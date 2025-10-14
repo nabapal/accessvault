@@ -3,6 +3,8 @@ __pycache__/
 *.sqlite3
 .env
 .env.*
+!.env.example
+!.env.docker.example
 .venv/
 venv/
 .envrc
