@@ -70,7 +70,7 @@ frontend/   # React + Vite + Tailwind SPA
    ./deployments/deploy.sh
    ```
    The helper script will prompt for admin credentials, build the images, start the stack, and seed the initial admin user.
-   - Backend (FastAPI + Uvicorn) listens on `http://localhost:8000` and stores `data/accessvault.db` on the host.
+      - Backend (FastAPI + Uvicorn) listens on `http://localhost:8005` and stores `data/accessvault.db` on the host.
    - Frontend is served via Nginx on `http://localhost/` with API/WebSocket traffic proxied to the backend.
 4. Tail logs or stop the stack as needed:
    ```bash
