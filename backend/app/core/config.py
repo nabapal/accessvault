@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     fernet_key: str
     cors_origins: List[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     websocket_origin: Optional[AnyUrl] = None
+    inventory_poller_enabled: bool = True
+    inventory_poll_tick_seconds: int = Field(default=15, ge=5, le=300)
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

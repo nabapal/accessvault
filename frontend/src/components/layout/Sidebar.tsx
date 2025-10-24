@@ -5,8 +5,11 @@ interface SidebarProps {
 }
 
 export function Sidebar({ children }: SidebarProps) {
+  if (!children) {
+    return null;
+  }
   return (
-    <aside className="hidden w-72 flex-shrink-0 border-r border-slate-800 bg-slate-900/60 p-4 lg:block">
+    <aside className="hidden w-72 flex-shrink-0 border-r border-brand-800 bg-brand-900/70 p-4 lg:block">
       {children}
     </aside>
   );

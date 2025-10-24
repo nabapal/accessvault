@@ -1,0 +1,21 @@
+
+> accessvault-frontend@0.1.0 dev
+> vite --host 0.0.0.0 --port 5173
+
+
+  VITE v5.4.20  ready in 214 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://10.64.90.20:5173/
+  ➜  Network: http://10.64.46.248:5173/
+  ➜  Network: http://10.64.88.210:5173/
+  ➜  Network: http://172.22.0.1:5173/
+  ➜  Network: http://172.100.100.128:5173/
+  ➜  Network: http://172.26.0.1:5173/
+  ➜  Network: http://172.18.0.1:5173/
+  ➜  Network: http://192.168.80.1:5173/
+  ➜  Network: http://172.28.0.1:5173/
+  ➜  Network: http://172.17.0.1:5173/
+  ➜  Network: http://172.23.0.1:5173/
+  ➜  Network: http://192.168.128.1:5173/
+  ➜  press h + enter to show help

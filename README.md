@@ -1,15 +1,18 @@
-# AccessVault
+# InfraPulse
 
-AccessVault is a secure credential management and remote access portal. It combines a FastAPI backend with a React/Tailwind frontend to organize infrastructure systems, encrypt credentials, and streamline GUI/CLI access from the browser.
+InfraPulse is a secure infrastructure operations portal for multinational teams. The first module, AccessVault, delivers credential management and remote access automation. Upcoming expansions introduce live ESXi inventory and wider data center observability.
 
 ## Features
 - JWT authentication with role-based access control (admin, user)
-- Group and system management with search and filtering
+- Group and system management with search and filtering (AccessVault module)
 - AES/Fernet encryption for stored credentials
 - Browser-based SSH terminal (xterm.js + Paramiko over WebSocket)
 - GUI quick-launch helpers for basic-auth protected interfaces
 - React dashboard with modals, filters, and responsive layout
+- Inventory overview with collector health, alerts feed, and VM Center workspace
 - Automated API tests with pytest + httpx
+- InfraPulse Inventory (in progress): live ESXi visibility with host, VM, datastore, and network telemetry
+- Inventory endpoint registry with encrypted credentials and polling metadata
 
 ## Project Structure
 ```
@@ -17,7 +20,7 @@ backend/    # FastAPI application
 frontend/   # React + Vite + Tailwind SPA
 ```
 
-## Backend Setup
+## AccessVault Backend Setup
 1. Create and activate a Python 3.11+ virtual environment.
 2. Install dependencies:
    ```bash
@@ -55,6 +58,13 @@ frontend/   # React + Vite + Tailwind SPA
    ```
    The app will proxy API and WebSocket requests to `http://localhost:8002`.
 
+> **Tip:** `./dev.sh` launches both FastAPI and Vite dev servers and writes logs to `logs/backend.log` and `logs/frontend.log`.
+
+### Inventory UI Overview
+- `/inventory`: live dashboard with KPI tiles, collector health list, and events & alerts feed.
+- `/inventory/admin`: step-by-step onboarding wizard with validation history, draft save/clear, and filterable collector registry.
+- `/inventory/virtual-machines`: VM Center view with summary metrics, advanced filters, and detail side panel for selected workloads.
+
 ## Production Deployment (Docker)
 1. Copy the Docker environment template and fill in secure values:
    ```bash
@@ -79,6 +89,24 @@ frontend/   # React + Vite + Tailwind SPA
    ```
 
 > **Note:** If you deploy behind a custom domain, update `CORS_ORIGINS` in `backend/.env.docker` accordingly.
+
+## Inventory Module (Alpha)
+- Register ESXi or vCenter collection endpoints through `/api/v1/inventory/endpoints`
+- Credentials are stored encrypted using the shared Fernet secret; passwords are never returned in responses
+- Responses include polling metadata (`last_polled_at`, `last_poll_status`) for the InfraPulse dashboard
+- Background poller (enabled by default) refreshes endpoint heartbeat metadata; toggle via `INVENTORY_POLLER_ENABLED`
+- Stub collector currently seeds representative host and VM telemetry so the dashboard surfaces utilization trends while ESXi integration is developed
+
+### REST Endpoints
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/v1/inventory/endpoints` | List all registered collectors (authenticated users) |
+| POST | `/api/v1/inventory/endpoints` | Create a new collector endpoint (admin only) |
+| GET | `/api/v1/inventory/endpoints/{id}` | Retrieve collector details (authenticated users) |
+| PATCH | `/api/v1/inventory/endpoints/{id}` | Update collector settings and credentials (admin only) |
+| DELETE | `/api/v1/inventory/endpoints/{id}` | Remove a collector (admin only) |
+| GET | `/api/v1/inventory/hosts` | Fetch aggregated host telemetry with optional `endpoint_id` filter |
+| GET | `/api/v1/inventory/virtual-machines` | Fetch VM inventory with optional `endpoint_id`/`host_id` filters |
 
 ## Testing
 ```bash

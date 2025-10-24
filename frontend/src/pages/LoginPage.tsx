@@ -24,9 +24,10 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-      <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-8 shadow-xl">
-        <h1 className="mb-6 text-center text-2xl font-semibold text-slate-100">AccessVault Login</h1>
+    <div className="flex min-h-screen items-center justify-center bg-brand-900 px-4">
+      <div className="w-full max-w-md rounded-lg border border-brand-700 bg-brand-900/80 p-8 shadow-xl shadow-black/40">
+        <h1 className="mb-2 text-center text-2xl font-semibold text-slate-100 tracking-wide">InfraPulse</h1>
+        <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-primary-200">Secure operations portal</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-400" htmlFor="email">
@@ -37,7 +38,7 @@ export function LoginPage() {
               type="email"
               value={email}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+              className="w-full rounded-md border border-brand-700 bg-brand-900 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
               required
             />
           </div>
@@ -50,7 +51,7 @@ export function LoginPage() {
               type="password"
               value={password}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setPassword(event.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+              className="w-full rounded-md border border-brand-700 bg-brand-900 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
               required
             />
           </div>

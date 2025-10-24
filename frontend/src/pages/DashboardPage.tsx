@@ -18,9 +18,9 @@ import {
   requestGuiToken,
   updateSystem
 } from "@/services/systems";
-import { AccessType, GroupDetail, GroupSummary, System, SystemCredentialSecret } from "@/types";
+import { AccessType, GroupSummary, System, SystemCredentialSecret } from "@/types";
 
-export function DashboardPage() {
+export function AccessVaultPage() {
   const token = useAuthStore((state: AuthState) => state.token) ?? "";
 
   const [groups, setGroups] = useState<GroupSummary[]>([]);
@@ -177,7 +177,7 @@ export function DashboardPage() {
       />
       <button
         type="button"
-        className="w-full rounded-md border border-dashed border-primary-500 px-3 py-2 text-sm font-semibold text-primary-300 transition hover:bg-primary-500/20"
+        className="w-full rounded-md border border-dashed border-primary-500 px-3 py-2 text-sm font-semibold text-primary-200 transition hover:bg-primary-500/20"
         onClick={handleOpenCreateSystem}
         disabled={!activeGroupId}
       >
@@ -195,21 +195,21 @@ export function DashboardPage() {
           onSearchChange={setSearch}
           onAccessTypeChange={setAccessFilter}
         />
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+        <div className="rounded-lg border border-brand-800/70 bg-brand-900/60 p-4 shadow-inner shadow-black/20">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-100">Systems</h2>
+              <h2 className="text-lg font-semibold text-slate-100">AccessVault Systems</h2>
               {activeGroupId ? (
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-300">
                   Showing systems for selected group.
                 </p>
               ) : (
-                <p className="text-sm text-slate-400">Showing all systems.</p>
+                <p className="text-sm text-slate-300">Showing all systems.</p>
               )}
             </div>
             <button
               type="button"
-              className="rounded-md border border-primary-500 px-3 py-2 text-sm font-semibold text-primary-300 transition hover:bg-primary-500/20"
+              className="rounded-md border border-primary-500 px-3 py-2 text-sm font-semibold text-primary-200 transition hover:bg-primary-500/20"
               onClick={handleOpenCreateSystem}
               disabled={!activeGroupId}
             >
