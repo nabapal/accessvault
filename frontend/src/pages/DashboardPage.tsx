@@ -187,7 +187,7 @@ export function AccessVaultPage() {
   );
 
   return (
-    <AppShell sidebar={sidebar}>
+    <AppShell sidebarContent={sidebar}>
       <div className="space-y-6">
         <SystemFilters
           search={search}
