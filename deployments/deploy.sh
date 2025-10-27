@@ -33,7 +33,21 @@ cd "${ROOT_DIR}"
 if [[ -d .git ]]; then
   echo "[deploy] Fetching latest changes..."
   git fetch --tags
+  NEED_STASH=0
+  STASH_REF=""
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "[deploy] Stashing local changes..."
+    NEED_STASH=1
+    git stash push -u -m "deploy.sh auto-stash" >/dev/null
+    STASH_REF="stash@{0}"
+  fi
   git pull --ff-only
+  if [[ "${NEED_STASH}" -eq 1 ]]; then
+    echo "[deploy] Restoring local changes..."
+    if ! git stash pop "${STASH_REF}"; then
+      echo "[deploy] Warning: automatic stash pop failed; remaining stash is ${STASH_REF}. Resolve manually." >&2
+    fi
+  fi
 else
   echo "[deploy] Skipping Git pull (no .git directory)."
 fi
