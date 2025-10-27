@@ -74,6 +74,7 @@ class InventoryHost(Base):
     endpoint_id = Column(GUID(), ForeignKey("inventory_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     cluster = Column(String, nullable=True)
+    hardware_model = Column(String, nullable=True)
     connection_state = Column(Enum(InventoryHostConnectionState), nullable=False, default=InventoryHostConnectionState.CONNECTED)
     power_state = Column(Enum(InventoryPowerState), nullable=False, default=InventoryPowerState.POWERED_ON)
     cpu_cores = Column(Integer, nullable=True)

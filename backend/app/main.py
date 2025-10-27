@@ -53,6 +53,11 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
         if "tools_status" not in vm_columns:
             await conn.execute(text("ALTER TABLE inventory_virtual_machines ADD COLUMN tools_status VARCHAR"))
 
+        host_result = await conn.execute(text("PRAGMA table_info('inventory_hosts')"))
+        host_columns = {row[1] for row in host_result}
+        if "hardware_model" not in host_columns:
+            await conn.execute(text("ALTER TABLE inventory_hosts ADD COLUMN hardware_model VARCHAR"))
+
     poller = None
     if settings.inventory_poller_enabled:
         poller = build_inventory_poller(

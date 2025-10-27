@@ -10,6 +10,7 @@ from pyVim.connect import Disconnect, SmartConnect
 class VsphereHost:
     name: str
     cluster: Optional[str]
+    hardware_model: Optional[str]
     connection_state: str
     power_state: str
     cpu_cores: Optional[int]
@@ -107,6 +108,7 @@ def collect_inventory(
                         VsphereHost(
                             name=summary.config.name,
                             cluster=cluster_name,
+                            hardware_model=getattr(hardware, "model", None),
                             connection_state=str(summary.runtime.connectionState) if summary.runtime else "unknown",
                             power_state=str(summary.runtime.powerState) if summary.runtime else "unknown",
                             cpu_cores=getattr(hardware, "numCpuCores", None),

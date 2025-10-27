@@ -76,6 +76,7 @@ export interface InventoryHost {
   endpoint_name: string;
   name: string;
   cluster?: string | null;
+  hardware_model?: string | null;
   connection_state: InventoryHostConnectionState;
   power_state: InventoryPowerState;
   cpu_cores?: number | null;

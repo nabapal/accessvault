@@ -1,11 +1,16 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+
+import { Dialog, Transition } from "@headlessui/react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import {
   CreateInventoryEndpointPayload,
   createInventoryEndpoint,
   fetchInventoryEndpoints,
+  UpdateInventoryEndpointPayload,
+  updateInventoryEndpoint,
+  deleteInventoryEndpoint,
   syncInventoryEndpoint,
   testInventoryEndpoint,
   validateInventoryEndpoint
@@ -114,6 +119,14 @@ export function InventoryAdminPage() {
   const [lastValidation, setLastValidation] = useState<InventoryEndpointValidationResult | null>(null);
   const [draftLoaded, setDraftLoaded] = useState<boolean>(false);
   const [collectorFilter, setCollectorFilter] = useState<"all" | "healthy" | "attention" | "pending">("all");
+  const [editingEndpoint, setEditingEndpoint] = useState<InventoryEndpoint | null>(null);
+  const [editForm, setEditForm] = useState<UpdateInventoryEndpointPayload>({});
+  const [editTagsInput, setEditTagsInput] = useState<string>("");
+  const [isUpdatingEndpoint, setIsUpdatingEndpoint] = useState<boolean>(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<InventoryEndpoint | null>(null);
+  const [isDeletingEndpoint, setIsDeletingEndpoint] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const currentStepIndex = useMemo(
     () => Math.max(0, onboardingSteps.findIndex((step) => step.key === activeStep)),
@@ -268,6 +281,127 @@ export function InventoryAdminPage() {
     };
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
     setFormSuccess("Draft saved locally");
+  };
+
+  const openEditEndpoint = (endpoint: InventoryEndpoint) => {
+    setEditingEndpoint(endpoint);
+    setEditForm({
+      name: endpoint.name,
+      address: endpoint.address,
+      port: endpoint.port,
+      source_type: endpoint.source_type,
+      username: endpoint.username,
+      verify_ssl: endpoint.verify_ssl,
+      poll_interval_seconds: endpoint.poll_interval_seconds,
+      description: endpoint.description ?? "",
+      tags: endpoint.tags,
+      password: ""
+    });
+    setEditTagsInput(endpoint.tags.join(", "));
+    setUpdateError(null);
+  };
+
+  const closeEditModal = () => {
+    if (isUpdatingEndpoint) {
+      return;
+    }
+    setEditingEndpoint(null);
+    setEditForm({});
+    setEditTagsInput("");
+    setUpdateError(null);
+  };
+
+  const handleEditInputChange = (event: FormEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const target = event.currentTarget;
+    const { name, value, type } = target;
+
+    if (name === "tags") {
+      setEditTagsInput(value);
+      return;
+    }
+
+    if (type === "checkbox") {
+      setEditForm((prev) => ({ ...prev, [name]: (target as HTMLInputElement).checked }));
+      return;
+    }
+
+    if (type === "number") {
+      const numericValue = value === "" ? undefined : Number(value);
+      setEditForm((prev) => ({ ...prev, [name]: numericValue }));
+      return;
+    }
+
+    setEditForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleUpdateEndpoint = async () => {
+    if (!editingEndpoint) {
+      return;
+    }
+    setIsUpdatingEndpoint(true);
+    setUpdateError(null);
+    const tags = editTagsInput
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+
+    const payload: UpdateInventoryEndpointPayload = {
+      ...editForm,
+      tags
+    };
+
+    if (payload.description !== undefined) {
+      const trimmed = payload.description?.toString().trim();
+      payload.description = trimmed ? trimmed : null;
+    }
+
+    if (payload.password !== undefined && payload.password.trim() === "") {
+      delete payload.password;
+    }
+
+    try {
+      await updateInventoryEndpoint(editingEndpoint.id, payload);
+      setFormSuccess("Endpoint updated successfully");
+      setFormError(null);
+      closeEditModal();
+      await refreshEndpoints();
+    } catch (error) {
+      setUpdateError((error as Error).message || "Unable to update endpoint");
+    } finally {
+      setIsUpdatingEndpoint(false);
+    }
+  };
+
+  const openDeleteEndpoint = (endpoint: InventoryEndpoint) => {
+    setDeleteTarget(endpoint);
+    setDeleteError(null);
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeletingEndpoint) {
+      return;
+    }
+    setDeleteTarget(null);
+    setDeleteError(null);
+  };
+
+  const handleDeleteEndpoint = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+    setIsDeletingEndpoint(true);
+    setDeleteError(null);
+    try {
+      await deleteInventoryEndpoint(deleteTarget.id);
+      setFormSuccess("Endpoint deleted successfully");
+      setFormError(null);
+      setDeleteTarget(null);
+      await refreshEndpoints();
+    } catch (error) {
+      setDeleteError((error as Error).message || "Unable to delete endpoint");
+    } finally {
+      setIsDeletingEndpoint(false);
+    }
   };
 
   const handleInputChange = (event: FormEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -851,6 +985,20 @@ export function InventoryAdminPage() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
+                              onClick={() => openEditEndpoint(endpoint)}
+                              className="rounded-md border border-brand-700 bg-brand-900 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-primary-500 hover:text-white"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openDeleteEndpoint(endpoint)}
+                              className="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-200 transition hover:bg-rose-500/20"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleTest(endpoint)}
                               className="rounded-md border border-brand-700 bg-brand-800 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white disabled:opacity-50"
                               disabled={actions.testingId === endpoint.id}
@@ -890,6 +1038,264 @@ export function InventoryAdminPage() {
           )}
         </section>
       </div>
+
+      <Transition.Root show={Boolean(editingEndpoint)} as={Fragment} appear>
+        <Dialog as="div" className="relative z-50" onClose={closeEditModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-150"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/70" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-lg border border-brand-800 bg-brand-900/95 p-6 shadow-xl transition-all">
+                  <Dialog.Title className="text-lg font-semibold text-slate-100">Edit collector</Dialog.Title>
+                  <p className="mt-1 text-sm text-slate-400">Update connection details, tags, or polling settings.</p>
+
+                  <form
+                    className="mt-4 space-y-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      handleUpdateEndpoint();
+                    }}
+                  >
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-name">
+                          Name
+                        </label>
+                        <input
+                          id="edit-name"
+                          name="name"
+                          type="text"
+                          value={editForm.name ?? ""}
+                          onChange={handleEditInputChange}
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-source-type">
+                          Source type
+                        </label>
+                        <select
+                          id="edit-source-type"
+                          name="source_type"
+                          value={editForm.source_type ?? "esxi"}
+                          onChange={handleEditInputChange}
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                        >
+                          <option value="esxi">ESXi host</option>
+                          <option value="vcenter">vCenter</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-address">
+                          Address
+                        </label>
+                        <input
+                          id="edit-address"
+                          name="address"
+                          type="text"
+                          value={editForm.address ?? ""}
+                          onChange={handleEditInputChange}
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-port">
+                          Port
+                        </label>
+                        <input
+                          id="edit-port"
+                          name="port"
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={editForm.port ?? 443}
+                          onChange={handleEditInputChange}
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-username">
+                          Username
+                        </label>
+                        <input
+                          id="edit-username"
+                          name="username"
+                          type="text"
+                          value={editForm.username ?? ""}
+                          onChange={handleEditInputChange}
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-password">
+                          Password
+                        </label>
+                        <input
+                          id="edit-password"
+                          name="password"
+                          type="password"
+                          value={editForm.password ?? ""}
+                          onChange={handleEditInputChange}
+                          placeholder="Leave blank to keep current secret"
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        name="verify_ssl"
+                        checked={Boolean(editForm.verify_ssl)}
+                        onChange={handleEditInputChange}
+                        className="h-4 w-4 rounded border-brand-700 bg-brand-900 text-primary-500 focus:ring-primary-500"
+                      />
+                      Verify TLS certificates
+                    </label>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-interval">
+                          Poll interval (seconds)
+                        </label>
+                        <input
+                          id="edit-interval"
+                          name="poll_interval_seconds"
+                          type="number"
+                          min={60}
+                          value={editForm.poll_interval_seconds ?? 300}
+                          onChange={handleEditInputChange}
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-tags">
+                          Tags
+                        </label>
+                        <input
+                          id="edit-tags"
+                          name="tags"
+                          type="text"
+                          value={editTagsInput}
+                          onChange={handleEditInputChange}
+                          placeholder="Comma separated"
+                          className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="edit-description">
+                        Description
+                      </label>
+                      <textarea
+                        id="edit-description"
+                        name="description"
+                        value={editForm.description ?? ""}
+                        onChange={handleEditInputChange}
+                        rows={3}
+                        className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                      />
+                    </div>
+                    {updateError && <p className="text-sm text-rose-300">{updateError}</p>}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={closeEditModal}
+                        className="rounded-md border border-brand-700 bg-brand-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white"
+                        disabled={isUpdatingEndpoint}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="rounded-md border border-primary-500/60 bg-primary-500/20 px-4 py-2 text-sm font-medium text-primary-100 transition hover:bg-primary-500/30 disabled:opacity-50"
+                        disabled={isUpdatingEndpoint}
+                      >
+                        {isUpdatingEndpoint ? "Saving…" : "Save changes"}
+                      </button>
+                    </div>
+                  </form>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+
+      <Transition.Root show={Boolean(deleteTarget)} as={Fragment} appear>
+        <Dialog as="div" className="relative z-50" onClose={closeDeleteModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-150"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/70" />
+          </Transition.Child>
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-lg border border-brand-800 bg-brand-900/95 p-6 shadow-xl transition-all">
+                  <Dialog.Title className="text-lg font-semibold text-slate-100">Delete collector</Dialog.Title>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Are you sure you want to remove {deleteTarget?.name}? This stops polling and removes stored credentials for this endpoint.
+                  </p>
+                  {deleteError && <p className="mt-4 text-sm text-rose-300">{deleteError}</p>}
+                  <div className="mt-6 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={closeDeleteModal}
+                      className="rounded-md border border-brand-700 bg-brand-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white"
+                      disabled={isDeletingEndpoint}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteEndpoint}
+                      className="rounded-md border border-rose-500/60 bg-rose-500/20 px-4 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/30 disabled:opacity-50"
+                      disabled={isDeletingEndpoint}
+                    >
+                      {isDeletingEndpoint ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
     </AppShell>
   );
 }

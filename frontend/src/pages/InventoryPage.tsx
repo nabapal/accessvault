@@ -59,6 +59,8 @@ const powerStateLabels: Record<InventoryPowerState, string> = {
   unknown: "Unknown"
 };
 
+const PAGE_SIZE_OPTIONS = [5, 10, 20];
+
 const formatDateTime = (value?: string | null) => {
   if (!value) {
     return "Never";
@@ -90,6 +92,15 @@ export function InventoryPage() {
   const [networks, setNetworks] = useState<InventoryNetwork[]>([]);
   const [isInventoryLoading, setIsInventoryLoading] = useState<boolean>(true);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [hostSearch, setHostSearch] = useState<string>("");
+  const [datastoreSearch, setDatastoreSearch] = useState<string>("");
+  const [networkSearch, setNetworkSearch] = useState<string>("");
+  const [hostPage, setHostPage] = useState<number>(1);
+  const [hostPageSize, setHostPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
+  const [datastorePage, setDatastorePage] = useState<number>(1);
+  const [datastorePageSize, setDatastorePageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
+  const [networkPage, setNetworkPage] = useState<number>(1);
+  const [networkPageSize, setNetworkPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
   const isAdmin = useAuthStore((state) => state.user?.role === "admin");
 
   useEffect(() => {
@@ -155,6 +166,18 @@ export function InventoryPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setHostPage(1);
+  }, [hostSearch]);
+
+  useEffect(() => {
+    setDatastorePage(1);
+  }, [datastoreSearch]);
+
+  useEffect(() => {
+    setNetworkPage(1);
+  }, [networkSearch]);
+
   const totals = useMemo(() => {
     const hostCount = hosts.length;
     const vmCount = virtualMachines.length;
@@ -193,6 +216,90 @@ export function InventoryPage() {
     });
     return counts;
   }, [datastores]);
+
+  const filteredHosts = useMemo(() => {
+    const query = hostSearch.trim().toLowerCase();
+    if (!query) {
+      return hosts;
+    }
+    return hosts.filter((host) => {
+      const values = [host.name, host.cluster ?? "", host.endpoint_name, host.hardware_model ?? ""];
+      return values.some((value) => value.toLowerCase().includes(query));
+    });
+  }, [hostSearch, hosts]);
+
+  const filteredDatastores = useMemo(() => {
+    const query = datastoreSearch.trim().toLowerCase();
+    if (!query) {
+      return datastores;
+    }
+    return datastores.filter((datastore) => {
+      const values = [datastore.name, datastore.endpoint_name, datastore.type ?? ""];
+      return values.some((value) => value.toLowerCase().includes(query));
+    });
+  }, [datastoreSearch, datastores]);
+
+  const filteredNetworks = useMemo(() => {
+    const query = networkSearch.trim().toLowerCase();
+    if (!query) {
+      return networks;
+    }
+    return networks.filter((network) => {
+      const values = [network.name, network.endpoint_name];
+      return values.some((value) => value.toLowerCase().includes(query));
+    });
+  }, [networkSearch, networks]);
+
+  const hostTotal = filteredHosts.length;
+  const hostTotalPages = hostTotal > 0 ? Math.ceil(hostTotal / hostPageSize) : 1;
+  useEffect(() => {
+    if (hostPage > hostTotalPages) {
+      setHostPage(hostTotalPages);
+    }
+  }, [hostPage, hostTotalPages]);
+  const paginatedHosts = useMemo(() => {
+    if (!hostTotal) {
+      return [];
+    }
+    const start = (hostPage - 1) * hostPageSize;
+    return filteredHosts.slice(start, start + hostPageSize);
+  }, [filteredHosts, hostPage, hostPageSize, hostTotal]);
+  const hostRangeStart = hostTotal === 0 ? 0 : (hostPage - 1) * hostPageSize + 1;
+  const hostRangeEnd = hostTotal === 0 ? 0 : Math.min(hostPage * hostPageSize, hostTotal);
+
+  const datastoreTotal = filteredDatastores.length;
+  const datastoreTotalPages = datastoreTotal > 0 ? Math.ceil(datastoreTotal / datastorePageSize) : 1;
+  useEffect(() => {
+    if (datastorePage > datastoreTotalPages) {
+      setDatastorePage(datastoreTotalPages);
+    }
+  }, [datastorePage, datastoreTotalPages]);
+  const paginatedDatastores = useMemo(() => {
+    if (!datastoreTotal) {
+      return [];
+    }
+    const start = (datastorePage - 1) * datastorePageSize;
+    return filteredDatastores.slice(start, start + datastorePageSize);
+  }, [filteredDatastores, datastorePage, datastorePageSize, datastoreTotal]);
+  const datastoreRangeStart = datastoreTotal === 0 ? 0 : (datastorePage - 1) * datastorePageSize + 1;
+  const datastoreRangeEnd = datastoreTotal === 0 ? 0 : Math.min(datastorePage * datastorePageSize, datastoreTotal);
+
+  const networkTotal = filteredNetworks.length;
+  const networkTotalPages = networkTotal > 0 ? Math.ceil(networkTotal / networkPageSize) : 1;
+  useEffect(() => {
+    if (networkPage > networkTotalPages) {
+      setNetworkPage(networkTotalPages);
+    }
+  }, [networkPage, networkTotalPages]);
+  const paginatedNetworks = useMemo(() => {
+    if (!networkTotal) {
+      return [];
+    }
+    const start = (networkPage - 1) * networkPageSize;
+    return filteredNetworks.slice(start, start + networkPageSize);
+  }, [filteredNetworks, networkPage, networkPageSize, networkTotal]);
+  const networkRangeStart = networkTotal === 0 ? 0 : (networkPage - 1) * networkPageSize + 1;
+  const networkRangeEnd = networkTotal === 0 ? 0 : Math.min(networkPage * networkPageSize, networkTotal);
 
   const endpointEvents = useMemo(() => {
     return endpoints
@@ -520,20 +627,40 @@ export function InventoryPage() {
 
         <section className="grid gap-4 lg:grid-cols-1">
           <div className="rounded-lg border border-brand-800/70 bg-brand-900/60 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-200">Host Utilization</h3>
-              {isInventoryLoading && <span className="text-xs text-slate-400">Loading…</span>}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-200">Host Utilization</h3>
+                {isInventoryLoading && <span className="text-xs text-slate-400">Loading…</span>}
+              </div>
+              <div className="w-full sm:w-auto">
+                <label className="sr-only" htmlFor="host-search">
+                  Search hosts
+                </label>
+                <input
+                  id="host-search"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Search hosts…"
+                  className="w-full rounded border border-brand-700 bg-brand-900 px-3 py-1 text-sm text-slate-200 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-56"
+                  value={hostSearch}
+                  onChange={(event) => setHostSearch(event.target.value)}
+                />
+              </div>
             </div>
             {!isInventoryLoading && inventoryError && <p className="mt-4 text-sm text-rose-300">{inventoryError}</p>}
             {!isInventoryLoading && !inventoryError && hosts.length === 0 && (
               <p className="mt-4 text-sm text-slate-400">No host telemetry yet. Poller will populate data after the first cycle.</p>
             )}
-            {!isInventoryLoading && !inventoryError && hosts.length > 0 && (
+            {!isInventoryLoading && !inventoryError && hosts.length > 0 && filteredHosts.length === 0 && (
+              <p className="mt-4 text-sm text-slate-400">No hosts match your search.</p>
+            )}
+            {!isInventoryLoading && !inventoryError && hosts.length > 0 && filteredHosts.length > 0 && (
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full border-separate border-spacing-y-2 text-sm">
                   <thead className="text-xs uppercase tracking-wide text-slate-400">
                     <tr>
                       <th className="px-2 text-left">Host</th>
+                      <th className="px-2 text-left">Server Model</th>
                       <th className="px-2 text-left">CPU</th>
                       <th className="px-2 text-left">Memory</th>
                       <th className="px-2 text-left">Storage</th>
@@ -544,7 +671,7 @@ export function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {hosts.slice(0, 8).map((host) => {
+                    {paginatedHosts.map((host) => {
                       const cpuPercent = calculateCpuPercent(host);
                       const memPercent = calculateMemoryPercent(host);
                       const vmCount = hostVmCounts[host.id] ?? 0;
@@ -555,6 +682,7 @@ export function InventoryPage() {
                             <div className="font-semibold text-slate-100">{host.name}</div>
                             <div className="text-xs text-slate-400">{host.cluster ?? host.endpoint_name}</div>
                           </td>
+                          <td className="px-2 py-2 align-top text-xs text-slate-300">{host.hardware_model ?? "--"}</td>
                           <td className="px-2 py-2 align-top text-xs text-slate-300">
                             <div>{formatPercent(cpuPercent)}</div>
                             <div className="text-slate-500">{host.cpu_cores ? `${host.cpu_cores} cores` : "--"}</div>
@@ -582,21 +710,85 @@ export function InventoryPage() {
                     })}
                   </tbody>
                 </table>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-400">
+                    Showing {hostRangeStart}-{hostRangeEnd} of {hostTotal} hosts
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Rows</span>
+                      <select
+                        value={hostPageSize}
+                        onChange={(event) => {
+                          setHostPageSize(Number(event.currentTarget.value));
+                          setHostPage(1);
+                        }}
+                        className="rounded border border-brand-700 bg-brand-900/80 px-2 py-1 text-xs text-slate-200 focus:border-primary-500 focus:outline-none"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setHostPage((prev) => Math.max(1, prev - 1))}
+                        disabled={hostPage <= 1}
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        Page {hostPage} of {hostTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setHostPage((prev) => Math.min(hostTotalPages, prev + 1))}
+                        disabled={hostPage >= hostTotalPages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </section>
         <section className="space-y-4">
           <div className="rounded-lg border border-brand-800/70 bg-brand-900/60 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-200">Datastore Utilization</h3>
-              {isInventoryLoading && <span className="text-xs text-slate-400">Loading…</span>}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-200">Datastore Utilization</h3>
+                {isInventoryLoading && <span className="text-xs text-slate-400">Loading…</span>}
+              </div>
+              <div className="w-full sm:w-auto">
+                <label className="sr-only" htmlFor="datastore-search">
+                  Search datastores
+                </label>
+                <input
+                  id="datastore-search"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Search datastores…"
+                  className="w-full rounded border border-brand-700 bg-brand-900 px-3 py-1 text-sm text-slate-200 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-56"
+                  value={datastoreSearch}
+                  onChange={(event) => setDatastoreSearch(event.target.value)}
+                />
+              </div>
             </div>
             {!isInventoryLoading && inventoryError && <p className="mt-4 text-sm text-rose-300">{inventoryError}</p>}
             {!isInventoryLoading && !inventoryError && datastores.length === 0 && (
               <p className="mt-4 text-sm text-slate-400">No datastores discovered yet. Poller will sync storage assets shortly.</p>
             )}
-            {!isInventoryLoading && !inventoryError && datastores.length > 0 && (
+            {!isInventoryLoading && !inventoryError && datastores.length > 0 && filteredDatastores.length === 0 && (
+              <p className="mt-4 text-sm text-slate-400">No datastores match your search.</p>
+            )}
+            {!isInventoryLoading && !inventoryError && datastores.length > 0 && filteredDatastores.length > 0 && (
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full border-separate border-spacing-y-2 text-sm">
                   <thead className="text-xs uppercase tracking-wide text-slate-400">
@@ -609,7 +801,7 @@ export function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {datastores.slice(0, 8).map((datastore) => {
+                    {paginatedDatastores.map((datastore) => {
                       const usagePercent = calculateDatastorePercent(datastore);
                       const free = datastore.free_gb ?? undefined;
                       const used = datastore.capacity_gb ? Math.max(0, datastore.capacity_gb - (datastore.free_gb ?? 0)) : undefined;
@@ -631,30 +823,138 @@ export function InventoryPage() {
                     })}
                   </tbody>
                 </table>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-400">
+                    Showing {datastoreRangeStart}-{datastoreRangeEnd} of {datastoreTotal} datastores
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Rows</span>
+                      <select
+                        value={datastorePageSize}
+                        onChange={(event) => {
+                          setDatastorePageSize(Number(event.currentTarget.value));
+                          setDatastorePage(1);
+                        }}
+                        className="rounded border border-brand-700 bg-brand-900/80 px-2 py-1 text-xs text-slate-200 focus:border-primary-500 focus:outline-none"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setDatastorePage((prev) => Math.max(1, prev - 1))}
+                        disabled={datastorePage <= 1}
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        Page {datastorePage} of {datastoreTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setDatastorePage((prev) => Math.min(datastoreTotalPages, prev + 1))}
+                        disabled={datastorePage >= datastoreTotalPages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
           <div className="rounded-lg border border-brand-800/70 bg-brand-900/60 p-4">
-            <h3 className="text-sm font-semibold text-slate-200">Available Networks</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-200">Available Networks</h3>
+                {isInventoryLoading && <span className="text-xs text-slate-400">Loading…</span>}
+              </div>
+              <div className="w-full sm:w-auto">
+                <label className="sr-only" htmlFor="network-search">
+                  Search networks
+                </label>
+                <input
+                  id="network-search"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Search networks…"
+                  className="w-full rounded border border-brand-700 bg-brand-900 px-3 py-1 text-sm text-slate-200 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-56"
+                  value={networkSearch}
+                  onChange={(event) => setNetworkSearch(event.target.value)}
+                />
+              </div>
+            </div>
             {!isInventoryLoading && inventoryError && <p className="mt-2 text-sm text-rose-300">{inventoryError}</p>}
-            {isInventoryLoading && <p className="mt-2 text-sm text-slate-400">Loading…</p>}
             {!isInventoryLoading && !inventoryError && networks.length === 0 && (
               <p className="mt-2 text-sm text-slate-400">No networks discovered yet. Inventory sync will populate overlays soon.</p>
             )}
-            {!isInventoryLoading && !inventoryError && networks.length > 0 && (
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {networks.slice(0, 10).map((network) => (
-                  <li key={network.id} className="rounded border border-brand-800/60 bg-brand-900/70 px-3 py-2 text-sm text-slate-200">
-                    <p className="font-semibold text-primary-100">{network.name}</p>
-                    <p className="text-xs text-slate-400">{network.endpoint_name}</p>
-                  </li>
-                ))}
-                {networks.length > 10 && (
-                  <li className="rounded border border-brand-800/60 bg-brand-900/70 px-3 py-2 text-xs text-slate-400">
-                    +{networks.length - 10} more networks…
-                  </li>
-                )}
-              </ul>
+            {!isInventoryLoading && !inventoryError && networks.length > 0 && filteredNetworks.length === 0 && (
+              <p className="mt-2 text-sm text-slate-400">No networks match your search.</p>
+            )}
+            {!isInventoryLoading && !inventoryError && networks.length > 0 && filteredNetworks.length > 0 && (
+              <>
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {paginatedNetworks.map((network) => (
+                    <li key={network.id} className="rounded border border-brand-800/60 bg-brand-900/70 px-3 py-2 text-sm text-slate-200">
+                      <p className="font-semibold text-primary-100">{network.name}</p>
+                      <p className="text-xs text-slate-400">{network.endpoint_name}</p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-400">
+                    Showing {networkRangeStart}-{networkRangeEnd} of {networkTotal} networks
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Rows</span>
+                      <select
+                        value={networkPageSize}
+                        onChange={(event) => {
+                          setNetworkPageSize(Number(event.currentTarget.value));
+                          setNetworkPage(1);
+                        }}
+                        className="rounded border border-brand-700 bg-brand-900/80 px-2 py-1 text-xs text-slate-200 focus:border-primary-500 focus:outline-none"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setNetworkPage((prev) => Math.max(1, prev - 1))}
+                        disabled={networkPage <= 1}
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        Page {networkPage} of {networkTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setNetworkPage((prev) => Math.min(networkTotalPages, prev + 1))}
+                        disabled={networkPage >= networkTotalPages}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </section>

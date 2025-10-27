@@ -31,6 +31,8 @@ const powerStateBadge: Record<InventoryPowerState, string> = {
 
 type PowerFilter = "all" | InventoryPowerState;
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
+
 const formatNumber = (value: number | null | undefined): string => {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "--";
@@ -82,6 +84,8 @@ export function VirtualMachinesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedVmId, setSelectedVmId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
 
   useEffect(() => {
     let isMounted = true;
@@ -130,6 +134,10 @@ export function VirtualMachinesPage() {
     }
   }, [selectedVmId, virtualMachines]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [endpointFilter, hostFilter, powerFilter, searchTerm]);
+
   const filteredVirtualMachines = useMemo(() => {
     return virtualMachines.filter((vm) => {
       if (endpointFilter !== "all" && vm.endpoint_id !== endpointFilter) {
@@ -161,6 +169,28 @@ export function VirtualMachinesPage() {
       return true;
     });
   }, [endpointFilter, hostFilter, powerFilter, searchTerm, virtualMachines]);
+
+  const totalVmCount = filteredVirtualMachines.length;
+  const totalPages = totalVmCount > 0 ? Math.ceil(totalVmCount / pageSize) : 1;
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedVirtualMachines = useMemo(() => {
+    if (!totalVmCount) {
+      return [];
+    }
+    const start = (page - 1) * pageSize;
+    return filteredVirtualMachines.slice(start, start + pageSize);
+  }, [filteredVirtualMachines, page, pageSize, totalVmCount]);
+
+  const pageStart = totalVmCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageEnd = totalVmCount === 0 ? 0 : Math.min(page * pageSize, totalVmCount);
+  const canGoPrev = page > 1;
+  const canGoNext = totalVmCount > 0 && page < totalPages;
 
   const selectedVm = useMemo(() => {
     return filteredVirtualMachines.find((vm) => vm.id === selectedVmId) ?? null;
@@ -387,7 +417,7 @@ export function VirtualMachinesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredVirtualMachines.map((vm) => {
+                  {paginatedVirtualMachines.map((vm) => {
                     const cpuPercent = vm.cpu_count && vm.cpu_usage_mhz ? (vm.cpu_usage_mhz / (vm.cpu_count * 2500)) * 100 : null;
                     const memoryPercent = vm.memory_mb && vm.memory_usage_mb ? (vm.memory_usage_mb / vm.memory_mb) * 100 : null;
                     const storagePercent =
@@ -458,6 +488,51 @@ export function VirtualMachinesPage() {
                     );
                   })}
                 </tbody>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-400">
+                    Showing {pageStart}-{pageEnd} of {totalVmCount} virtual machines
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Rows</span>
+                      <select
+                        value={pageSize}
+                        onChange={(event) => {
+                          setPageSize(Number(event.currentTarget.value));
+                          setPage(1);
+                        }}
+                        className="rounded border border-brand-700 bg-brand-900/80 px-2 py-1 text-xs text-slate-200 focus:border-primary-500 focus:outline-none"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                        disabled={!canGoPrev}
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        Page {page} of {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                        disabled={!canGoNext}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </table>
             </div>
           )}

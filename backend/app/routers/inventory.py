@@ -63,6 +63,7 @@ def _serialize_host(host: InventoryHost) -> InventoryHostRead:
         endpoint_name=endpoint.name if endpoint else "Unknown",
         name=host.name,
         cluster=host.cluster,
+    hardware_model=host.hardware_model,
         connection_state=host.connection_state,
         power_state=host.power_state,
         cpu_cores=host.cpu_cores,

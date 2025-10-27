@@ -26,7 +26,7 @@ for datacenter in content.rootFolder.childEntity:
             print("\n=== Host Summary ===")
             print(f"Host: {summary.config.name}")
             print(f"Product: {summary.config.product.fullName}")
-            print(f"CPU Model: {hw.cpuModel}")
+            print(f"Server Model: {hw.model}")
             print(f"CPU Cores: {hw.numCpuCores}")
             print(f"CPU MHz/Core: {hw.cpuMhz}")
             print(f"Memory: {humanize.naturalsize(hw.memorySize)}")

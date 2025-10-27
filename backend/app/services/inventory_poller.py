@@ -124,6 +124,7 @@ async def _upsert_hosts(
 			host = InventoryHost(endpoint_id=endpoint.id, name=host_data.name)
 			session.add(host)
 		host.cluster = host_data.cluster
+		host.hardware_model = host_data.hardware_model
 		host.connection_state = _map_connection_state(host_data.connection_state)
 		host.power_state = _map_power_state(host_data.power_state)
 		host.cpu_cores = host_data.cpu_cores

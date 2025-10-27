@@ -68,6 +68,7 @@ class InventoryHostRead(BaseModel):
     endpoint_name: str
     name: str
     cluster: Optional[str]
+    hardware_model: Optional[str]
     connection_state: InventoryHostConnectionState
     power_state: InventoryPowerState
     cpu_cores: Optional[int]

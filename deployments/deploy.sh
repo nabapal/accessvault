@@ -30,6 +30,14 @@ fi
 
 cd "${ROOT_DIR}"
 
+if [[ -d .git ]]; then
+  echo "[deploy] Fetching latest changes..."
+  git fetch --tags
+  git pull --ff-only
+else
+  echo "[deploy] Skipping Git pull (no .git directory)."
+fi
+
 echo "[deploy] Building and starting containers..."
 docker compose up --build -d
 
