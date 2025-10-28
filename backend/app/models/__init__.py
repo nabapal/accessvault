@@ -12,6 +12,8 @@ from .inventory import (
     InventoryNetwork,
     InventoryVirtualMachine,
 )
+from .aci import AciFabricNode, AciNodeRole
+from .telco import TelcoFabricOnboardingJob, TelcoFabricType, TelcoOnboardingStatus
 
 __all__ = [
     "User",
@@ -29,4 +31,9 @@ __all__ = [
     "InventoryDatastore",
     "InventoryNetwork",
     "InventoryVirtualMachine",
+    "AciFabricNode",
+    "AciNodeRole",
+    "TelcoFabricOnboardingJob",
+    "TelcoFabricType",
+    "TelcoOnboardingStatus",
 ]

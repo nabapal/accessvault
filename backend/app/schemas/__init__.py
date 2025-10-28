@@ -11,6 +11,18 @@ from .inventory import (
     InventoryEndpointValidationResult,
     InventoryEndpointSyncResponse,
 )
+from .aci import (
+    AciFabricNodePage,
+    AciFabricNodeRead,
+    AciFabricNodeSummary,
+    AciFabricSummaryDetails,
+    AciFabricSummaryFabric,
+)
+from .telco import (
+    TelcoOnboardingJobCreate,
+    TelcoOnboardingJobRead,
+    TelcoOnboardingValidationRequest,
+)
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
 
@@ -30,6 +42,14 @@ __all__ = [
     "InventoryVMRead",
     "InventoryEndpointValidationResult",
     "InventoryEndpointSyncResponse",
+    "AciFabricNodeRead",
+    "AciFabricNodeSummary",
+    "AciFabricNodePage",
+    "AciFabricSummaryFabric",
+    "AciFabricSummaryDetails",
+    "TelcoOnboardingJobCreate",
+    "TelcoOnboardingJobRead",
+    "TelcoOnboardingValidationRequest",
     "AccessType",
     "SystemCreate",
     "SystemRead",

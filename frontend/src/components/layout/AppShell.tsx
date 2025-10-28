@@ -13,10 +13,18 @@ const SIDEBAR_SECTIONS = [
   {
     title: "IPSE",
     items: [
-      { label: "Dashboard", to: "/inventory" },
+  { label: "Dashboard", to: "/inventory" },
       { label: "VM Center", to: "/inventory/virtual-machines" },
       { label: "Collectors Admin", to: "/inventory/admin" },
       { label: "Access Vault", to: "/accessvault" }
+    ]
+  },
+  {
+    title: "Telco",
+    items: [
+      { label: "ACI Summary", to: "/telco/aci/summary" },
+      { label: "Cisco ACI Fabric", to: "/telco/aci" },
+      { label: "Fabric Onboarding", to: "/telco/onboarding" }
     ]
   }
 ];
