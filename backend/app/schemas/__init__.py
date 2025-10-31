@@ -14,6 +14,8 @@ from .inventory import (
 from .aci import (
     AciFabricNodePage,
     AciFabricNodeRead,
+    AciFabricNodeDetailRead,
+    AciFabricNodeInterfaceRead,
     AciFabricNodeSummary,
     AciFabricSummaryDetails,
     AciFabricSummaryFabric,
@@ -43,6 +45,8 @@ __all__ = [
     "InventoryEndpointValidationResult",
     "InventoryEndpointSyncResponse",
     "AciFabricNodeRead",
+    "AciFabricNodeDetailRead",
+    "AciFabricNodeInterfaceRead",
     "AciFabricNodeSummary",
     "AciFabricNodePage",
     "AciFabricSummaryFabric",

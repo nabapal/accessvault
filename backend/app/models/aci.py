@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Any, Dict
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, JSON, String, Text, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, JSON, String, Text, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -61,6 +61,8 @@ class AciFabricNode(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     fabric_job = relationship("TelcoFabricOnboardingJob", lazy="selectin")
+    detail = relationship("AciFabricNodeDetail", back_populates="node", uselist=False, cascade="all, delete-orphan")
+    interfaces = relationship("AciFabricNodeInterface", back_populates="node", cascade="all, delete-orphan")
 
     def update_from_attributes(self, attributes: Dict[str, Any]) -> None:
         self.name = attributes.get("name", self.name)
@@ -116,3 +118,56 @@ def _parse_timestamp(value: str) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+class AciFabricNodeDetail(Base):
+    __tablename__ = "aci_fabric_node_details"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    node_id = Column(GUID(), ForeignKey("aci_fabric_nodes.id", ondelete="CASCADE"), nullable=False, unique=True)
+    fabric_job_id = Column(GUID(), ForeignKey("telco_fabric_onboarding_jobs.id"), nullable=True)
+    general = Column(JSON, nullable=False, default=dict)
+    health = Column(JSON, nullable=False, default=dict)
+    resources = Column(JSON, nullable=False, default=dict)
+    environment = Column(JSON, nullable=False, default=dict)
+    firmware = Column(JSON, nullable=False, default=dict)
+    port_channels = Column(JSON, nullable=False, default=list)
+    connected_endpoints = Column(JSON, nullable=False, default=list)
+    collected_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    node = relationship("AciFabricNode", back_populates="detail")
+
+
+class AciFabricNodeInterface(Base):
+    __tablename__ = "aci_fabric_node_interfaces"
+    __table_args__ = (UniqueConstraint("node_id", "name", name="uq_aci_node_interface"),)
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    node_id = Column(GUID(), ForeignKey("aci_fabric_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
+    fabric_job_id = Column(GUID(), ForeignKey("telco_fabric_onboarding_jobs.id"), nullable=True)
+    name = Column(String, nullable=False)
+    distinguished_name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    admin_state = Column(String, nullable=True)
+    oper_state = Column(String, nullable=True)
+    oper_speed = Column(String, nullable=True)
+    usage = Column(String, nullable=True)
+    last_link_change_at = Column(DateTime(timezone=True), nullable=True)
+    mtu = Column(Integer, nullable=True)
+    fec_mode = Column(String, nullable=True)
+    duplex = Column(String, nullable=True)
+    mac = Column(String, nullable=True)
+    port_type = Column(String, nullable=True)
+    bundle_id = Column(String, nullable=True)
+    port_channel_id = Column(String, nullable=True)
+    port_channel_name = Column(String, nullable=True)
+    vlan_list = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=False, default=dict)
+    transceiver = Column(JSON, nullable=False, default=dict)
+    stats = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    node = relationship("AciFabricNode", back_populates="interfaces")

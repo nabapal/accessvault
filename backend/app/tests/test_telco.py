@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
-from app.core.database import AsyncSessionLocal
+from app.core import database
 from app.core.security import get_password_hash
 from app.models import (
     TelcoOnboardingStatus,
@@ -16,7 +16,7 @@ from app.services.telco_collector import TelcoCollectionResult
 
 @pytest.fixture
 async def admin_user() -> User:
-    async with AsyncSessionLocal() as session:
+    async with database.AsyncSessionLocal() as session:
         user = User(
             id=uuid.uuid4(),
             email="admin-telco@example.com",

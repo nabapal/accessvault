@@ -221,6 +221,153 @@ export interface AciFabricSummary {
   by_version: Record<string, number>;
 }
 
+export interface AciFabricNodeHealthSample {
+  window: string;
+  health_last?: number | null;
+  health_avg?: number | null;
+  health_max?: number | null;
+  health_min?: number | null;
+  sample_start?: string | null;
+  sample_end?: string | null;
+}
+
+export interface AciFabricNodeCpuStats {
+  usage_pct?: number | null;
+  idle_pct?: number | null;
+  user_pct?: number | null;
+  kernel_pct?: number | null;
+  sample_start?: string | null;
+  sample_end?: string | null;
+}
+
+export interface AciFabricNodeMemoryStats {
+  total_kb?: number | null;
+  used_kb?: number | null;
+  free_kb?: number | null;
+  usage_pct?: number | null;
+  sample_start?: string | null;
+  sample_end?: string | null;
+}
+
+export interface AciFabricNodeResources {
+  cpu?: AciFabricNodeCpuStats | null;
+  memory?: AciFabricNodeMemoryStats | null;
+}
+
+export interface AciFabricNodeTempSensor {
+  name: string;
+  value_celsius?: number | null;
+  normalized_value?: number | null;
+  distinguished_name?: string | null;
+}
+
+export interface AciFabricNodeFan {
+  name: string;
+  direction?: string | null;
+  model?: string | null;
+  vendor?: string | null;
+  status?: string | null;
+  distinguished_name?: string | null;
+}
+
+export interface AciFabricNodeEnvironment {
+  temperatures: AciFabricNodeTempSensor[];
+  fans: AciFabricNodeFan[];
+  power_supplies: Record<string, unknown>[];
+}
+
+export interface AciFabricNodeFirmware {
+  version?: string | null;
+  description?: string | null;
+  pe_version?: string | null;
+  bios_version?: string | null;
+  bios_timestamp?: string | null;
+  kickstart_image?: string | null;
+  system_image?: string | null;
+  last_boot?: string | null;
+}
+
+export interface AciFabricNodePortChannelMember {
+  name: string;
+  distinguished_name?: string | null;
+}
+
+export interface AciFabricNodePortChannel {
+  port_channel_id: string;
+  name?: string | null;
+  admin_state?: string | null;
+  oper_state?: string | null;
+  usage?: string | null;
+  speed?: string | null;
+  active_ports?: number | null;
+  members: AciFabricNodePortChannelMember[];
+}
+
+export interface AciFabricNodeTransceiver {
+  product_id?: string | null;
+  serial?: string | null;
+  type?: string | null;
+  vendor?: string | null;
+  state?: string | null;
+  is_present?: string | null;
+}
+
+export interface AciFabricNodeGeneral {
+  fabric_domain?: string | null;
+  fabric_id?: string | null;
+  pod_id?: string | null;
+  address?: string | null;
+  inband_address?: string | null;
+  inband_gateway?: string | null;
+  oob_address?: string | null;
+  oob_gateway?: string | null;
+  serial?: string | null;
+  system_name?: string | null;
+  uptime?: string | null;
+  last_reboot_at?: string | null;
+  last_reset_reason?: string | null;
+  current_time?: string | null;
+  mode?: string | null;
+}
+
+export interface AciFabricNodeDetail {
+  node: AciFabricNode;
+  collected_at?: string | null;
+  general: AciFabricNodeGeneral;
+  health: { samples: AciFabricNodeHealthSample[] };
+  resources: AciFabricNodeResources;
+  environment: AciFabricNodeEnvironment;
+  firmware: AciFabricNodeFirmware | null;
+  port_channels: AciFabricNodePortChannel[];
+}
+
+export interface AciFabricNodeInterface {
+  id: string;
+  node_id: string;
+  name: string;
+  distinguished_name: string;
+  description?: string | null;
+  admin_state?: string | null;
+  oper_state?: string | null;
+  oper_speed?: string | null;
+  usage?: string | null;
+  last_link_change_at?: string | null;
+  mtu?: number | null;
+  fec_mode?: string | null;
+  duplex?: string | null;
+  mac?: string | null;
+  port_type?: string | null;
+  bundle_id?: string | null;
+  port_channel_id?: string | null;
+  port_channel_name?: string | null;
+  vlan_list?: string | null;
+  attributes: Record<string, unknown>;
+  transceiver: AciFabricNodeTransceiver;
+  stats: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export type TelcoFabricType = "aci" | "nxos";
 
 export type TelcoOnboardingStatus = "pending" | "validating" | "ready" | "failed";

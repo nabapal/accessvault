@@ -1,16 +1,25 @@
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import delete
 
-from app.core.database import AsyncSessionLocal
+from app.core import database
 from app.core.security import get_password_hash
-from app.models import AciFabricNode, AciNodeRole, User, UserRoleEnum
+from app.models import (
+    AciFabricNode,
+    AciFabricNodeDetail,
+    AciFabricNodeInterface,
+    AciNodeRole,
+    User,
+    UserRoleEnum,
+)
 
 
 @pytest.fixture
 async def admin_user() -> User:
-    async with AsyncSessionLocal() as session:
+    async with database.AsyncSessionLocal() as session:
         user = User(
             id=uuid.uuid4(),
             email="admin-aci@example.com",
@@ -26,7 +35,12 @@ async def admin_user() -> User:
 
 @pytest.fixture
 async def populate_fabric_nodes() -> None:
-    async with AsyncSessionLocal() as session:
+    async with database.AsyncSessionLocal() as session:
+        await session.execute(delete(AciFabricNodeInterface))
+        await session.execute(delete(AciFabricNodeDetail))
+        await session.execute(delete(AciFabricNode))
+        await session.commit()
+
         nodes: list[AciFabricNode] = []
         for idx in range(20):
             nodes.append(
@@ -72,6 +86,56 @@ async def populate_fabric_nodes() -> None:
             )
         session.add_all(nodes)
         await session.commit()
+
+
+@pytest.fixture
+async def node_with_detail() -> AciFabricNode:
+    async with database.AsyncSessionLocal() as session:
+        node = AciFabricNode(
+            id=uuid.uuid4(),
+            distinguished_name="topology/pod-1/node-999",
+            name="leaf-999",
+            role=AciNodeRole.LEAF,
+            node_id="999",
+            address="10.10.10.10",
+            serial="SN-LEAF-9999",
+            model="N9K-C93180YC-FX",
+            version="5.2(3)",
+        )
+        session.add(node)
+        await session.flush()
+
+        detail = AciFabricNodeDetail(
+            node_id=node.id,
+            general={"system_name": "leaf-999", "fabric_domain": "test-fabric"},
+            health={"samples": [{"window": "15min", "health_last": 90.0}]},
+            resources={
+                "cpu": {"usage_pct": 15.0, "idle_pct": 85.0},
+                "memory": {"usage_pct": 40.0, "total_kb": 1024},
+            },
+            environment={"temperatures": [], "fans": [], "power_supplies": []},
+            firmware={"version": "n9000-15.3(2a)"},
+            port_channels=[],
+            connected_endpoints=[],
+            collected_at=datetime.now(timezone.utc),
+        )
+        interface = AciFabricNodeInterface(
+            node_id=node.id,
+            name="eth1/1",
+            distinguished_name="topology/pod-1/node-999/sys/phys-[eth1/1]",
+            description="uplink",
+            admin_state="up",
+            oper_state="up",
+            oper_speed="10G",
+            usage="epg",
+            attributes={},
+            transceiver={},
+            stats={},
+        )
+        session.add_all([detail, interface])
+        await session.commit()
+        await session.refresh(node)
+        return node
 
 
 async def _login(client: AsyncClient, email: str, password: str) -> str:
@@ -180,3 +244,33 @@ async def test_fabric_summary_details(async_client: AsyncClient, admin_user: Use
     leaves_data = leaves_only.json()
     assert leaves_data["total_nodes"] == 20
     assert leaves_data["fabrics"][0]["by_role"].get("leaf") == 20
+
+
+@pytest.mark.anyio("asyncio")
+async def test_get_fabric_node_detail(async_client: AsyncClient, admin_user: User, node_with_detail: AciFabricNode) -> None:
+    token = await _login(async_client, admin_user.email, "adminpass")
+
+    response = await async_client.get(
+        f"/api/v1/aci/fabric/nodes/{node_with_detail.id}/detail",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["node"]["id"] == str(node_with_detail.id)
+    assert data["general"]["system_name"] == "leaf-999"
+    assert data["firmware"]["version"] == "n9000-15.3(2a)"
+    assert data["resources"]["cpu"]["usage_pct"] == 15.0
+
+
+@pytest.mark.anyio("asyncio")
+async def test_list_fabric_node_interfaces(async_client: AsyncClient, admin_user: User, node_with_detail: AciFabricNode) -> None:
+    token = await _login(async_client, admin_user.email, "adminpass")
+
+    response = await async_client.get(
+        f"/api/v1/aci/fabric/nodes/{node_with_detail.id}/interfaces",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "eth1/1"

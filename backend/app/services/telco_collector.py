@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import logging
 import asyncio
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, Iterable, List, Optional
+from typing import Any, AsyncGenerator, Dict, Iterable, List, Optional, Tuple
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import AciFabricNode
+from app.models import AciFabricNode, AciFabricNodeDetail, AciFabricNodeInterface
 from app.models.telco import TelcoFabricOnboardingJob, TelcoFabricType, TelcoOnboardingStatus
 from app.services.crypto import decrypt_secret
 
@@ -28,6 +29,132 @@ class TelcoCollectionResult:
 
 class TelcoCollectionError(Exception):
     """Raised when a Telco collection run fails for a known reason."""
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate or candidate.lower() in {"never", "unspecified"}:
+        return None
+    try:
+        return datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _extract_node_path(distinguished_name: str | None) -> str | None:
+    if not distinguished_name or "node-" not in distinguished_name:
+        return None
+    marker = "/sys"
+    idx = distinguished_name.find(marker)
+    if idx != -1:
+        return distinguished_name[:idx]
+    parts = distinguished_name.split("/")
+    for index, part in enumerate(parts):
+        if part.startswith("node-"):
+            return "/".join(parts[: index + 1])
+    return None
+
+
+def _normalize_interface_dn(distinguished_name: str | None) -> str | None:
+    if not distinguished_name:
+        return None
+    if "/phys/" in distinguished_name:
+        return distinguished_name[: distinguished_name.find("/phys/")]
+    if distinguished_name.endswith("/phys"):
+        return distinguished_name[: -5]
+    if "/phys-" in distinguished_name:
+        return distinguished_name
+    return distinguished_name
+
+
+def _extract_interface_name(distinguished_name: str | None) -> str | None:
+    if not distinguished_name:
+        return None
+    if "[" in distinguished_name and "]" in distinguished_name:
+        start = distinguished_name.find("[") + 1
+        end = distinguished_name.find("]", start)
+        if start > 0 and end > start:
+            return distinguished_name[start:end]
+    parts = distinguished_name.split("/")
+    return parts[-1] if parts else None
+
+
+def _clean_string(value: Any) -> str | None:
+    if not value or not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _normalize_port_channel_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.lower().startswith("po"):
+        return text.lower()
+    if text.isdigit():
+        return f"po{text}"
+    return text.lower()
+
+
+def _serialize_datetime(value: datetime | None) -> datetime | str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _append_health_sample(container: Dict[str, Any], attributes: Dict[str, Any], window: str) -> None:
+    samples = container.setdefault("samples", [])
+    samples.append(
+        {
+            "window": window,
+            "health_last": _safe_float(attributes.get("healthLast")),
+            "health_avg": _safe_float(attributes.get("healthAvg")),
+            "health_max": _safe_float(attributes.get("healthMax")),
+            "health_min": _safe_float(attributes.get("healthMin")),
+            "sample_start": _serialize_datetime(_parse_datetime(attributes.get("repIntvStart"))),
+            "sample_end": _serialize_datetime(_parse_datetime(attributes.get("repIntvEnd"))),
+        }
+    )
+
+
+_ACI_DETAIL_ENDPOINTS: Dict[str, str] = {
+    "topSystem": "/api/class/topSystem.json",
+    "fabricNodeHealth15min": "/api/class/fabricNodeHealth15min.json",
+    "fabricNodeHealth1d": "/api/class/fabricNodeHealth1d.json",
+    "procSysCPU15min": "/api/class/procSysCPU15min.json",
+    "procSysMem15min": "/api/class/procSysMem15min.json",
+    "eqptTemp5min": "/api/class/eqptTemp5min.json",
+    "eqptFan": "/api/class/eqptFan.json",
+    "firmwareRunning": "/api/class/firmwareRunning.json",
+    "l1PhysIf": "/api/class/l1PhysIf.json",
+    "ethpmPhysIf": "/api/class/ethpmPhysIf.json",
+    "ethpmFcot": "/api/class/ethpmFcot.json",
+    "pcAggrIf": "/api/class/pcAggrIf.json",
+    "pcRsMbrIfs": "/api/class/pcRsMbrIfs.json",
+}
 
 
 async def run_collection_for_job(
@@ -79,6 +206,9 @@ async def _collect_aci_fabric(
     timeout = httpx.Timeout(30.0, read=60.0)
     login_payload = {"aaaUser": {"attributes": {"name": job.username, "pwd": password}}}
 
+    detail_counts = {"node_detail_count": 0, "interface_count": 0}
+    count = 0
+
     async with httpx.AsyncClient(base_url=base_url, verify=job.verify_ssl, timeout=timeout) as client:
         response = await client.post("/api/aaaLogin.json", json=login_payload)
         response.raise_for_status()
@@ -93,11 +223,18 @@ async def _collect_aci_fabric(
         fabric_response.raise_for_status()
         payload = fabric_response.json()
 
-    items = payload.get("imdata", [])
-    count = await _upsert_aci_nodes(session, items, job)
-    await session.flush()
+        items = payload.get("imdata", [])
+        count = await _upsert_aci_nodes(session, items, job)
+        await session.flush()
 
-    return {"fabric_node_count": count}
+        result = await session.execute(select(AciFabricNode).where(AciFabricNode.fabric_job_id == job.id))
+        nodes = result.scalars().all()
+        if nodes:
+            detail_counts = await _collect_and_upsert_aci_node_details(session, client, job, nodes)
+
+    snapshot = {"fabric_node_count": count}
+    snapshot.update(detail_counts)
+    return snapshot
 
 
 async def _collect_nxos_fabric(
@@ -172,6 +309,450 @@ async def _upsert_aci_nodes(
         node.update_from_attributes(attributes)
         total += 1
     return total
+
+
+async def _collect_and_upsert_aci_node_details(
+    session: AsyncSession,
+    client: httpx.AsyncClient,
+    job: TelcoFabricOnboardingJob,
+    nodes: Iterable[AciFabricNode],
+) -> Dict[str, int]:
+    node_map: Dict[str, AciFabricNode] = {}
+    for node in nodes:
+        if node.distinguished_name:
+            node_map[node.distinguished_name] = node
+    if not node_map:
+        return {"node_detail_count": 0, "interface_count": 0}
+
+    datasets = await _fetch_aci_detail_datasets(client)
+    snapshots = _build_node_snapshots(node_map, datasets)
+    if not snapshots:
+        return {"node_detail_count": 0, "interface_count": 0}
+
+    detail_count, _ = await _upsert_node_detail_records(session, job, node_map, snapshots)
+    interface_count = await _replace_node_interfaces(session, job, node_map, snapshots)
+    return {"node_detail_count": detail_count, "interface_count": interface_count}
+
+
+async def _fetch_aci_detail_datasets(client: httpx.AsyncClient) -> Dict[str, List[Dict[str, Any]]]:
+    tasks = [client.get(path) for path in _ACI_DETAIL_ENDPOINTS.values()]
+    responses = await asyncio.gather(*tasks, return_exceptions=True)
+    datasets: Dict[str, List[Dict[str, Any]]] = {}
+
+    for (key, response) in zip(_ACI_DETAIL_ENDPOINTS.keys(), responses):
+        if isinstance(response, Exception):
+            logger.warning("Failed to fetch APIC endpoint %s: %s", key, response)
+            datasets[key] = []
+            continue
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.warning("APIC returned an error for endpoint %s: %s", key, exc)
+            datasets[key] = []
+            continue
+        payload = response.json()
+        items = payload.get("imdata", [])
+        datasets[key] = items if isinstance(items, list) else []
+
+    return datasets
+
+
+def _build_node_snapshots(
+    node_map: Dict[str, AciFabricNode],
+    datasets: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, Dict[str, Any]]:
+    snapshots: Dict[str, Dict[str, Any]] = {
+        node_path: {
+            "general": {},
+            "health": {"samples": []},
+            "resources": {},
+            "environment": {"temperatures": [], "fans": [], "power_supplies": []},
+            "firmware": {},
+            "port_channels": [],
+            "interfaces": [],
+            "connected_endpoints": [],
+        }
+        for node_path in node_map.keys()
+    }
+
+    for item in datasets.get("topSystem", []):
+        attributes = item.get("topSystem", {}).get("attributes")
+        if not attributes:
+            continue
+        node_path = _extract_node_path(attributes.get("dn"))
+        if node_path not in snapshots:
+            continue
+        general = snapshots[node_path]["general"]
+        general.update(
+            {
+                "fabric_domain": attributes.get("fabricDomain"),
+                "fabric_id": attributes.get("fabricId"),
+                "pod_id": attributes.get("podId"),
+                "address": attributes.get("address"),
+                "inband_address": attributes.get("inbMgmtAddr"),
+                "inband_gateway": attributes.get("inbMgmtGateway"),
+                "oob_address": attributes.get("oobMgmtAddr"),
+                "oob_gateway": attributes.get("oobMgmtGateway"),
+                "serial": attributes.get("serial"),
+                "system_name": attributes.get("name"),
+                "uptime": attributes.get("systemUpTime"),
+                "last_reboot_at": _serialize_datetime(_parse_datetime(attributes.get("lastRebootTime"))),
+                "last_reset_reason": attributes.get("lastResetReason"),
+                "current_time": _serialize_datetime(_parse_datetime(attributes.get("currentTime"))),
+                "mode": attributes.get("mode"),
+            }
+        )
+
+    health_mappings = {"fabricNodeHealth15min": "15min", "fabricNodeHealth1d": "1d"}
+    for key, window in health_mappings.items():
+        for item in datasets.get(key, []):
+            attributes = item.get(key, {}).get("attributes")
+            if not attributes:
+                continue
+            node_path = _extract_node_path(attributes.get("dn"))
+            if node_path not in snapshots:
+                continue
+            _append_health_sample(snapshots[node_path]["health"], attributes, window)
+
+    for item in datasets.get("procSysCPU15min", []):
+        attributes = item.get("procSysCPU15min", {}).get("attributes")
+        if not attributes:
+            continue
+        node_path = _extract_node_path(attributes.get("dn"))
+        if node_path not in snapshots:
+            continue
+        idle = _safe_float(attributes.get("idleAvg"))
+        user = _safe_float(attributes.get("userAvg"))
+        kernel = _safe_float(attributes.get("kernelAvg"))
+        usage_pct = None
+        if idle is not None:
+            usage_pct = max(0.0, min(100.0, 100.0 - idle))
+        snapshots[node_path]["resources"]["cpu"] = {
+            "usage_pct": usage_pct,
+            "idle_pct": idle,
+            "user_pct": user,
+            "kernel_pct": kernel,
+            "sample_start": _serialize_datetime(_parse_datetime(attributes.get("repIntvStart"))),
+            "sample_end": _serialize_datetime(_parse_datetime(attributes.get("repIntvEnd"))),
+        }
+
+    for item in datasets.get("procSysMem15min", []):
+        attributes = item.get("procSysMem15min", {}).get("attributes")
+        if not attributes:
+            continue
+        node_path = _extract_node_path(attributes.get("dn"))
+        if node_path not in snapshots:
+            continue
+        total = _safe_int(attributes.get("totalAvg"))
+        used = _safe_int(attributes.get("usedAvg"))
+        free = _safe_int(attributes.get("freeAvg"))
+        usage_pct = None
+        if total and total > 0 and used is not None:
+            usage_pct = max(0.0, min(100.0, (used / total) * 100.0))
+        snapshots[node_path]["resources"]["memory"] = {
+            "total_kb": total,
+            "used_kb": used,
+            "free_kb": free,
+            "usage_pct": usage_pct,
+            "sample_start": _serialize_datetime(_parse_datetime(attributes.get("repIntvStart"))),
+            "sample_end": _serialize_datetime(_parse_datetime(attributes.get("repIntvEnd"))),
+        }
+
+    for item in datasets.get("eqptTemp5min", []):
+        attributes = item.get("eqptTemp5min", {}).get("attributes")
+        if not attributes:
+            continue
+        dn = attributes.get("dn")
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots:
+            continue
+        segments = dn.split("/") if dn else []
+        sensor = segments[-2] if len(segments) >= 2 else (dn or "sensor")
+        location = segments[-3] if len(segments) >= 3 else None
+        name = sensor if not location else f"{location}/{sensor}"
+        snapshots[node_path]["environment"]["temperatures"].append(
+            {
+                "name": name,
+                "value_celsius": _safe_float(attributes.get("currentLast")),
+                "normalized_value": _safe_float(attributes.get("normalizedLast")),
+                "distinguished_name": dn,
+            }
+        )
+
+    for item in datasets.get("eqptFan", []):
+        attributes = item.get("eqptFan", {}).get("attributes")
+        if not attributes:
+            continue
+        dn = attributes.get("dn")
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots:
+            continue
+        fan_label = attributes.get("descr") or attributes.get("id") or _extract_interface_name(dn)
+        snapshots[node_path]["environment"]["fans"].append(
+            {
+                "name": fan_label or "fan",
+                "direction": attributes.get("dir"),
+                "model": attributes.get("model"),
+                "vendor": attributes.get("vendor"),
+                "status": attributes.get("operSt"),
+                "distinguished_name": dn,
+            }
+        )
+
+    for item in datasets.get("firmwareRunning", []):
+        attributes = item.get("firmwareRunning", {}).get("attributes")
+        if not attributes:
+            continue
+        node_path = _extract_node_path(attributes.get("dn"))
+        if node_path not in snapshots:
+            continue
+        snapshots[node_path]["firmware"] = {
+            "version": attributes.get("version"),
+            "description": attributes.get("descr"),
+            "pe_version": attributes.get("peVer"),
+            "bios_version": attributes.get("biosVer"),
+            "bios_timestamp": _serialize_datetime(_parse_datetime(attributes.get("biosTs"))),
+            "kickstart_image": attributes.get("ksFile"),
+            "system_image": attributes.get("sysFile"),
+            "last_boot": _serialize_datetime(_parse_datetime(attributes.get("ts"))),
+        }
+
+    interface_map: Dict[str, Dict[str, Any]] = {}
+    for item in datasets.get("l1PhysIf", []):
+        attributes = item.get("l1PhysIf", {}).get("attributes")
+        if not attributes:
+            continue
+        dn = attributes.get("dn")
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots:
+            continue
+        entry = interface_map.setdefault(dn, {"node_path": node_path})
+        entry["l1"] = attributes
+
+    for item in datasets.get("ethpmPhysIf", []):
+        attributes = item.get("ethpmPhysIf", {}).get("attributes")
+        if not attributes:
+            continue
+        dn = _normalize_interface_dn(attributes.get("dn"))
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots or not dn:
+            continue
+        entry = interface_map.setdefault(dn, {"node_path": node_path})
+        entry["ethpm"] = attributes
+
+    for item in datasets.get("ethpmFcot", []):
+        attributes = item.get("ethpmFcot", {}).get("attributes")
+        if not attributes:
+            continue
+        dn = _normalize_interface_dn(attributes.get("dn"))
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots or not dn:
+            continue
+        entry = interface_map.setdefault(dn, {"node_path": node_path})
+        entry["fcot"] = attributes
+
+    port_channels_by_node: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+    for item in datasets.get("pcAggrIf", []):
+        attributes = item.get("pcAggrIf", {}).get("attributes")
+        if not attributes:
+            continue
+        dn = attributes.get("dn")
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots:
+            continue
+        pc_id = _normalize_port_channel_id(attributes.get("pcId") or attributes.get("id"))
+        if not pc_id:
+            continue
+        port_channels_by_node[node_path][pc_id] = {
+            "port_channel_id": pc_id,
+            "name": attributes.get("name") or pc_id,
+            "admin_state": attributes.get("adminSt"),
+            "oper_state": attributes.get("switchingSt"),
+            "usage": attributes.get("usage"),
+            "speed": attributes.get("speed"),
+            "active_ports": _safe_int(attributes.get("activePorts")),
+            "members": [],
+        }
+
+    for item in datasets.get("pcRsMbrIfs", []):
+        attributes = item.get("pcRsMbrIfs", {}).get("attributes")
+        if not attributes:
+            continue
+        t_dn = attributes.get("tDn")
+        dn = _normalize_interface_dn(t_dn)
+        node_path = _extract_node_path(dn)
+        if node_path not in snapshots or not dn:
+            continue
+        pc_id = _normalize_port_channel_id(attributes.get("parentSKey"))
+        if not pc_id:
+            continue
+        entry = interface_map.setdefault(dn, {"node_path": node_path})
+        entry["port_channel"] = {"id": pc_id}
+        member_name = attributes.get("tSKey") or _extract_interface_name(dn) or dn
+        port_channel = port_channels_by_node[node_path].get(pc_id)
+        if port_channel is not None:
+            member_record = {"name": member_name, "distinguished_name": dn}
+            if member_record not in port_channel["members"]:
+                port_channel["members"].append(member_record)
+
+    for node_path, channel_map in port_channels_by_node.items():
+        snapshots[node_path]["port_channels"] = sorted(channel_map.values(), key=lambda item: item["port_channel_id"])
+
+    for dn, payload in interface_map.items():
+        node_path = payload.get("node_path")
+        if node_path not in snapshots:
+            continue
+        l1 = payload.get("l1", {})
+        ethpm = payload.get("ethpm", {})
+        fcot = payload.get("fcot", {})
+        port_channel_info = payload.get("port_channel", {})
+        name = l1.get("id") or _extract_interface_name(dn) or dn
+        port_channel_id = port_channel_info.get("id") if isinstance(port_channel_info, dict) else None
+        port_channel_id = _normalize_port_channel_id(port_channel_id)
+        port_channel_name = None
+        if port_channel_id:
+            channel = port_channels_by_node[node_path].get(port_channel_id)
+            if channel:
+                port_channel_name = channel.get("name")
+
+        transceiver = {}
+        if fcot:
+            transceiver = {
+                "product_id": _clean_string(fcot.get("guiCiscoPID")),
+                "serial": _clean_string(fcot.get("guiSN")),
+                "type": fcot.get("typeName") or fcot.get("type"),
+                "vendor": _clean_string(fcot.get("guiName")),
+                "state": fcot.get("state"),
+                "is_present": fcot.get("isFcotPresent"),
+            }
+
+        interface_entry = {
+            "name": name,
+            "distinguished_name": dn,
+            "description": l1.get("descr") or _clean_string(l1.get("name")),
+            "admin_state": l1.get("adminSt"),
+            "oper_state": ethpm.get("operSt") or l1.get("adminSt"),
+            "oper_speed": ethpm.get("operSpeed") or l1.get("speed"),
+            "usage": ethpm.get("usage") or l1.get("usage"),
+            "last_link_change_at": _parse_datetime(ethpm.get("lastLinkStChg")),
+            "mtu": _safe_int(l1.get("mtu")),
+            "fec_mode": ethpm.get("operFecMode") or l1.get("fecMode"),
+            "duplex": ethpm.get("operDuplex"),
+            "mac": ethpm.get("backplaneMac"),
+            "port_type": l1.get("portT") or ethpm.get("intfT"),
+            "bundle_id": ethpm.get("bundleBupId"),
+            "port_channel_id": port_channel_id,
+            "port_channel_name": port_channel_name,
+            "vlan_list": ethpm.get("operVlans") or ethpm.get("allowedVlans"),
+            "attributes": {
+                "mode": l1.get("mode"),
+                "layer": l1.get("layer"),
+                "auto_negotiation": l1.get("autoNeg"),
+            },
+            "transceiver": transceiver,
+            "stats": {
+                "reset_count": _safe_int(ethpm.get("resetCtr")),
+                "err_disable_reason": ethpm.get("operErrDisQual"),
+                "last_errors": ethpm.get("lastErrors"),
+            },
+        }
+        snapshots[node_path]["interfaces"].append(interface_entry)
+
+    for snapshot in snapshots.values():
+        snapshot["interfaces"].sort(key=lambda item: item["name"])
+
+    return snapshots
+
+
+async def _upsert_node_detail_records(
+    session: AsyncSession,
+    job: TelcoFabricOnboardingJob,
+    node_map: Dict[str, AciFabricNode],
+    snapshots: Dict[str, Dict[str, Any]],
+) -> Tuple[int, datetime]:
+    node_ids = [node.id for node in node_map.values()]
+    if not node_ids:
+        return 0, datetime.now(timezone.utc)
+    result = await session.execute(
+        select(AciFabricNodeDetail).where(AciFabricNodeDetail.node_id.in_(node_ids))
+    )
+    existing = {detail.node_id: detail for detail in result.scalars()}
+    collected_at = datetime.now(timezone.utc)
+    updated = 0
+
+    for node_path, snapshot in snapshots.items():
+        node = node_map.get(node_path)
+        if node is None:
+            continue
+        detail = existing.get(node.id)
+        if detail is None:
+            detail = AciFabricNodeDetail(node_id=node.id, fabric_job_id=job.id)
+            session.add(detail)
+        detail.fabric_job_id = job.id
+        detail.general = snapshot.get("general", {})
+        detail.health = snapshot.get("health", {})
+        detail.resources = snapshot.get("resources", {})
+        detail.environment = snapshot.get("environment", {})
+        detail.firmware = snapshot.get("firmware", {})
+        detail.port_channels = snapshot.get("port_channels", [])
+        detail.connected_endpoints = snapshot.get("connected_endpoints", [])
+        detail.collected_at = collected_at
+        updated += 1
+
+    return updated, collected_at
+
+
+async def _replace_node_interfaces(
+    session: AsyncSession,
+    job: TelcoFabricOnboardingJob,
+    node_map: Dict[str, AciFabricNode],
+    snapshots: Dict[str, Dict[str, Any]],
+) -> int:
+    node_ids = [node.id for node in node_map.values()]
+    if not node_ids:
+        return 0
+    await session.execute(delete(AciFabricNodeInterface).where(AciFabricNodeInterface.node_id.in_(node_ids)))
+
+    interface_models: List[AciFabricNodeInterface] = []
+    for node_path, snapshot in snapshots.items():
+        node = node_map.get(node_path)
+        if node is None:
+            continue
+        for entry in snapshot.get("interfaces", []):
+            dn_value = entry.get("distinguished_name")
+            if not dn_value:
+                continue
+            name_value = entry.get("name") or "interface"
+            interface_models.append(
+                AciFabricNodeInterface(
+                    node_id=node.id,
+                    fabric_job_id=job.id,
+                    name=name_value,
+                    distinguished_name=dn_value,
+                    description=entry.get("description"),
+                    admin_state=entry.get("admin_state"),
+                    oper_state=entry.get("oper_state"),
+                    oper_speed=entry.get("oper_speed"),
+                    usage=entry.get("usage"),
+                    last_link_change_at=entry.get("last_link_change_at"),
+                    mtu=entry.get("mtu"),
+                    fec_mode=entry.get("fec_mode"),
+                    duplex=entry.get("duplex"),
+                    mac=entry.get("mac"),
+                    port_type=entry.get("port_type"),
+                    bundle_id=entry.get("bundle_id"),
+                    port_channel_id=entry.get("port_channel_id"),
+                    port_channel_name=entry.get("port_channel_name"),
+                    vlan_list=entry.get("vlan_list"),
+                    attributes=entry.get("attributes") or {},
+                    transceiver=entry.get("transceiver") or {},
+                    stats=entry.get("stats") or {},
+                )
+            )
+
+    if interface_models:
+        session.add_all(interface_models)
+    return len(interface_models)
 
 
 def _parse_nxos_inventory(data: Dict[str, Any]) -> List[Dict[str, Any]]:

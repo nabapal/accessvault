@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { fetchAciFabricNodes, fetchAciFabricSummary } from "@/services/aci";
@@ -182,7 +183,7 @@ export function AciInventoryPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search name, IP, serial, model..."
+              placeholder="Search name, IP, serial, model, fabric..."
               className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-72"
             />
           </div>
@@ -304,7 +305,14 @@ export function AciInventoryPage() {
                         <div className="text-xs text-slate-500">{node.fabric_ip ?? "--"}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-white">{node.name}</div>
+                        <div className="font-semibold text-white">
+                          <Link
+                            to={`/telco/aci/nodes/${node.id}`}
+                            className="text-primary-300 hover:text-primary-200"
+                          >
+                            {node.name}
+                          </Link>
+                        </div>
                         <div className="text-xs text-slate-400">Node ID: {node.node_id}</div>
                         {node.pod ? <div className="text-xs text-slate-500">{node.pod}</div> : null}
                       </td>

@@ -5,12 +5,15 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_current_user, get_db
-from app.models import AciFabricNode, AciNodeRole
+from app.models import AciFabricNode, AciFabricNodeDetail, AciFabricNodeInterface, AciNodeRole, TelcoFabricOnboardingJob
 from app.schemas import (
+    AciFabricNodeDetailRead,
+    AciFabricNodeInterfaceRead,
     AciFabricNodePage,
     AciFabricNodeRead,
     AciFabricNodeSummary,
@@ -25,18 +28,47 @@ def _serialize_node(node: AciFabricNode) -> AciFabricNodeRead:
     return AciFabricNodeRead.model_validate(node, from_attributes=True)
 
 
+def _serialize_node_detail(
+    node: AciFabricNode,
+    detail: AciFabricNodeDetail | None,
+) -> AciFabricNodeDetailRead:
+    firmware_payload = detail.firmware if detail and detail.firmware else None
+    return AciFabricNodeDetailRead(
+        node=_serialize_node(node),
+        collected_at=detail.collected_at if detail else None,
+        general=detail.general if detail and detail.general else {},
+        health=detail.health if detail and detail.health else {},
+        resources=detail.resources if detail and detail.resources else {},
+        environment=detail.environment if detail and detail.environment else {},
+        firmware=firmware_payload,
+        port_channels=detail.port_channels if detail and detail.port_channels else [],
+    )
+
+
 @router.get("/fabric/nodes", response_model=AciFabricNodePage)
 async def list_fabric_nodes(
     page: int = Query(default=1, ge=1, description="1-indexed page number"),
     page_size: int = Query(default=25, ge=1, le=200, description="Number of records per page"),
     role: Optional[AciNodeRole] = Query(default=None, description="Filter by fabric role"),
-    search: Optional[str] = Query(default=None, description="Case-insensitive search across name, address, serial, model"),
+    search: Optional[str] = Query(
+        default=None,
+        description="Case-insensitive search across name, address, serial, model, fabric name, or fabric IP",
+    ),
     db: AsyncSession = Depends(get_db),
     _: object = Depends(get_current_user),
 ) -> AciFabricNodePage:
+    telco_alias = aliased(TelcoFabricOnboardingJob)
+
     conditions = []
-    stmt = select(AciFabricNode).options(selectinload(AciFabricNode.fabric_job)).order_by(AciFabricNode.name)
-    count_stmt = select(func.count()).select_from(AciFabricNode)
+    stmt = (
+        select(AciFabricNode)
+        .options(selectinload(AciFabricNode.fabric_job))
+        .outerjoin(telco_alias, AciFabricNode.fabric_job_id == telco_alias.id)
+        .order_by(AciFabricNode.name)
+    )
+    count_stmt = select(func.count()).select_from(AciFabricNode).outerjoin(
+        telco_alias, AciFabricNode.fabric_job_id == telco_alias.id
+    )
 
     if role is not None:
         condition = AciFabricNode.role == role
@@ -49,6 +81,8 @@ async def list_fabric_nodes(
             func.lower(AciFabricNode.address).like(pattern),
             func.lower(AciFabricNode.serial).like(pattern),
             func.lower(AciFabricNode.model).like(pattern),
+            func.lower(func.coalesce(telco_alias.name, "")).like(pattern),
+            func.lower(func.coalesce(telco_alias.target_host, "")).like(pattern),
         )
         conditions.append(search_condition)
 
@@ -95,6 +129,43 @@ async def get_fabric_node(
     if node is None:
         raise HTTPException(status_code=404, detail="Fabric node not found")
     return _serialize_node(node)
+
+
+@router.get("/fabric/nodes/{node_id}/detail", response_model=AciFabricNodeDetailRead)
+async def get_fabric_node_detail(
+    node_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> AciFabricNodeDetailRead:
+    node = await db.get(AciFabricNode, node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail="Fabric node not found")
+
+    result = await db.execute(
+        select(AciFabricNodeDetail).where(AciFabricNodeDetail.node_id == node.id)
+    )
+    detail = result.scalar_one_or_none()
+
+    return _serialize_node_detail(node, detail)
+
+
+@router.get("/fabric/nodes/{node_id}/interfaces", response_model=list[AciFabricNodeInterfaceRead])
+async def list_fabric_node_interfaces(
+    node_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> list[AciFabricNodeInterfaceRead]:
+    node = await db.get(AciFabricNode, node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail="Fabric node not found")
+
+    result = await db.execute(
+        select(AciFabricNodeInterface)
+        .where(AciFabricNodeInterface.node_id == node.id)
+        .order_by(AciFabricNodeInterface.name)
+    )
+    interfaces = result.scalars().all()
+    return [AciFabricNodeInterfaceRead.model_validate(item, from_attributes=True) for item in interfaces]
 
 
 @router.get("/fabric/summary", response_model=AciFabricNodeSummary)

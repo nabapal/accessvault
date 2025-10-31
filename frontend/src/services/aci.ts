@@ -1,6 +1,13 @@
 import api from "./api";
 
-import { AciFabricNodePage, AciFabricSummary, AciFabricSummaryDetails, AciNodeRole } from "@/types";
+import {
+  AciFabricNodeDetail,
+  AciFabricNodeInterface,
+  AciFabricNodePage,
+  AciFabricSummary,
+  AciFabricSummaryDetails,
+  AciNodeRole
+} from "@/types";
 
 interface FetchAciFabricNodesOptions {
   role?: AciNodeRole;
@@ -65,5 +72,15 @@ export const fetchAciFabricSummaryDetails = async (
   const { data } = await api.get<AciFabricSummaryDetails>("/aci/fabric/summary/details", {
     params: Object.keys(params).length ? params : undefined
   });
+  return data;
+};
+
+export const fetchAciFabricNodeDetail = async (nodeId: string): Promise<AciFabricNodeDetail> => {
+  const { data } = await api.get<AciFabricNodeDetail>(`/aci/fabric/nodes/${nodeId}/detail`);
+  return data;
+};
+
+export const fetchAciFabricNodeInterfaces = async (nodeId: string): Promise<AciFabricNodeInterface[]> => {
+  const { data } = await api.get<AciFabricNodeInterface[]>(`/aci/fabric/nodes/${nodeId}/interfaces`);
   return data;
 };

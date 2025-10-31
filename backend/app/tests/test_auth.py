@@ -4,14 +4,14 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.core.database import AsyncSessionLocal
+from app.core import database
 from app.core.security import get_password_hash
 from app.models import User, UserRoleEnum
 
 
 @pytest.fixture
 async def admin_user() -> User:
-    async with AsyncSessionLocal() as session:
+    async with database.AsyncSessionLocal() as session:
         user = User(
             id=uuid.uuid4(),
             email="admin@example.com",
@@ -68,7 +68,7 @@ async def test_register_user(async_client: AsyncClient, admin_user: User):
     data = create_resp.json()
     assert data["email"] == "user@example.com"
 
-    async with AsyncSessionLocal() as session:
+    async with database.AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.email == "user@example.com"))
         created_user = result.scalar_one_or_none()
         assert created_user is not None
