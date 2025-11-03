@@ -274,3 +274,5 @@ async def test_list_fabric_node_interfaces(async_client: AsyncClient, admin_user
     data = response.json()
     assert len(data) == 1
     assert data[0]["name"] == "eth1/1"
+    assert data[0]["epg_bindings"] == []
+    assert data[0]["l3out_bindings"] == []

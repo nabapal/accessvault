@@ -143,6 +143,18 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
                 await conn.execute(text("DROP TABLE aci_fabric_nodes_old"))
                 needs_aci_backfill = True
 
+        interface_result = await conn.execute(text("PRAGMA table_info('aci_fabric_node_interfaces')"))
+        interface_columns = {row[1] for row in interface_result}
+        if interface_columns:
+            if "epg_bindings" not in interface_columns:
+                await conn.execute(
+                    text("ALTER TABLE aci_fabric_node_interfaces ADD COLUMN epg_bindings JSON DEFAULT '[]'")
+                )
+            if "l3out_bindings" not in interface_columns:
+                await conn.execute(
+                    text("ALTER TABLE aci_fabric_node_interfaces ADD COLUMN l3out_bindings JSON DEFAULT '[]'")
+                )
+
         telco_result = await conn.execute(text("PRAGMA table_info('telco_fabric_onboarding_jobs')"))
         telco_columns = {row[1] for row in telco_result}
         if telco_columns:  # table exists

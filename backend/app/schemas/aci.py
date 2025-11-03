@@ -217,6 +217,8 @@ class AciFabricNodeInterfaceRead(BaseModel):
     port_channel_id: str | None = None
     port_channel_name: str | None = None
     vlan_list: str | None = None
+    epg_bindings: List[Dict[str, Any]] = Field(default_factory=list)
+    l3out_bindings: List[Dict[str, Any]] = Field(default_factory=list)
     attributes: Dict[str, Any] = Field(default_factory=dict)
     transceiver: Dict[str, Any] = Field(default_factory=dict)
     stats: Dict[str, Any] = Field(default_factory=dict)

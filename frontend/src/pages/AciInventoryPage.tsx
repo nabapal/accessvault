@@ -214,11 +214,11 @@ export function AciInventoryPage() {
             <p className="mt-1 text-[13px] text-slate-400">Backbone connectivity layer</p>
           </div>
           <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-400">Delayed Heartbeat</p>
+            <p className="text-xs uppercase tracking-wide text-slate-400">Controller Nodes</p>
             <p className="mt-2 text-2xl font-semibold text-amber-200">
-              {filteredSummary?.delayed_heartbeat ?? "--"}
+              {filteredSummary?.controller_count ?? "--"}
             </p>
-            <p className="mt-1 text-[13px] text-slate-400">Nodes reporting delayed heartbeat</p>
+            <p className="mt-1 text-[13px] text-slate-400">Centralized fabric policy controllers</p>
           </div>
         </section>
 

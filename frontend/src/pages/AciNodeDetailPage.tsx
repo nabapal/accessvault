@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { fetchAciFabricNodeDetail, fetchAciFabricNodeInterfaces } from "@/services/aci";
-import { AciFabricNodeDetail, AciFabricNodeInterface } from "@/types";
+import { AciFabricNodeDetail, AciFabricNodeInterface, AciInterfaceBinding } from "@/types";
 
 const formatDateTime = (value?: string | null) => {
   if (!value) {
@@ -101,6 +101,14 @@ export function AciNodeDetailPage() {
   const cpuStats = detail?.resources.cpu ?? null;
   const memoryStats = detail?.resources.memory ?? null;
 
+  const formatBindingLabel = (binding: AciInterfaceBinding) => {
+    const parts = [binding.name];
+    if (binding.encap) {
+      parts.push(`(${binding.encap})`);
+    }
+    return parts.join(" ");
+  };
+
   const filteredInterfaces = useMemo(() => {
     if (!interfaceFilter) {
       return interfaces;
@@ -108,6 +116,10 @@ export function AciNodeDetailPage() {
     const term = interfaceFilter.toLowerCase();
     return interfaces.filter((item) => {
       const transceiver = item.transceiver ?? {};
+      const bindingCandidates = [
+        ...item.epg_bindings.flatMap((binding) => [binding.name, binding.encap, binding.mode, binding.immediacy]),
+        ...item.l3out_bindings.flatMap((binding) => [binding.name, binding.encap, binding.mode, binding.immediacy])
+      ].filter(Boolean) as string[];
       const candidates = [
         item.name,
         item.description,
@@ -115,17 +127,18 @@ export function AciNodeDetailPage() {
         item.oper_speed,
         item.vlan_list,
         item.port_channel_name,
+  item.port_channel_id,
         transceiver.product_id,
         transceiver.type,
         transceiver.vendor,
         transceiver.serial,
-        transceiver.state
+        transceiver.state,
+        ...bindingCandidates
       ].filter(Boolean) as string[];
       return candidates.some((candidate) => candidate.toLowerCase().includes(term));
     });
   }, [interfaces, interfaceFilter]);
 
-  const portChannelCount = detail?.port_channels.length ?? 0;
   const interfaceCount = interfaces.length;
 
   return (
@@ -204,7 +217,7 @@ export function AciNodeDetailPage() {
               <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
                 <p className="text-xs uppercase tracking-wide text-slate-400">Inventory Coverage</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-100">{interfaceCount} interfaces</p>
-                <p className="mt-1 text-[13px] text-slate-400">{portChannelCount} port-channels discovered</p>
+                <p className="mt-1 text-[13px] text-slate-400">Interface telemetry includes policy bindings and link health.</p>
               </div>
             </section>
 
@@ -319,66 +332,16 @@ export function AciNodeDetailPage() {
 
             <section className="rounded-lg border border-brand-700 bg-brand-900/60">
               <div className="border-b border-brand-800/70 px-4 py-3">
-                <h2 className="text-sm font-semibold text-slate-100">Port Channels</h2>
-                <p className="text-xs text-slate-400">Aggregated links and active members discovered on this node.</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-brand-800/70 text-sm">
-                  <thead className="bg-brand-900/70 text-xs uppercase tracking-wide text-slate-400">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Port Channel</th>
-                      <th className="px-4 py-3 text-left">State</th>
-                      <th className="px-4 py-3 text-left">Usage</th>
-                      <th className="px-4 py-3 text-left">Members</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-brand-800/60 text-slate-200">
-                    {detail.port_channels.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-4 text-center text-sm text-slate-400">
-                          No port channels discovered.
-                        </td>
-                      </tr>
-                    ) : (
-                      detail.port_channels.map((channel) => (
-                        <tr key={channel.port_channel_id} className="hover:bg-brand-800/40">
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-white">{channel.name ?? channel.port_channel_id}</div>
-                            <div className="text-xs text-slate-400">ID: {channel.port_channel_id ? channel.port_channel_id.toUpperCase() : "--"}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div>{channel.oper_state ?? "--"}</div>
-                            <div className="text-xs text-slate-500">Admin: {channel.admin_state ?? "--"}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div>{channel.usage ?? "--"}</div>
-                            <div className="text-xs text-slate-500">Active: {channel.active_ports ?? "--"}</div>
-                          </td>
-                          <td className="px-4 py-3 text-slate-100">
-                            {channel.members.length === 0
-                              ? "--"
-                              : channel.members.map((member) => member.name ?? member.distinguished_name ?? "--").join(", ")}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="rounded-lg border border-brand-700 bg-brand-900/60">
-              <div className="border-b border-brand-800/70 px-4 py-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h2 className="text-sm font-semibold text-slate-100">Interfaces</h2>
-                    <p className="text-xs text-slate-400">Operational state, speed, VLANs, and port-channel membership.</p>
+                    <p className="text-xs text-slate-400">Operational state, speed, policy bindings, and port-channel membership.</p>
                   </div>
                   <input
                     type="search"
                     value={interfaceFilter}
                     onChange={(event) => setInterfaceFilter(event.target.value)}
-                    placeholder="Filter by name, state, VLAN, port-channel..."
+                    placeholder="Filter by name, state, binding, port-channel..."
                     className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 md:w-80"
                   />
                 </div>
@@ -391,7 +354,7 @@ export function AciNodeDetailPage() {
                       <th className="px-4 py-3 text-left">Admin / Oper</th>
                       <th className="px-4 py-3 text-left">Speed</th>
                       <th className="px-4 py-3 text-left">Transceiver</th>
-                      <th className="px-4 py-3 text-left">VLANs</th>
+                      <th className="px-4 py-3 text-left">EPGs / L3Outs</th>
                       <th className="px-4 py-3 text-left">Port Channel</th>
                       <th className="px-4 py-3 text-left">Last Change</th>
                     </tr>
@@ -423,7 +386,26 @@ export function AciNodeDetailPage() {
                             </div>
                             <div className="text-xs text-slate-500">State: {iface.transceiver?.state ?? "--"}</div>
                           </td>
-                          <td className="px-4 py-3 text-slate-100">{iface.vlan_list ?? "--"}</td>
+                          <td className="px-4 py-3 text-slate-100">
+                            {iface.epg_bindings.length === 0 && iface.l3out_bindings.length === 0 ? (
+                              <span className="text-slate-500">--</span>
+                            ) : (
+                              <div className="space-y-2">
+                                {iface.epg_bindings.length > 0 ? (
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">EPGs</div>
+                                    <div>{iface.epg_bindings.map((binding) => formatBindingLabel(binding)).join(", ")}</div>
+                                  </div>
+                                ) : null}
+                                {iface.l3out_bindings.length > 0 ? (
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">L3Outs</div>
+                                    <div>{iface.l3out_bindings.map((binding) => formatBindingLabel(binding)).join(", ")}</div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-slate-100">{iface.port_channel_name ?? iface.port_channel_id ?? "--"}</td>
                           <td className="px-4 py-3 text-slate-100">{formatDateTime(iface.last_link_change_at)}</td>
                         </tr>

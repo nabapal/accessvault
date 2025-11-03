@@ -341,6 +341,14 @@ export interface AciFabricNodeDetail {
   port_channels: AciFabricNodePortChannel[];
 }
 
+export interface AciInterfaceBinding {
+  name: string;
+  encap?: string | null;
+  mode?: string | null;
+  immediacy?: string | null;
+  path?: string | null;
+}
+
 export interface AciFabricNodeInterface {
   id: string;
   node_id: string;
@@ -361,6 +369,8 @@ export interface AciFabricNodeInterface {
   port_channel_id?: string | null;
   port_channel_name?: string | null;
   vlan_list?: string | null;
+  epg_bindings: AciInterfaceBinding[];
+  l3out_bindings: AciInterfaceBinding[];
   attributes: Record<string, unknown>;
   transceiver: AciFabricNodeTransceiver;
   stats: Record<string, unknown>;

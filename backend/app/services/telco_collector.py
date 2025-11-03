@@ -117,6 +117,141 @@ def _normalize_port_channel_id(value: Any) -> str | None:
     return text.lower()
 
 
+def _parse_epg_binding(dn: str | None) -> str | None:
+    if not dn or "epg-" not in dn:
+        return None
+    tenant = None
+    app_profile = None
+    epg = None
+    for segment in dn.split("/"):
+        if segment.startswith("tn-"):
+            tenant = segment[3:]
+        elif segment.startswith("ap-"):
+            app_profile = segment[3:]
+        elif segment.startswith("epg-"):
+            epg = segment[4:]
+    if tenant and app_profile and epg:
+        return f"{tenant} / {app_profile} / {epg}"
+    if tenant and epg:
+        return f"{tenant} / {epg}"
+    return None
+
+
+def _parse_l3out_binding(dn: str | None) -> str | None:
+    if not dn or "out-" not in dn:
+        return None
+    tenant = None
+    l3out = None
+    node_profile = None
+    interface_profile = None
+    for segment in dn.split("/"):
+        lower = segment.lower()
+        if segment.startswith("tn-"):
+            tenant = segment[3:]
+        elif segment.startswith("out-"):
+            l3out = segment[4:]
+        elif lower.startswith("lnodep-"):
+            node_profile = segment.split("-", 1)[1]
+        elif lower.startswith("lifp-"):
+            interface_profile = segment.split("-", 1)[1]
+    parts = [part for part in [tenant, l3out, node_profile, interface_profile] if part]
+    if parts:
+        return " / ".join(parts)
+    return None
+
+
+def _parse_path_binding_target(path_dn: str | None) -> Tuple[str | None, str | None, str | None]:
+    if not path_dn:
+        return None, None, None
+    marker = "/pathep-["
+    idx = path_dn.find(marker)
+    if idx == -1:
+        return None, None, None
+    endpoint = path_dn[idx + len(marker) :]
+    if endpoint.endswith("]"):
+        endpoint = endpoint[:-1]
+    endpoint = endpoint.strip()
+    base = path_dn[:idx]
+
+    port_channel_id = None
+    interface_dn = None
+    pod_segment = None
+    node_segment = None
+
+    if endpoint.lower().startswith("po"):
+        port_channel_id = _normalize_port_channel_id(endpoint)
+    else:
+        for segment in base.split("/"):
+            if segment.startswith("pod-"):
+                pod_segment = segment
+            elif segment.startswith("paths-") and "-" in segment:
+                node_segment = f"node-{segment.split('-', 1)[1]}"
+            elif segment.startswith("node-"):
+                node_segment = segment
+        if pod_segment and node_segment:
+            interface_dn = f"topology/{pod_segment}/{node_segment}/sys/phys-[{endpoint}]"
+
+    if not pod_segment:
+        for segment in base.split("/"):
+            if segment.startswith("pod-"):
+                pod_segment = segment
+                break
+
+    pod_path = f"topology/{pod_segment}" if pod_segment else None
+
+    return interface_dn, port_channel_id, pod_path
+
+
+def _binding_record(
+    name: str,
+    *,
+    encap: str | None = None,
+    mode: str | None = None,
+    immediacy: str | None = None,
+    path: str | None = None,
+) -> Dict[str, Any]:
+    record: Dict[str, Any] = {"name": name}
+    if encap:
+        record["encap"] = encap
+    if mode:
+        record["mode"] = mode
+    if immediacy:
+        record["immediacy"] = immediacy
+    if path:
+        record["path"] = path
+    return record
+
+
+def _deduplicate_binding_records(bindings: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen: set[Tuple[Any, ...]] = set()
+    results: List[Dict[str, Any]] = []
+    for binding in bindings:
+        if not binding:
+            continue
+        name = _clean_string(binding.get("name")) if isinstance(binding, dict) else None
+        if not name:
+            continue
+        encap = _clean_string(binding.get("encap")) if isinstance(binding, dict) else None
+        mode = _clean_string(binding.get("mode")) if isinstance(binding, dict) else None
+        immediacy = _clean_string(binding.get("immediacy")) if isinstance(binding, dict) else None
+        path = _clean_string(binding.get("path")) if isinstance(binding, dict) else None
+        key = (name, encap, mode, immediacy, path)
+        if key in seen:
+            continue
+        seen.add(key)
+        compact = {"name": name}
+        if encap:
+            compact["encap"] = encap
+        if mode:
+            compact["mode"] = mode
+        if immediacy:
+            compact["immediacy"] = immediacy
+        if path:
+            compact["path"] = path
+        results.append(compact)
+    return results
+
+
 def _serialize_datetime(value: datetime | None) -> datetime | str | None:
     if value is None:
         return None
@@ -154,6 +289,8 @@ _ACI_DETAIL_ENDPOINTS: Dict[str, str] = {
     "ethpmFcot": "/api/class/ethpmFcot.json",
     "pcAggrIf": "/api/class/pcAggrIf.json",
     "pcRsMbrIfs": "/api/class/pcRsMbrIfs.json",
+    "fvRsPathAtt": "/api/class/fvRsPathAtt.json",
+    "l3extRsPathL3OutAtt": "/api/class/l3extRsPathL3OutAtt.json",
 }
 
 
@@ -595,8 +732,67 @@ def _build_node_snapshots(
             if member_record not in port_channel["members"]:
                 port_channel["members"].append(member_record)
 
+    interface_epg_bindings: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    port_epg_bindings: Dict[Tuple[str | None, str], List[Dict[str, Any]]] = defaultdict(list)
+    interface_l3out_bindings: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    port_l3out_bindings: Dict[Tuple[str | None, str], List[Dict[str, Any]]] = defaultdict(list)
+
+    for item in datasets.get("fvRsPathAtt", []):
+        attributes = item.get("fvRsPathAtt", {}).get("attributes")
+        if not attributes:
+            continue
+        binding_name = _parse_epg_binding(attributes.get("dn"))
+        if not binding_name:
+            continue
+        path_dn = attributes.get("tDn") or attributes.get("dn")
+        interface_dn, port_channel_id, pod_path = _parse_path_binding_target(path_dn)
+        if not interface_dn and not port_channel_id:
+            continue
+        record = _binding_record(
+            binding_name,
+            encap=_clean_string(attributes.get("encap")),
+            mode=_clean_string(attributes.get("mode")),
+            immediacy=_clean_string(attributes.get("instrImedcy")),
+            path=_clean_string(path_dn),
+        )
+        if interface_dn:
+            interface_epg_bindings[interface_dn].append(record)
+        if port_channel_id:
+            port_epg_bindings[(pod_path, port_channel_id)].append(record)
+
+    for item in datasets.get("l3extRsPathL3OutAtt", []):
+        attributes = item.get("l3extRsPathL3OutAtt", {}).get("attributes")
+        if not attributes:
+            continue
+        binding_name = _parse_l3out_binding(attributes.get("dn"))
+        if not binding_name:
+            continue
+        path_dn = attributes.get("tDn") or attributes.get("dn")
+        interface_dn, port_channel_id, pod_path = _parse_path_binding_target(path_dn)
+        if not interface_dn and not port_channel_id:
+            continue
+        record = _binding_record(
+            binding_name,
+            encap=_clean_string(attributes.get("encap")),
+            mode=_clean_string(attributes.get("mode")),
+            immediacy=_clean_string(attributes.get("instrImedcy")),
+            path=_clean_string(path_dn),
+        )
+        if interface_dn:
+            interface_l3out_bindings[interface_dn].append(record)
+        if port_channel_id:
+            port_l3out_bindings[(pod_path, port_channel_id)].append(record)
+
     for node_path, channel_map in port_channels_by_node.items():
-        snapshots[node_path]["port_channels"] = sorted(channel_map.values(), key=lambda item: item["port_channel_id"])
+        node_pod_path = None
+        parts = node_path.split("/") if node_path else []
+        if len(parts) >= 2:
+            node_pod_path = "/".join(parts[:2])
+        for channel in channel_map.values():
+            key = (node_pod_path, channel.get("port_channel_id"))
+            channel["epg_bindings"] = _deduplicate_binding_records(port_epg_bindings.get(key, []))
+            channel["l3out_bindings"] = _deduplicate_binding_records(port_l3out_bindings.get(key, []))
+    snapshots[node_path]["port_channels"] = sorted(channel_map.values(), key=lambda item: item["port_channel_id"])
 
     for dn, payload in interface_map.items():
         node_path = payload.get("node_path")
@@ -614,6 +810,11 @@ def _build_node_snapshots(
             channel = port_channels_by_node[node_path].get(port_channel_id)
             if channel:
                 port_channel_name = channel.get("name")
+
+        pod_path = None
+        dn_parts = dn.split("/") if dn else []
+        if len(dn_parts) >= 2:
+            pod_path = "/".join(dn_parts[:2])
 
         transceiver = {}
         if fcot:
@@ -656,6 +857,17 @@ def _build_node_snapshots(
                 "last_errors": ethpm.get("lastErrors"),
             },
         }
+        epg_records = []
+        epg_records.extend(interface_epg_bindings.get(dn, []))
+        if port_channel_id:
+            epg_records.extend(port_epg_bindings.get((pod_path, port_channel_id), []))
+        l3out_records = []
+        l3out_records.extend(interface_l3out_bindings.get(dn, []))
+        if port_channel_id:
+            l3out_records.extend(port_l3out_bindings.get((pod_path, port_channel_id), []))
+
+        interface_entry["epg_bindings"] = _deduplicate_binding_records(epg_records)
+        interface_entry["l3out_bindings"] = _deduplicate_binding_records(l3out_records)
         snapshots[node_path]["interfaces"].append(interface_entry)
 
     for snapshot in snapshots.values():
@@ -747,6 +959,8 @@ async def _replace_node_interfaces(
                     attributes=entry.get("attributes") or {},
                     transceiver=entry.get("transceiver") or {},
                     stats=entry.get("stats") or {},
+                    epg_bindings=entry.get("epg_bindings") or [],
+                    l3out_bindings=entry.get("l3out_bindings") or [],
                 )
             )
 
