@@ -9,6 +9,8 @@ InfraPulse is a secure infrastructure operations portal for multinational teams.
 - Browser-based SSH terminal (xterm.js + Paramiko over WebSocket)
 - GUI quick-launch helpers for basic-auth protected interfaces
 - React dashboard with modals, filters, and responsive layout
+- Cisco ACI node detail surfaces interface EPG/L3Out bindings with contextual filters
+- Fabric inventory KPIs include controller counts alongside leaf/spine metrics
 - Inventory overview with collector health, alerts feed, and VM Center workspace
 - Automated API tests with pytest + httpx
 - InfraPulse Inventory (in progress): live ESXi visibility with host, VM, datastore, and network telemetry
@@ -123,3 +125,10 @@ pytest
 - Harden GUI automation pathways (e.g., per-application scripts via Playwright).
 - Extend audit logging and session tracking.
 - Add end-to-end tests for the React frontend.
+
+## Release Notes
+
+### 2025-11-03
+- **ACI Interface Bindings:** Collector now ingests `fvRsPathAtt` and `l3extRsPathL3OutAtt` data, exposing EPG and L3Out bindings on each node interface in the UI and API.
+- **Inventory Dashboard:** Replaced the delayed-heartbeat KPI with controller node counts and refreshed filtering text to highlight policy bindings.
+- **Schema & API:** Added JSON columns for `epg_bindings`/`l3out_bindings`, updated Pydantic responses, and extended tests to cover the new payload shape.
