@@ -5,6 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ROOT_DIR}/backend/.env.docker"
 DATA_DIR="${ROOT_DIR}/data"
 
+# Pick the docker compose command available on the host. Use the new
+# `docker compose` if present, otherwise fall back to `docker-compose`.
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "[deploy] Error: neither 'docker compose' nor 'docker-compose' is available on PATH" >&2
+  exit 1
+fi
+
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "[deploy] Missing backend/.env.docker. Copy backend/.env.docker.example and provide production secrets." >&2
   exit 1
@@ -53,19 +64,20 @@ else
 fi
 
 echo "[deploy] Building and starting containers..."
-docker compose up --build -d
+${COMPOSE_CMD} up --build -d
 
 echo "[deploy] Installing backend dependencies inside container..."
-docker compose exec -T backend sh -c "cd /app && pip install --no-cache-dir -r requirements.txt"
+${COMPOSE_CMD} exec -T backend sh -c "cd /app && pip install --no-cache-dir -r requirements.txt"
 
 echo "[deploy] Giving backend a moment to start..."
 sleep 5
 
 echo "[deploy] Running database migrations..."
-docker compose exec -T backend sh -c "cd /app && alembic upgrade head"
+# Ensure alembic uses the backend-specific alembic.ini (script_location) when run from /app
+${COMPOSE_CMD} exec -T backend sh -c "cd /app && alembic -c backend/alembic.ini upgrade head"
 
 echo "[deploy] Seeding admin user (email: ${ADMIN_EMAIL})..."
-docker compose exec -T \
+${COMPOSE_CMD} exec -T \
   -e ADMIN_EMAIL="${ADMIN_EMAIL}" \
   -e ADMIN_NAME="${ADMIN_NAME}" \
   -e ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
