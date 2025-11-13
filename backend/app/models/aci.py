@@ -52,7 +52,9 @@ class AciFabricNode(Base):
     admin_state = Column(String, nullable=True)
     delayed_heartbeat = Column(Boolean, nullable=False, default=False)
     pod = Column(String, nullable=True)
-    fabric_job_id = Column(GUID(), ForeignKey("telco_fabric_onboarding_jobs.id"), nullable=True)
+    site_name = Column(String, nullable=True)
+    rack_location = Column(String, nullable=True)
+    fabric_job_id = Column(GUID(), ForeignKey("telco_fabric_onboarding_jobs.id", ondelete="CASCADE"), nullable=True)
     raw_attributes = Column(JSON, nullable=False, default=dict)
     last_state_change_at = Column(DateTime(timezone=True), nullable=True)
     last_modified_at = Column(DateTime(timezone=True), nullable=True)
@@ -60,7 +62,7 @@ class AciFabricNode(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    fabric_job = relationship("TelcoFabricOnboardingJob", lazy="selectin")
+    fabric_job = relationship("TelcoFabricOnboardingJob", back_populates="nodes", lazy="selectin")
     detail = relationship("AciFabricNodeDetail", back_populates="node", uselist=False, cascade="all, delete-orphan")
     interfaces = relationship("AciFabricNodeInterface", back_populates="node", cascade="all, delete-orphan")
 

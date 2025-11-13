@@ -223,7 +223,15 @@ export function InventoryPage() {
       return hosts;
     }
     return hosts.filter((host) => {
-      const values = [host.name, host.cluster ?? "", host.endpoint_name, host.hardware_model ?? ""];
+      const values = [
+        host.name,
+        host.cluster ?? "",
+        host.endpoint_name,
+        host.hardware_model ?? "",
+        host.serial ?? "",
+        host.site_name ?? "",
+        host.rack_location ?? ""
+      ];
       return values.some((value) => value.toLowerCase().includes(query));
     });
   }, [hostSearch, hosts]);
@@ -660,6 +668,9 @@ export function InventoryPage() {
                   <thead className="text-xs uppercase tracking-wide text-slate-400">
                     <tr>
                       <th className="px-2 text-left">Host</th>
+                      <th className="px-2 text-left">Serial</th>
+                      <th className="px-2 text-left">Site</th>
+                      <th className="px-2 text-left">Rack</th>
                       <th className="px-2 text-left">Server Model</th>
                       <th className="px-2 text-left">CPU</th>
                       <th className="px-2 text-left">Memory</th>
@@ -682,6 +693,9 @@ export function InventoryPage() {
                             <div className="font-semibold text-slate-100">{host.name}</div>
                             <div className="text-xs text-slate-400">{host.cluster ?? host.endpoint_name}</div>
                           </td>
+                          <td className="px-2 py-2 align-top text-xs text-slate-300">{host.serial ?? "MISSING"}</td>
+                          <td className="px-2 py-2 align-top text-xs text-slate-300">{host.site_name ?? "--"}</td>
+                          <td className="px-2 py-2 align-top text-xs text-slate-300">{host.rack_location ?? "--"}</td>
                           <td className="px-2 py-2 align-top text-xs text-slate-300">{host.hardware_model ?? "--"}</td>
                           <td className="px-2 py-2 align-top text-xs text-slate-300">
                             <div>{formatPercent(cpuPercent)}</div>

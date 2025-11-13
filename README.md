@@ -11,6 +11,7 @@ InfraPulse is a secure infrastructure operations portal for multinational teams.
 - React dashboard with modals, filters, and responsive layout
 - Cisco ACI node detail surfaces interface EPG/L3Out bindings with contextual filters
 - Fabric inventory KPIs include controller counts alongside leaf/spine metrics
+- Nautobot enrichment surfaces site and rack positions for each ACI fabric node
 - Inventory overview with collector health, alerts feed, and VM Center workspace
 - Automated API tests with pytest + httpx
 - InfraPulse Inventory (in progress): live ESXi visibility with host, VM, datastore, and network telemetry
@@ -36,7 +37,13 @@ frontend/   # React + Vite + Tailwind SPA
    python -c "import secrets; print(secrets.token_hex(16))"      # PASSWORD_SALT
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FERNET_KEY
    ```
-4. Run database migrations (SQLite default auto-creates tables on startup). For PostgreSQL, configure `DATABASE_URL` accordingly.
+   Optional: populate `NAUTOBOT_BASE_URL` and `NAUTOBOT_TOKEN` to enable site/rack enrichment from Nautobot.
+4. Run database migrations:
+   ```bash
+   cd backend
+   alembic upgrade head
+   ```
+   The FastAPI app will also apply pending migrations at startup, but running them explicitly keeps your local environment consistent. Configure `DATABASE_URL` for PostgreSQL deployments as needed.
 5. Create an initial admin user:
    ```bash
    cd backend

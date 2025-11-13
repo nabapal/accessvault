@@ -3,7 +3,7 @@ from typing import AsyncIterator, List
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core import database
 from app.core.config import Settings, get_settings
@@ -37,7 +37,7 @@ def override_settings() -> AsyncIterator[None]:
     app.dependency_overrides[get_settings] = lambda: test_settings
     get_settings.cache_clear()
     database.settings = test_settings
-    database.engine = create_async_engine(test_settings.database_url, future=True, echo=False)
+    database.engine = database.build_engine(test_settings.database_url)
     database.AsyncSessionLocal = async_sessionmaker(bind=database.engine, expire_on_commit=False)
     yield
     app.dependency_overrides.pop(get_settings, None)

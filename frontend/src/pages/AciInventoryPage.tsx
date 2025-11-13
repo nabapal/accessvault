@@ -26,11 +26,6 @@ const stateBadges: Record<string, string> = {
   down: "border-rose-600/50 bg-rose-500/15 text-rose-100"
 };
 
-const heartbeatBadge = {
-  ok: "border-slate-600/50 bg-slate-700/30 text-slate-200",
-  delayed: "border-rose-500/50 bg-rose-500/15 text-rose-100"
-};
-
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -183,7 +178,7 @@ export function AciInventoryPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search name, IP, serial, model, fabric..."
+              placeholder="Search name, fabric, site, location, serial, model, IP..."
               className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-72"
             />
           </div>
@@ -274,13 +269,13 @@ export function AciInventoryPage() {
                 <tr>
                   <th className="px-4 py-3 text-left">Fabric Name / IP</th>
                   <th className="px-4 py-3 text-left">Node Name</th>
+                  <th className="px-4 py-3 text-left">Site</th>
+                  <th className="px-4 py-3 text-left">Location</th>
                   <th className="px-4 py-3 text-left">Role</th>
-                  <th className="px-4 py-3 text-left">IP / DN</th>
                   <th className="px-4 py-3 text-left">Model</th>
                   <th className="px-4 py-3 text-left">Serial</th>
                   <th className="px-4 py-3 text-left">Version</th>
                   <th className="px-4 py-3 text-left">Fabric State</th>
-                  <th className="px-4 py-3 text-left">Heartbeat</th>
                   <th className="px-4 py-3 text-left">Last Change</th>
                 </tr>
               </thead>
@@ -316,6 +311,8 @@ export function AciInventoryPage() {
                         <div className="text-xs text-slate-400">Node ID: {node.node_id}</div>
                         {node.pod ? <div className="text-xs text-slate-500">{node.pod}</div> : null}
                       </td>
+                      <td className="px-4 py-3 text-slate-100">{formatLabel(node.site_name)}</td>
+                      <td className="px-4 py-3 text-slate-100">{formatLabel(node.rack_location)}</td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${roleBadges[node.role]}`}
@@ -325,10 +322,6 @@ export function AciInventoryPage() {
                         {node.node_type ? (
                           <div className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">{node.node_type}</div>
                         ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>{formatLabel(node.address)}</div>
-                        <div className="text-xs text-slate-500">{node.distinguished_name}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-100">{formatLabel(node.model)}</td>
                       <td className="px-4 py-3 text-slate-100">{formatLabel(node.serial)}</td>
@@ -344,15 +337,6 @@ export function AciInventoryPage() {
                         {node.admin_state ? (
                           <div className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">Admin: {node.admin_state}</div>
                         ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${
-                            node.delayed_heartbeat ? heartbeatBadge.delayed : heartbeatBadge.ok
-                          }`}
-                        >
-                          {node.delayed_heartbeat ? "Delayed" : "Normal"}
-                        </span>
                       </td>
                       <td className="px-4 py-3 text-slate-100">{formatDate(node.last_state_change_at)}</td>
                     </tr>

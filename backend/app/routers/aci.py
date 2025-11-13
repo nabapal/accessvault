@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
@@ -81,6 +81,13 @@ async def list_fabric_nodes(
             func.lower(AciFabricNode.address).like(pattern),
             func.lower(AciFabricNode.serial).like(pattern),
             func.lower(AciFabricNode.model).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.site_name, "")).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.rack_location, "")).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.version, "")).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.fabric_state, "")).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.role, "")).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.pod, "")).like(pattern),
+            func.lower(func.coalesce(AciFabricNode.distinguished_name, "")).like(pattern),
             func.lower(func.coalesce(telco_alias.name, "")).like(pattern),
             func.lower(func.coalesce(telco_alias.target_host, "")).like(pattern),
         )
@@ -149,7 +156,7 @@ async def get_fabric_node_detail(
     return _serialize_node_detail(node, detail)
 
 
-@router.get("/fabric/nodes/{node_id}/interfaces", response_model=list[AciFabricNodeInterfaceRead])
+@router.get("/fabric/nodes/{node_id}/interfaces", response_model=List[AciFabricNodeInterfaceRead])
 async def list_fabric_node_interfaces(
     node_id: str,
     db: AsyncSession = Depends(get_db),

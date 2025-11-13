@@ -9,12 +9,14 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, Iterable, List, Optional, Tuple
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import get_settings
 from app.models import AciFabricNode, AciFabricNodeDetail, AciFabricNodeInterface
 from app.models.telco import TelcoFabricOnboardingJob, TelcoFabricType, TelcoOnboardingStatus
 from app.services.crypto import decrypt_secret
+from app.services.nautobot import fetch_nautobot_device_locations
 
 logger = logging.getLogger(__name__)
 
@@ -344,7 +346,9 @@ async def _collect_aci_fabric(
     login_payload = {"aaaUser": {"attributes": {"name": job.username, "pwd": password}}}
 
     detail_counts = {"node_detail_count": 0, "interface_count": 0}
+    nautobot_enriched = 0
     count = 0
+    nodes: List[AciFabricNode] = []
 
     async with httpx.AsyncClient(base_url=base_url, verify=job.verify_ssl, timeout=timeout) as client:
         response = await client.post("/api/aaaLogin.json", json=login_payload)
@@ -361,6 +365,7 @@ async def _collect_aci_fabric(
         payload = fabric_response.json()
 
         items = payload.get("imdata", [])
+        await _ensure_aci_node_location_columns(session)
         count = await _upsert_aci_nodes(session, items, job)
         await session.flush()
 
@@ -369,9 +374,84 @@ async def _collect_aci_fabric(
         if nodes:
             detail_counts = await _collect_and_upsert_aci_node_details(session, client, job, nodes)
 
+    if nodes:
+        nautobot_enriched = await _enrich_nodes_with_nautobot(session, nodes)
+
     snapshot = {"fabric_node_count": count}
     snapshot.update(detail_counts)
+    if nautobot_enriched:
+        snapshot["nautobot_enriched_nodes"] = nautobot_enriched
     return snapshot
+
+
+async def _enrich_nodes_with_nautobot(session: AsyncSession, nodes: Iterable[AciFabricNode]) -> int:
+    settings = get_settings()
+    base_url = settings.nautobot_base_url
+    token = settings.nautobot_token
+
+    if not base_url or not token:
+        return 0
+
+    try:
+        location_index = await fetch_nautobot_device_locations(base_url, token)
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to enrich ACI nodes from Nautobot: %s", exc)
+        return 0
+
+    updated = 0
+    for node in nodes:
+        record = location_index.lookup(node.name)
+        if record is None:
+            continue
+        site_name, rack_location = record
+        changed = False
+        if node.site_name != site_name:
+            node.site_name = site_name
+            changed = True
+        if node.rack_location != rack_location:
+            node.rack_location = rack_location
+            changed = True
+        if changed:
+            updated += 1
+
+    if updated:
+        await session.flush()
+
+    return updated
+
+
+async def _ensure_aci_node_location_columns(session: AsyncSession) -> None:
+    bind = session.get_bind()
+    if bind is None:
+        return
+
+    dialect = bind.dialect.name
+    statements: List[str] = []
+
+    if dialect == "sqlite":
+        result = await session.execute(text("PRAGMA table_info('aci_fabric_nodes')"))
+        existing_columns = {row[1] for row in result.all() if len(row) > 1}
+        if "site_name" not in existing_columns:
+            statements.append("ALTER TABLE aci_fabric_nodes ADD COLUMN site_name VARCHAR")
+        if "rack_location" not in existing_columns:
+            statements.append("ALTER TABLE aci_fabric_nodes ADD COLUMN rack_location VARCHAR")
+    else:
+        statements = [
+            "ALTER TABLE aci_fabric_nodes ADD COLUMN IF NOT EXISTS site_name VARCHAR",
+            "ALTER TABLE aci_fabric_nodes ADD COLUMN IF NOT EXISTS rack_location VARCHAR",
+        ]
+
+    for ddl in statements:
+        try:
+            await session.execute(text(ddl))
+        except Exception as exc:
+            message = str(exc).lower()
+            if "duplicate" in message or "exists" in message:
+                continue
+            raise
+
+    if statements:
+        await session.commit()
 
 
 async def _collect_nxos_fabric(
@@ -792,7 +872,11 @@ def _build_node_snapshots(
             key = (node_pod_path, channel.get("port_channel_id"))
             channel["epg_bindings"] = _deduplicate_binding_records(port_epg_bindings.get(key, []))
             channel["l3out_bindings"] = _deduplicate_binding_records(port_l3out_bindings.get(key, []))
-    snapshots[node_path]["port_channels"] = sorted(channel_map.values(), key=lambda item: item["port_channel_id"])
+        if node_path in snapshots:
+            snapshots[node_path]["port_channels"] = sorted(
+                channel_map.values(),
+                key=lambda item: item["port_channel_id"],
+            )
 
     for dn, payload in interface_map.items():
         node_path = payload.get("node_path")

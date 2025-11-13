@@ -11,6 +11,7 @@ class VsphereHost:
     name: str
     cluster: Optional[str]
     hardware_model: Optional[str]
+    serial: Optional[str]
     connection_state: str
     power_state: str
     cpu_cores: Optional[int]
@@ -104,11 +105,26 @@ def collect_inventory(
                         total_bytes += ds_summary.capacity or 0
                         free_bytes += ds_summary.freeSpace or 0
 
+                    # Determine serial number with fallbacks (systemInfo, summary.otherIdentifyingInfo)
+                    serial_val = getattr(getattr(hardware, "systemInfo", None), "serialNumber", None)
+                    if not serial_val:
+                        # otherIdentifyingInfo can contain vendor-specific identifier tuples
+                        other = getattr(summary.hardware, "otherIdentifyingInfo", None)
+                        if other:
+                            for info in other:
+                                # identifierType may expose label or key that indicates serial/service tag
+                                id_type = getattr(info, "identifierType", None)
+                                label = getattr(id_type, "label", None) or getattr(id_type, "key", None) or ""
+                                if "serial" in str(label).lower() or "service" in str(label).lower():
+                                    serial_val = getattr(info, "identifierValue", None)
+                                    break
+
                     hosts.append(
                         VsphereHost(
                             name=summary.config.name,
                             cluster=cluster_name,
                             hardware_model=getattr(hardware, "model", None),
+                            serial=serial_val,
                             connection_state=str(summary.runtime.connectionState) if summary.runtime else "unknown",
                             power_state=str(summary.runtime.powerState) if summary.runtime else "unknown",
                             cpu_cores=getattr(hardware, "numCpuCores", None),

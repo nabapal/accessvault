@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     apic_username: Optional[str] = None
     apic_password: Optional[str] = None
     apic_verify_ssl: bool = False
+    nautobot_base_url: Optional[str] = None
+    nautobot_token: Optional[str] = None
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",

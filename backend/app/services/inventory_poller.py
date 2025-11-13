@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -7,6 +6,7 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict, Optional, Set
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models import (
@@ -21,6 +21,8 @@ from app.models import (
 )
 from app.services.crypto import decrypt_secret
 from app.services.vsphere import VsphereSnapshot, collect_inventory
+from app.core.config import get_settings
+from app.services.nautobot import fetch_nautobot_device_locations, compute_device_location
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +127,10 @@ async def _upsert_hosts(
 			session.add(host)
 		host.cluster = host_data.cluster
 		host.hardware_model = host_data.hardware_model
+		# Preserve existing serial if the collector did not provide one to avoid
+		# overwriting previously-discovered values with None.
+		if host_data.serial:
+			host.serial = host_data.serial
 		host.connection_state = _map_connection_state(host_data.connection_state)
 		host.power_state = _map_power_state(host_data.power_state)
 		host.cpu_cores = host_data.cpu_cores
@@ -244,6 +250,77 @@ async def run_poll_for_endpoint(
 	if poll_result.status == InventoryEndpointStatus.OK and poll_result.snapshot:
 		await apply_snapshot(session, endpoint, poll_result.snapshot)
 
+		# Attempt to enrich hosts with Nautobot site/rack metadata when available.
+		settings = get_settings()
+		try:
+			base_url = settings.nautobot_base_url
+			token = settings.nautobot_token
+		except Exception:
+			base_url = None
+			token = None
+
+		if base_url and token:
+			try:
+				# Fetch Nautobot device location index (name -> (site, rack))
+				location_index = await fetch_nautobot_device_locations(base_url, token)
+				# Load hosts for this endpoint and update site/rack when serial lookup matches
+				result = await session.execute(select(InventoryHost).where(InventoryHost.endpoint_id == endpoint.id))
+				hosts = result.scalars().all()
+				changed = False
+				for host in hosts:
+					# Only attempt lookup when host has a serial
+					if not host.serial:
+						continue
+					# Nautobot index is keyed by device name; prefer exact match by serial -> need to search
+					# We'll try to find a device by serial via the index lower/exact maps by scanning values.
+					# Build a reverse map from location_index exact/lower to speed up lookup by serial
+					# (small N, do a simple scan)
+					matched = None
+					# The compute_device_location applies to device payloads; here we check index entries
+					for name, record in location_index.exact.items():
+						# No serial in index keys; skip — we need to map serial -> device via Nautobot API which is costly.
+						# Instead, use the helper script path or let server_nautobot_locations handle explicit serial lookups.
+						pass
+				# Note: automatic serial->device mapping via the pre-fetched device index isn't available
+				# because the index is keyed by device name. The reliable approach is to query Nautobot by serial
+				# per-host when serial is present. We'll perform per-host queries below.
+				for host in hosts:
+					if not host.serial:
+						continue
+					try:
+						# perform a direct per-host Nautobot lookup by serial
+						async with asyncio.timeout(30):
+							# fetch_nautobot_device_locations returns all devices; instead call Nautobot API directly
+							# Use httpx here to query /dcim/devices/?serial=<serial>
+							import httpx
+
+							headers = {
+								"Accept": "application/json",
+								"Authorization": f"Token {token}",
+								"User-Agent": "InfraPulse-Collector/1.0",
+							}
+							async with httpx.AsyncClient(base_url=base_url.rstrip("/"), headers=headers, timeout=30) as client:
+								resp = await client.get("/dcim/devices/", params={"serial": host.serial, "limit": "1"})
+								resp.raise_for_status()
+								payload = resp.json()
+								results = payload.get("results", [])
+								if results:
+									device = results[0]
+									site_name, rack_location = compute_device_location(device)  # type: ignore[name-defined]
+									# Only update if different
+									if site_name != host.site_name or rack_location != host.rack_location:
+										host.site_name = site_name
+										host.rack_location = rack_location
+										changed = True
+					except Exception:
+						# Don't let Nautobot enrichment break the poll — log and continue
+						logger.debug("Nautobot enrichment failed for host %s", host.name, exc_info=True)
+
+				if changed:
+					await session.flush()
+			except Exception as exc:
+				logger.warning("Failed to enrich inventory hosts from Nautobot: %s", exc)
+
 	return poll_result
 
 
@@ -293,8 +370,27 @@ class InventoryPoller:
 				await self._process_endpoint(session, endpoint)
 
 	async def _process_endpoint(self, session: AsyncSession, endpoint: InventoryEndpoint) -> None:
-		await run_poll_for_endpoint(session, endpoint)
-		await session.commit()
+		# Retry to soften transient SQLite "database is locked" errors when concurrent writers overlap.
+		for attempt in range(3):
+			try:
+				await run_poll_for_endpoint(session, endpoint)
+				await session.commit()
+				return
+			except OperationalError as exc:
+				await session.rollback()
+				message = str(exc).lower()
+				if "database is locked" in message and attempt < 2:
+					backoff = 0.5 * (attempt + 1)
+					logger.warning(
+						"Inventory poll retry due to SQLite lock",
+						extra={"endpoint": str(endpoint.id), "attempt": attempt + 1},
+					)
+					await asyncio.sleep(backoff)
+					continue
+				raise
+			except Exception:
+				await session.rollback()
+				raise
 
 	def _should_poll(self, endpoint: InventoryEndpoint) -> bool:
 		if endpoint.poll_interval_seconds <= 0:

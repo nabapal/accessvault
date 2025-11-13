@@ -26,6 +26,8 @@ class AciFabricNodeRead(BaseModel):
     admin_state: str | None
     delayed_heartbeat: bool
     pod: str | None
+    site_name: str | None = None
+    rack_location: str | None = None
     fabric_job_id: UUID | None = None
     fabric_name: str | None = None
     fabric_ip: str | None = None

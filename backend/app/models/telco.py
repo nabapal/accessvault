@@ -6,6 +6,7 @@ from enum import Enum as PyEnum
 from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, JSON, LargeBinary, String, Text, func
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 from app.core.types import GUID
@@ -45,6 +46,8 @@ class TelcoFabricOnboardingJob(Base):
     last_validation_completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    nodes = relationship("AciFabricNode", back_populates="fabric_job", cascade="all, delete-orphan")
 
     def start_validation(self) -> None:
         self.status = TelcoOnboardingStatus.VALIDATING

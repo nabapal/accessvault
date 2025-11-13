@@ -166,6 +166,8 @@ async def test_list_fabric_nodes_pagination(async_client: AsyncClient, admin_use
     assert data["has_prev"] is False
     assert len(data["items"]) == 10
     assert data["items"][0]["name"] == "controller-00"
+    assert "site_name" in data["items"][0]
+    assert "rack_location" in data["items"][0]
 
     third_page = await async_client.get(
         "/api/v1/aci/fabric/nodes",

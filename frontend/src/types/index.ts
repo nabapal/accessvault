@@ -75,8 +75,11 @@ export interface InventoryHost {
   endpoint_id: string;
   endpoint_name: string;
   name: string;
+  serial?: string | null;
   cluster?: string | null;
   hardware_model?: string | null;
+  site_name?: string | null;
+  rack_location?: string | null;
   connection_state: InventoryHostConnectionState;
   power_state: InventoryPowerState;
   cpu_cores?: number | null;
@@ -168,6 +171,8 @@ export interface AciFabricNode {
   admin_state?: string | null;
   delayed_heartbeat: boolean;
   pod?: string | null;
+  site_name?: string | null;
+  rack_location?: string | null;
   fabric_job_id?: string | null;
   fabric_name?: string | null;
   fabric_ip?: string | null;

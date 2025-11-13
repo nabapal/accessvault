@@ -20,3 +20,4 @@ pytest-asyncio
 httpx
 pyvmomi
 eval-type-backport
+alembic

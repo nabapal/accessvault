@@ -55,8 +55,14 @@ fi
 echo "[deploy] Building and starting containers..."
 docker compose up --build -d
 
+echo "[deploy] Installing backend dependencies inside container..."
+docker compose exec -T backend sh -c "cd /app && pip install --no-cache-dir -r requirements.txt"
+
 echo "[deploy] Giving backend a moment to start..."
 sleep 5
+
+echo "[deploy] Running database migrations..."
+docker compose exec -T backend sh -c "cd /app && alembic upgrade head"
 
 echo "[deploy] Seeding admin user (email: ${ADMIN_EMAIL})..."
 docker compose exec -T \
@@ -68,7 +74,7 @@ import asyncio
 import os
 from sqlalchemy import select
 
-from app.core.database import AsyncSessionLocal, Base, engine
+from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.models import User, UserRoleEnum
 
@@ -77,9 +83,6 @@ ADMIN_NAME = os.environ["ADMIN_NAME"]
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 
 async def main() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.email == ADMIN_EMAIL))
         existing = result.scalar_one_or_none()
