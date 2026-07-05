@@ -36,11 +36,14 @@ const ROLE_COLORS: Record<string, string> = {
   URR: "#fda4af",
   VRR: "#e879f9",
   WRR: "#f0abfc",
+  IBR: "#0ea5e9",
+  IAG: "#7dd3fc",
   external: "#64748b"
 };
 
-// Route-reflector roles are kept as distinct roles but positioned at the AG3 level.
-const RR_ROLES = ["CRR", "IRR", "URR", "VRR", "WRR"];
+// Roles kept as distinct roles but positioned at a shared layer level.
+const RR_ROLES = ["CRR", "IRR", "URR", "VRR", "WRR"]; // → AG3 level
+const SAR_LEVEL_ROLES = ["IBR", "IAG"]; // → SAR level
 
 const roleKey = (kind: string, role?: string | null) =>
   kind === "external" ? "external" : (role || "OTHER").toUpperCase();
@@ -157,6 +160,7 @@ const layerOf = (kind: string, role?: string | null): string => {
   if (kind === "external") return "EXTERNAL";
   const r = (role || "").toUpperCase();
   if (RR_ROLES.includes(r)) return "AG3"; // route reflectors sit at the AG3 level
+  if (SAR_LEVEL_ROLES.includes(r)) return "SAR"; // IBR/IAG sit at the SAR level
   return ["SAR", "AG3", "AG2", "AG1"].includes(r) ? r : "OTHER";
 };
 
