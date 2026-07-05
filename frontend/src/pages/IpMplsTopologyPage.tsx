@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CytoscapeComponent from "react-cytoscapejs";
 import type { Core, ElementDefinition } from "cytoscape";
@@ -180,6 +180,9 @@ export function IpMplsTopologyPage() {
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
   const [groupBy, setGroupBy] = useState<"device" | "role" | "location">("device");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const cyRef = useRef<Core | null>(null);
+  const graphWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +207,33 @@ export function IpMplsTopologyPage() {
       cancelled = true;
     };
   }, []);
+
+  // Native fullscreen (Esc exits automatically); resize the graph to fill.
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      setTimeout(() => {
+        cyRef.current?.resize();
+        cyRef.current?.fit(undefined, 50);
+      }, 60);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && document.fullscreenElement) document.exitFullscreen();
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    const el = graphWrapRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else el.requestFullscreen?.();
+  };
 
   const rolesPresent = useMemo(() => {
     const set = new Set<string>();
@@ -318,6 +348,7 @@ export function IpMplsTopologyPage() {
   const allLocationsSelected = locationsPresent.length > 0 && locationsPresent.every((l) => selectedLocations.has(l));
 
   const registerCy = (cy: Core) => {
+    cyRef.current = cy;
     cy.on("tap", "node", (evt) => {
       const d = evt.target.data();
       if (d.deviceId) {
@@ -459,7 +490,14 @@ export function IpMplsTopologyPage() {
           </div>
         ) : null}
 
-        <section className="rounded-lg border border-brand-700 bg-brand-900/60 p-2">
+        <section ref={graphWrapRef} className={`relative rounded-lg border border-brand-700 p-2 ${isFullscreen ? "bg-brand-900" : "bg-brand-900/60"}`}>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="absolute right-3 top-3 z-10 rounded-md border border-brand-700 bg-brand-800/80 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-primary-500 hover:text-white"
+          >
+            {isFullscreen ? "Exit fullscreen (Esc)" : "⛶ Fullscreen"}
+          </button>
           {isLoading ? (
             <div className="p-10 text-center text-sm text-slate-400">Loading topology…</div>
           ) : topo && topo.nodes.length ? (
@@ -469,7 +507,7 @@ export function IpMplsTopologyPage() {
               stylesheet={cyStylesheet}
               layout={layout}
               cy={registerCy}
-              style={{ width: "100%", height: "680px" }}
+              style={{ width: "100%", height: isFullscreen ? "100vh" : "680px" }}
               wheelSensitivity={0.2}
             />
           ) : (
