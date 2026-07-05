@@ -279,7 +279,7 @@ async def run_poll_for_endpoint(
 					# The compute_device_location applies to device payloads; here we check index entries
 					for name, record in location_index.exact.items():
 						# No serial in index keys; skip — we need to map serial -> device via Nautobot API which is costly.
-						# Instead, use the helper script path or let server_nautobot_locations handle explicit serial lookups.
+						# Reliable serial->device mapping is done via per-host Nautobot queries below.
 						pass
 				# Note: automatic serial->device mapping via the pre-fetched device index isn't available
 				# because the index is keyed by device name. The reliable approach is to query Nautobot by serial
