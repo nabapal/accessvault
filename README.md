@@ -1,21 +1,23 @@
 # InfraPulse
 
-InfraPulse is a secure infrastructure operations portal for multinational teams. The first module, AccessVault, delivers credential management and remote access automation. Upcoming expansions introduce live ESXi inventory and wider data center observability.
+InfraPulse is a secure infrastructure operations portal for multinational teams. It combines credential management and remote access (AccessVault) with live inventory across VMware, Cisco ACI, and Cisco IP-MPLS networks.
+
+## Modules
+- **AccessVault** — credential vault, group/system management, browser SSH terminal, GUI quick-launch.
+- **VM Inventory (VMware)** — live ESXi/vCenter host, VM, datastore, and network telemetry via pyVmomi; overview dashboard + VM Center workspace.
+- **Cisco ACI** — fabric node inventory (leaf/spine/controller), interface EPG/L3Out bindings, cross-fabric endpoint directory (MAC/IP), VLAN inventory, and free-ports report.
+- **IP-MPLS Inventory** — Cisco IOS-XR/XE device onboarding (by Nautobot role), interface/VRF/neighbor/hardware collection via Netmiko + pyATS/Genie, and an interactive ISIS topology (Cytoscape) with role/location filters and fullscreen.
 
 ## Features
 - JWT authentication with role-based access control (admin, user)
-- Group and system management with search and filtering (AccessVault module)
-- AES/Fernet encryption for stored credentials
+- AES/Fernet encryption for stored credentials; secrets never returned in API responses
 - Browser-based SSH terminal (xterm.js + Paramiko over WebSocket)
-- GUI quick-launch helpers for basic-auth protected interfaces
+- Resilient background pollers (per-item isolation) for VMware, ACI, and IP-MPLS
+- Nautobot enrichment (role/site/rack) for ACI nodes and IP-MPLS devices
+- UTC storage rendered as **IST** in the UI
+- Auto-logout on session expiry (401 interceptor)
 - React dashboard with modals, filters, and responsive layout
-- Cisco ACI node detail surfaces interface EPG/L3Out bindings with contextual filters
-- Fabric inventory KPIs include controller counts alongside leaf/spine metrics
-- Nautobot enrichment surfaces site and rack positions for each ACI fabric node
-- Inventory overview with collector health, alerts feed, and VM Center workspace
 - Automated API tests with pytest + httpx
-- InfraPulse Inventory (in progress): live ESXi visibility with host, VM, datastore, and network telemetry
-- Inventory endpoint registry with encrypted credentials and polling metadata
 
 ## Project Structure
 ```
@@ -74,7 +76,7 @@ new inventory domains are added.
 6. Start the API server:
    ```bash
    cd backend
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8200
    ```
 
 ## Frontend Setup
@@ -87,7 +89,7 @@ new inventory domains are added.
    ```bash
    npm run dev
    ```
-   The app will proxy API and WebSocket requests to `http://localhost:8002`.
+   The app will proxy API and WebSocket requests to `http://localhost:8200`.
 
 > **Tip:** `./dev.sh` launches both FastAPI and Vite dev servers and writes logs to `logs/backend.log` and `logs/frontend.log`.
 
@@ -121,12 +123,11 @@ new inventory domains are added.
 
 > **Note:** If you deploy behind a custom domain, update `CORS_ORIGINS` in `backend/.env.docker` accordingly.
 
-## Inventory Module (Alpha)
+## VM Inventory Module
 - Register ESXi or vCenter collection endpoints through `/api/v1/inventory/endpoints`
 - Credentials are stored encrypted using the shared Fernet secret; passwords are never returned in responses
 - Responses include polling metadata (`last_polled_at`, `last_poll_status`) for the InfraPulse dashboard
-- Background poller (enabled by default) refreshes endpoint heartbeat metadata; toggle via `INVENTORY_POLLER_ENABLED`
-- Stub collector currently seeds representative host and VM telemetry so the dashboard surfaces utilization trends while ESXi integration is developed
+- Background poller (enabled by default) collects live host/VM/datastore/network telemetry via pyVmomi; toggle via `INVENTORY_POLLER_ENABLED`
 
 ### REST Endpoints
 | Method | Path | Description |
@@ -156,6 +157,11 @@ pytest
 - Add end-to-end tests for the React frontend.
 
 ## Release Notes
+
+### 2026-07
+- **IP-MPLS Inventory:** Cisco IOS-XR/XE onboarding by Nautobot role; interface/VRF/ISIS-LDP-BGP neighbor/hardware collection via Netmiko + pyATS/Genie; interactive ISIS topology (Cytoscape) with role/location grouping, filters, fullscreen (Esc), and link detail.
+- **Cisco ACI:** Cross-fabric endpoint directory (locally-attached MAC/IP, tunnel-learned excluded) with search across MAC/IP/tenant/EPG/BD/VRF; per-fabric VLAN inventory and free-ports report.
+- **Platform:** Timestamps rendered in IST; auto-logout on 401; Swagger/ReDoc/OpenAPI proxied in production (see `deployments/nginx.conf`); feature-development playbook added (`docs/DEVELOPMENT.md`).
 
 ### 2025-11-03
 - **ACI Interface Bindings:** Collector now ingests `fvRsPathAtt` and `l3extRsPathL3OutAtt` data, exposing EPG and L3Out bindings on each node interface in the UI and API.
