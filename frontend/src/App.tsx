@@ -6,6 +6,9 @@ import { AciInventoryPage } from "@/pages/AciInventoryPage";
 import { AciEndpointsPage } from "@/pages/AciEndpointsPage";
 import { AciFreePortsPage } from "@/pages/AciFreePortsPage";
 import { AciVlansPage } from "@/pages/AciVlansPage";
+import { IpMplsDevicesPage } from "@/pages/IpMplsDevicesPage";
+import { IpMplsDeviceDetailPage } from "@/pages/IpMplsDeviceDetailPage";
+import { IpMplsDevicesAdminPage } from "@/pages/IpMplsDevicesAdminPage";
 import { AciFabricSummaryPage } from "@/pages/AciFabricSummaryPage";
 import { AciNodeDetailPage } from "@/pages/AciNodeDetailPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -36,6 +39,9 @@ export default function App() {
     <Route path="/telco/aci/vlans" element={<AciVlansPage />} />
     <Route path="/telco/aci/summary" element={<AciFabricSummaryPage />} />
     <Route path="/telco/aci/nodes/:nodeId" element={<AciNodeDetailPage />} />
+    <Route path="/ipmpls/devices" element={<IpMplsDevicesPage />} />
+    <Route path="/ipmpls/devices/:deviceId" element={<IpMplsDeviceDetailPage />} />
+    <Route path="/ipmpls/admin" element={<IpMplsDevicesAdminPage />} />
     <Route path="/telco/onboarding" element={<TelcoOnboardingPage />} />
     <Route path="/accessvault" element={<AccessVaultPage />} />
       </Route>

@@ -28,10 +28,17 @@ const SIDEBAR_SECTIONS = [
     ]
   },
   {
+    title: "IP-MPLS Inventory",
+    items: [
+      { label: "Devices", to: "/ipmpls/devices" }
+    ]
+  },
+  {
     title: "Admin",
     items: [
       { label: "Fabric Onboarding", to: "/telco/onboarding" },
-      { label: "VM Collectors", to: "/inventory/admin" }
+      { label: "VM Collectors", to: "/inventory/admin" },
+      { label: "IP-MPLS Devices", to: "/ipmpls/admin" }
     ]
   },
   {

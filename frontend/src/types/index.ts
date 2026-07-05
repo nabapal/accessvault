@@ -510,3 +510,98 @@ export interface TelcoOnboardingJob {
   created_at: string;
   updated_at: string;
 }
+
+export type IpMplsPlatform = "iosxe" | "iosxr" | "unknown";
+export type IpMplsDeviceRole = "pe" | "p" | "rr" | "ce" | "unknown";
+export type IpMplsDeviceStatus = "pending" | "ok" | "error";
+
+export interface IpMplsDevice {
+  id: string;
+  name: string;
+  hostname?: string | null;
+  mgmt_ip: string;
+  port: number;
+  platform: IpMplsPlatform;
+  role: IpMplsDeviceRole;
+  model?: string | null;
+  serial?: string | null;
+  os_version?: string | null;
+  uptime_seconds?: number | null;
+  uptime_text?: string | null;
+  description?: string | null;
+  site_name?: string | null;
+  rack_location?: string | null;
+  poll_interval_seconds: number;
+  status: IpMplsDeviceStatus;
+  last_polled_at?: string | null;
+  last_error?: string | null;
+  username?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpMplsDevicePage {
+  items: IpMplsDevice[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface IpMplsInterface {
+  id: string;
+  device_id: string;
+  name: string;
+  description?: string | null;
+  admin_state?: string | null;
+  oper_state?: string | null;
+  ip_address?: string | null;
+  prefix_len?: number | null;
+  vrf?: string | null;
+  speed?: string | null;
+  mtu?: number | null;
+  mac?: string | null;
+  mpls_enabled?: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpMplsModule {
+  id: string;
+  device_id: string;
+  name?: string | null;
+  description?: string | null;
+  pid?: string | null;
+  vid?: string | null;
+  serial?: string | null;
+}
+
+export interface IpMplsSummary {
+  total: number;
+  total_interfaces: number;
+  by_platform: Record<string, number>;
+  by_status: Record<string, number>;
+  by_role: Record<string, number>;
+}
+
+export interface IpMplsSyncResult {
+  success: boolean;
+  message?: string | null;
+  interfaces: number;
+  modules: number;
+  device: IpMplsDevice;
+}
+
+export interface IpMplsDeviceCreate {
+  name: string;
+  mgmt_ip: string;
+  port?: number;
+  platform?: IpMplsPlatform;
+  role?: IpMplsDeviceRole;
+  description?: string;
+  poll_interval_seconds?: number;
+  username: string;
+  password: string;
+  enable?: string;
+}
