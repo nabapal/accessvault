@@ -102,9 +102,10 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
   <nav className="mt-6 flex-1 space-y-6 overflow-y-auto">
           {sections.map((section) => {
             const open = openSections.has(section.title);
-            // When the sidebar is width-collapsed there is no room for group headers,
-            // so all items are shown as icon badges (accordion applies only when expanded).
-            const showItems = isCollapsed || open;
+            // Respect the accordion in both widths: only an open group shows its items
+            // (the current route's group is open by default), so collapsing the rail no
+            // longer dumps every sub-tab as a short-name badge.
+            const showItems = open;
             return (
             <div key={section.title}>
               {!isCollapsed ? (
