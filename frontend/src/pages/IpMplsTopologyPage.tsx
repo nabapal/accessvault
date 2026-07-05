@@ -32,8 +32,15 @@ const ROLE_COLORS: Record<string, string> = {
   AG2: "#34d399",
   AG3: "#c084fc",
   CRR: "#f472b6",
+  IRR: "#fb7185",
+  URR: "#fda4af",
+  VRR: "#e879f9",
+  WRR: "#f0abfc",
   external: "#64748b"
 };
+
+// Route-reflector roles are kept as distinct roles but positioned at the AG3 level.
+const RR_ROLES = ["CRR", "IRR", "URR", "VRR", "WRR"];
 
 const roleKey = (kind: string, role?: string | null) =>
   kind === "external" ? "external" : (role || "OTHER").toUpperCase();
@@ -149,6 +156,7 @@ const groupOf = (name: string): string => {
 const layerOf = (kind: string, role?: string | null): string => {
   if (kind === "external") return "EXTERNAL";
   const r = (role || "").toUpperCase();
+  if (RR_ROLES.includes(r)) return "AG3"; // route reflectors sit at the AG3 level
   return ["SAR", "AG3", "AG2", "AG1"].includes(r) ? r : "OTHER";
 };
 
@@ -328,28 +336,54 @@ export function IpMplsTopologyPage() {
       return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: computePositions(shownNodes) };
     }
 
-    // Aggregate level: group by (location × role) or by location.
-    const keyFn =
-      groupBy === "role"
-        ? (n: { name: string; kind: string; role?: string | null }) => `${groupOf(n.name)}:${layerOf(n.kind, n.role)}`
-        : (n: { name: string; kind: string; role?: string | null }) => groupOf(n.name);
-    const { members, edgeWeight } = buildAggregate(shownNodes, shownLinks, keyFn);
+    const aggEdges = (edgeWeight: Record<string, number>): ElementDefinition[] =>
+      Object.entries(edgeWeight).map(([k, weight]) => {
+        const [a, b] = k.split("|");
+        return { data: { id: `e_${k}`, source: a, target: b, agg: 1, weight, label: String(weight) } };
+      });
 
+    // Role level: one node per (location × role); roles keep their identity but are
+    // positioned by layer (RR roles land in the AG3 band), spread within the band.
+    if (groupBy === "role") {
+      const { members, edgeWeight } = buildAggregate(
+        shownNodes,
+        shownLinks,
+        (n) => `${groupOf(n.name)}:${roleKey(n.kind, n.role)}`
+      );
+      const meta: Record<string, { grp: string; rk: string; layer: string }> = {};
+      Object.entries(members).forEach(([key, mem]) => {
+        const grp = key.split(":")[0];
+        const rk = key.split(":")[1];
+        meta[key] = { grp, rk, layer: layerOf(mem[0].kind, mem[0].role) };
+      });
+      const bands: Record<string, string[]> = {};
+      Object.entries(meta).forEach(([key, m]) => {
+        (bands[`${m.grp}|${m.layer}`] ??= []).push(key);
+      });
+      const positionsMap: Record<string, XY> = {};
+      Object.entries(bands).forEach(([bandKey, keys]) => {
+        const [grp, layer] = bandKey.split("|");
+        const region = REGION[grp];
+        const n = keys.length;
+        const step = n > 1 ? Math.min(region.width / n, 150) : 0;
+        keys.forEach((key, i) => {
+          positionsMap[key] = { x: region.cx + (i - (n - 1) / 2) * step, y: 70 + LAYER_ORDER.indexOf(layer) * 150 };
+        });
+      });
+      const nodes: ElementDefinition[] = Object.entries(members).map(([key, mem]) => ({
+        data: { id: key, agg: "role", roleKey: meta[key].rk, label: `${LOCATION_LABEL[meta[key].grp] ?? meta[key].grp} · ${meta[key].rk} (${mem.length})` }
+      }));
+      return { elements: [...nodes, ...aggEdges(edgeWeight)], shownCount: shownIds.size, positions: positionsMap };
+    }
+
+    // Location level: one node per location.
+    const { members, edgeWeight } = buildAggregate(shownNodes, shownLinks, (n) => groupOf(n.name));
     const positionsMap: Record<string, XY> = {};
     const nodes: ElementDefinition[] = Object.entries(members).map(([key, mem]) => {
-      if (groupBy === "role") {
-        const [grp, layer] = key.split(":");
-        positionsMap[key] = { x: REGION[grp].cx, y: 70 + LAYER_ORDER.indexOf(layer) * 150 };
-        return { data: { id: key, agg: "role", roleKey: layer, label: `${LOCATION_LABEL[grp] ?? grp} · ${layer} (${mem.length})` } };
-      }
       positionsMap[key] = { x: REGION[key].cx, y: 340 };
       return { data: { id: key, agg: "loc", label: `${LOCATION_LABEL[key] ?? key} (${mem.length})` } };
     });
-    const edges: ElementDefinition[] = Object.entries(edgeWeight).map(([k, weight]) => {
-      const [a, b] = k.split("|");
-      return { data: { id: `e_${k}`, source: a, target: b, agg: 1, weight, label: String(weight) } };
-    });
-    return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: positionsMap };
+    return { elements: [...nodes, ...aggEdges(edgeWeight)], shownCount: shownIds.size, positions: positionsMap };
   }, [topo, shownNodes, shownIds, shownLinks, groupBy]);
 
   const layout = useMemo(() => ({ name: "preset", positions, fit: true, padding: 40 }), [positions]);
@@ -399,7 +433,7 @@ export function IpMplsTopologyPage() {
     const keyOf = (id: string): string | null => {
       const n = nodeById.get(id);
       if (!n) return null;
-      if (groupBy === "role") return `${groupOf(n.name)}:${layerOf(n.kind, n.role)}`;
+      if (groupBy === "role") return `${groupOf(n.name)}:${roleKey(n.kind, n.role)}`;
       if (groupBy === "location") return groupOf(n.name);
       return id;
     };
