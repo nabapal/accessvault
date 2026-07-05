@@ -297,7 +297,7 @@ async def run_poll_for_endpoint(
 							headers = {
 								"Accept": "application/json",
 								"Authorization": f"Token {token}",
-								"User-Agent": "InfraPulse-Collector/1.0",
+								"User-Agent": "NetVerse-Collector/1.0",
 							}
 							async with httpx.AsyncClient(base_url=base_url.rstrip("/"), headers=headers, timeout=30) as client:
 								resp = await client.get("/dcim/devices/", params={"serial": host.serial, "limit": "1"})
@@ -325,7 +325,7 @@ async def run_poll_for_endpoint(
 
 
 class InventoryPoller:
-	"""Periodic poller that syncs VMware inventory into the InfraPulse data store."""
+	"""Periodic poller that syncs VMware inventory into the NetVerse AI data store."""
 
 	def __init__(
 		self,

@@ -185,7 +185,7 @@ async def verify_records(
     headers = {
         "Accept": "application/json",
         "Authorization": f"Token {settings.nautobot_token}",
-        "User-Agent": "InfraPulse-Verify/1.0",
+        "User-Agent": "NetVerse-Verify/1.0",
     }
     timeout_config = httpx.Timeout(timeout, read=timeout)
 

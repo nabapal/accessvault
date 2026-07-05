@@ -3,7 +3,7 @@ interface BrandMarkProps {
   className?: string;
 }
 
-// InfraPulse logo mark: a pulse/heartbeat line on a teal gradient tile.
+// NetVerse AI logo mark: a pulse/heartbeat line on a teal gradient tile.
 export function BrandMark({ size = 32, className = "" }: BrandMarkProps) {
   return (
     <span

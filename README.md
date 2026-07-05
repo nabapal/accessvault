@@ -1,6 +1,8 @@
-# InfraPulse
+# NetVerse AI
 
-InfraPulse is a secure infrastructure operations portal for multinational teams. It combines credential management and remote access (AccessVault) with live inventory across VMware, Cisco ACI, and Cisco IP-MPLS networks.
+> **Unified Infrastructure Intelligence for AI**
+
+NetVerse AI is a secure infrastructure operations portal for multinational teams. It combines credential management and remote access (AccessVault) with live inventory across VMware, Cisco ACI, and Cisco IP-MPLS networks.
 
 ## Modules
 - **AccessVault** — credential vault, group/system management, browser SSH terminal, GUI quick-launch.
@@ -126,7 +128,7 @@ new inventory domains are added.
 ## VM Inventory Module
 - Register ESXi or vCenter collection endpoints through `/api/v1/inventory/endpoints`
 - Credentials are stored encrypted using the shared Fernet secret; passwords are never returned in responses
-- Responses include polling metadata (`last_polled_at`, `last_poll_status`) for the InfraPulse dashboard
+- Responses include polling metadata (`last_polled_at`, `last_poll_status`) for the NetVerse AI dashboard
 - Background poller (enabled by default) collects live host/VM/datastore/network telemetry via pyVmomi; toggle via `INVENTORY_POLLER_ENABLED`
 
 ### REST Endpoints

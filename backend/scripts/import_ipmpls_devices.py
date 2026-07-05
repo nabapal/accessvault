@@ -72,7 +72,7 @@ def _node_name(value: Any) -> Any:
 
 
 def fetch_devices_by_roles(base_url: str, token: str, roles: List[str]) -> List[Dict[str, Any]]:
-    headers = {"Accept": "application/json", "Authorization": f"Token {token}", "User-Agent": "InfraPulse-Import/1.0"}
+    headers = {"Accept": "application/json", "Authorization": f"Token {token}", "User-Agent": "NetVerse-Import/1.0"}
     devices: List[Dict[str, Any]] = []
     with httpx.Client(base_url=base_url.rstrip("/"), headers=headers, verify=False, timeout=30.0) as client:
         for role in roles:

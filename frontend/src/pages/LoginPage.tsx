@@ -30,9 +30,9 @@ export function LoginPage() {
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandMark size={52} className="rounded-xl" />
           <h1 className="mt-4 text-2xl font-semibold tracking-wide text-white">
-            Infra<span className="text-primary-300">Pulse</span>
+            NetVerse<span className="text-primary-300"> AI</span>
           </h1>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.35em] text-primary-200/80">Unified infrastructure intelligence</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.35em] text-primary-200/80">Unified Infrastructure Intelligence for AI</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

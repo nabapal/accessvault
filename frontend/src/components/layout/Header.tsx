@@ -11,9 +11,9 @@ export function Header() {
         <BrandMark size={36} />
         <div>
           <h1 className="text-lg font-semibold tracking-wide text-white">
-            Infra<span className="text-primary-300">Pulse</span>
+            NetVerse<span className="text-primary-300"> AI</span>
           </h1>
-          <p className="text-[11px] uppercase tracking-[0.3em] text-primary-200/80">Unified infrastructure intelligence</p>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-primary-200/80">Unified Infrastructure Intelligence for AI</p>
         </div>
       </div>
       <div className="flex items-center gap-4">

@@ -84,7 +84,7 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
             <div className="flex items-center gap-2">
               <BrandMark size={28} />
               <span className="text-sm font-semibold tracking-wide text-white">
-                Infra<span className="text-primary-300">Pulse</span>
+                NetVerse<span className="text-primary-300"> AI</span>
               </span>
             </div>
           ) : (

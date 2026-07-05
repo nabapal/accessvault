@@ -117,7 +117,7 @@ async def fetch_nautobot_device_facts_by_name(
     headers = {
         "Accept": "application/json",
         "Authorization": f"Token {token}",
-        "User-Agent": "InfraPulse-Collector/1.0",
+        "User-Agent": "NetVerse-Collector/1.0",
     }
     timeout_config = httpx.Timeout(timeout, read=timeout)
     async with httpx.AsyncClient(base_url=base_url.rstrip("/"), headers=headers, timeout=timeout_config) as client:
@@ -139,7 +139,7 @@ async def fetch_nautobot_device_locations(
     headers = {
         "Accept": "application/json",
         "Authorization": f"Token {token}",
-        "User-Agent": "InfraPulse-Collector/1.0",
+        "User-Agent": "NetVerse-Collector/1.0",
     }
     exact: Dict[str, DeviceLocation] = {}
     lower: Dict[str, DeviceLocation] = {}

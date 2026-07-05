@@ -1,4 +1,4 @@
-# InfraPulse — Development Playbook
+# NetVerse AI — Development Playbook
 
 This is the standard workflow for adding a feature (especially a new inventory
 domain) so that **every feature automatically exposes its data through the REST
