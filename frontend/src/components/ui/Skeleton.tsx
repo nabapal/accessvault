@@ -20,6 +20,22 @@ export function StatTileSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
+// Skeleton rows to drop inside an existing <tbody> (replaces the "Loading…" row).
+// Renders `rows` shimmering full-width bars spanning `cols` columns.
+export function TableRowsSkeleton({ rows = 6, cols }: { rows?: number; cols: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, r) => (
+        <tr key={r}>
+          <td colSpan={cols} className="px-4 py-3.5">
+            <Skeleton className="h-3 w-full" />
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 // A table-shaped skeleton: header row + N body rows.
 export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {
   return (

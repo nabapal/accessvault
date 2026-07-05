@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { toast } from "@/components/ui/toast";
 import {
   createIpMplsDevice,
   deleteIpMplsDevice,
@@ -61,6 +62,7 @@ export function IpMplsDevicesAdminPage() {
     try {
       const created = await createIpMplsDevice({ ...form, port: Number(form.port) || 22 });
       setMessage(`Registered ${created.name}. Running first sync…`);
+      toast.success("Device registered", `${created.name} added. Running first sync…`);
       setForm(emptyForm);
       await load();
       try {
@@ -70,13 +72,20 @@ export function IpMplsDevicesAdminPage() {
             ? `Registered ${created.name} — collected ${res.interfaces} interfaces, ${res.modules} modules.`
             : `Registered ${created.name}, but first sync failed: ${res.message}`
         );
+        if (res.success) {
+          toast.success("First sync complete", `${res.interfaces} interfaces, ${res.modules} modules collected.`);
+        } else {
+          toast.warning("First sync failed", res.message ?? undefined);
+        }
         await load();
       } catch {
         setMessage(`Registered ${created.name}. Trigger a sync from the list when ready.`);
+        toast.warning("First sync didn't run", "Trigger a sync from the list when ready.");
       }
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail || "Failed to register device.");
+      toast.error("Registration failed", detail || undefined);
     } finally {
       setBusy(false);
     }
@@ -89,9 +98,15 @@ export function IpMplsDevicesAdminPage() {
     try {
       const res = await syncIpMplsDevice(id);
       setMessage(res.success ? `Synced: ${res.interfaces} interfaces, ${res.modules} modules.` : `Sync failed: ${res.message}`);
+      if (res.success) {
+        toast.success("Sync complete", `${res.interfaces} interfaces, ${res.modules} modules collected.`);
+      } else {
+        toast.error("Sync failed", res.message ?? undefined);
+      }
       await load();
     } catch {
       setError("Sync request failed.");
+      toast.error("Sync request failed", "Could not reach the device sync endpoint.");
     } finally {
       setSyncingId(null);
     }
@@ -101,9 +116,11 @@ export function IpMplsDevicesAdminPage() {
     if (!window.confirm(`Delete device ${name}? This removes its collected inventory.`)) return;
     try {
       await deleteIpMplsDevice(id);
+      toast.success("Device deleted", `${name} and its collected inventory were removed.`);
       await load();
     } catch {
       setError("Delete failed.");
+      toast.error("Delete failed", `Could not delete ${name}.`);
     }
   };
 

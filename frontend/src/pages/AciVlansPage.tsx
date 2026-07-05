@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { Squares2X2Icon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchAciFabricVlans } from "@/services/aci";
 import { AciFabricVlan } from "@/types";
 
@@ -137,15 +140,15 @@ export function AciVlansPage() {
               </thead>
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-400">
-                      Loading Cisco ACI VLANs…
-                    </td>
-                  </tr>
+                  <TableRowsSkeleton rows={8} cols={9} />
                 ) : vlans.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-400">
-                      No VLANs match the current filters.
+                    <td colSpan={9} className="px-4 py-6">
+                      <EmptyState
+                        icon={Squares2X2Icon}
+                        title="No VLANs match"
+                        description="Try a different search, or wait for the next ACI poll to populate VLANs."
+                      />
                     </td>
                   </tr>
                 ) : (

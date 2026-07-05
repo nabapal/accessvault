@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ServerIcon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchIpMplsDevices, fetchIpMplsSummary } from "@/services/ipmpls";
 import { parseApiDate } from "@/utils/datetime";
 import { locationFromName } from "@/utils/location";
@@ -166,13 +169,15 @@ export function IpMplsDevicesPage() {
               </thead>
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-400">Loading devices…</td>
-                  </tr>
+                  <TableRowsSkeleton rows={8} cols={11} />
                 ) : devices.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-400">
-                      No devices found. Register devices under Admin → IP-MPLS Devices.
+                    <td colSpan={11} className="px-4 py-6">
+                      <EmptyState
+                        icon={ServerIcon}
+                        title="No devices found"
+                        description="Register devices under Admin → IP-MPLS Devices to populate this list."
+                      />
                     </td>
                   </tr>
                 ) : (

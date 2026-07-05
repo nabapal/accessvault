@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { ViewfinderCircleIcon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchAciFreePorts } from "@/services/aci";
 import { AciFreePortNode, AciFreePortReport } from "@/types";
 
@@ -311,12 +314,16 @@ export function AciFreePortsPage() {
               </thead>
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {isLoading && !report ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-400">Loading free-port report…</td>
-                  </tr>
+                  <TableRowsSkeleton rows={8} cols={9} />
                 ) : visibleNodes.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-400">No switches match the current filters.</td>
+                    <td colSpan={9} className="px-4 py-6">
+                      <EmptyState
+                        icon={ViewfinderCircleIcon}
+                        title="No switches match"
+                        description="Adjust the filters, or wait for the next ACI poll to refresh the free-port report."
+                      />
+                    </td>
                   </tr>
                 ) : (
                   visibleNodes.map((node) => {

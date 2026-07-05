@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Dialog, Transition } from "@headlessui/react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { toast } from "@/components/ui/toast";
 import {
   CreateInventoryEndpointPayload,
   createInventoryEndpoint,
@@ -364,10 +365,13 @@ export function InventoryAdminPage() {
       await updateInventoryEndpoint(editingEndpoint.id, payload);
       setFormSuccess("Endpoint updated successfully");
       setFormError(null);
+      toast.success("Endpoint updated", editingEndpoint.name);
       closeEditModal();
       await refreshEndpoints();
     } catch (error) {
-      setUpdateError((error as Error).message || "Unable to update endpoint");
+      const msg = (error as Error).message || "Unable to update endpoint";
+      setUpdateError(msg);
+      toast.error("Update failed", msg);
     } finally {
       setIsUpdatingEndpoint(false);
     }
@@ -393,13 +397,17 @@ export function InventoryAdminPage() {
     setIsDeletingEndpoint(true);
     setDeleteError(null);
     try {
+      const removed = deleteTarget.name;
       await deleteInventoryEndpoint(deleteTarget.id);
       setFormSuccess("Endpoint deleted successfully");
       setFormError(null);
       setDeleteTarget(null);
+      toast.success("Endpoint deleted", removed);
       await refreshEndpoints();
     } catch (error) {
-      setDeleteError((error as Error).message || "Unable to delete endpoint");
+      const msg = (error as Error).message || "Unable to delete endpoint";
+      setDeleteError(msg);
+      toast.error("Delete failed", msg);
     } finally {
       setIsDeletingEndpoint(false);
     }
@@ -498,6 +506,7 @@ export function InventoryAdminPage() {
       setForm({ ...initialForm });
       setTagsInput("");
       setFormSuccess("Endpoint created successfully");
+      toast.success("Collector created", sanitizedPayload.name);
       setLastValidation((prev) => validationResult ?? prev);
       setActiveStep("enroll");
       if (typeof window !== "undefined") {
@@ -505,7 +514,9 @@ export function InventoryAdminPage() {
       }
       await refreshEndpoints();
     } catch (error) {
-      setFormError((error as Error).message || "Unable to create endpoint");
+      const msg = (error as Error).message || "Unable to create endpoint";
+      setFormError(msg);
+      toast.error("Create failed", msg);
     } finally {
       setIsCreating(false);
     }
@@ -520,12 +531,15 @@ export function InventoryAdminPage() {
         testingId: null,
         summaries: { ...prev.summaries, [endpoint.id]: result }
       }));
+      toast.success("Connectivity test passed", endpoint.name);
     } catch (error) {
+      const msg = (error as Error).message || "Unable to test endpoint";
       setActions((prev) => ({
         ...prev,
         testingId: null,
-        errors: { ...prev.errors, [endpoint.id]: (error as Error).message || "Unable to test endpoint" }
+        errors: { ...prev.errors, [endpoint.id]: msg }
       }));
+      toast.error("Connectivity test failed", `${endpoint.name}: ${msg}`);
     }
   };
 
@@ -539,12 +553,15 @@ export function InventoryAdminPage() {
         syncingId: null,
         summaries: { ...prev.summaries, [endpoint.id]: response.summary }
       }));
+      toast.success("Sync complete", endpoint.name);
     } catch (error) {
+      const msg = (error as Error).message || "Unable to sync endpoint";
       setActions((prev) => ({
         ...prev,
         syncingId: null,
-        errors: { ...prev.errors, [endpoint.id]: (error as Error).message || "Unable to sync endpoint" }
+        errors: { ...prev.errors, [endpoint.id]: msg }
       }));
+      toast.error("Sync failed", `${endpoint.name}: ${msg}`);
     }
   };
 

@@ -3,7 +3,11 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { Dialog, Transition } from "@headlessui/react";
 
+import { ServerStackIcon } from "@heroicons/react/24/outline";
+
 import { AppShell } from "@/components/layout/AppShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableSkeleton } from "@/components/ui/Skeleton";
 import {
   fetchInventoryEndpoints,
   fetchInventoryHosts,
@@ -396,11 +400,21 @@ export function VirtualMachinesPage() {
         <section className="rounded-lg border border-brand-800/70 bg-brand-900/60 p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-200">Virtual machines</h3>
-            {isLoading && <span className="text-xs text-slate-400">Loading…</span>}
           </div>
+          {isLoading && (
+            <div className="mt-4">
+              <TableSkeleton rows={6} cols={7} />
+            </div>
+          )}
           {error && <p className="mt-4 text-sm text-rose-300">{error}</p>}
           {!isLoading && !error && filteredVirtualMachines.length === 0 && (
-            <p className="mt-4 text-sm text-slate-400">No virtual machines match your filters.</p>
+            <div className="mt-4">
+              <EmptyState
+                icon={ServerStackIcon}
+                title="No virtual machines match your filters"
+                description="Adjust the filters above, or wait for the next collector poll to refresh VM inventory."
+              />
+            </div>
           )}
           {!isLoading && !error && filteredVirtualMachines.length > 0 && (
             <div className="mt-4 overflow-x-auto">
