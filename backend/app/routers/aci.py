@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -198,7 +198,7 @@ async def list_fabric_endpoints(
     fabric: Optional[str] = Query(default=None, description="Case-insensitive match on fabric name or IP"),
     search: Optional[str] = Query(
         default=None,
-        description="Case-insensitive search across MAC, tenant, EPG, encap, bridge domain, VRF, interface, or fabric",
+        description="Case-insensitive search across MAC, IP, tenant, EPG, encap, bridge domain, VRF, interface, or fabric",
     ),
     db: AsyncSession = Depends(get_db),
     _: object = Depends(get_current_user),
@@ -230,6 +230,8 @@ async def list_fabric_endpoints(
         conditions.append(
             or_(
                 func.lower(func.coalesce(AciFabricEndpoint.mac, "")).like(pattern),
+                # ip_addresses is a JSON list — match against its text form.
+                func.lower(func.cast(AciFabricEndpoint.ip_addresses, String)).like(pattern),
                 func.lower(func.coalesce(AciFabricEndpoint.tenant, "")).like(pattern),
                 func.lower(func.coalesce(AciFabricEndpoint.app_profile, "")).like(pattern),
                 func.lower(func.coalesce(AciFabricEndpoint.epg, "")).like(pattern),
