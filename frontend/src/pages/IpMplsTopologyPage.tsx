@@ -57,16 +57,65 @@ const cyStylesheet = [
   { selector: "edge.hl", style: { "line-color": "#22d3ee", width: 2.4, opacity: 1 } }
 ];
 
-const layout = {
-  name: "cose",
-  animate: false,
-  idealEdgeLength: 90,
-  nodeRepulsion: 9000,
-  nodeOverlap: 20,
-  gravity: 0.3,
-  padding: 24,
-  randomize: true
+// Structured layout: location columns (Mumbai left, Bangalore right, others far
+// right) × role layers stacked top→bottom (SAR, AG3, AG2, AG1, then other/external).
+const REGION: Record<string, { cx: number; width: number }> = {
+  mumbai: { cx: 320, width: 500 },
+  bangalore: { cx: 900, width: 500 },
+  other: { cx: 1420, width: 400 }
 };
+const REGION_ORDER = ["mumbai", "bangalore", "other"];
+const LAYER_ORDER = ["SAR", "AG3", "AG2", "AG1", "OTHER", "EXTERNAL"];
+
+const groupOf = (name: string): string => {
+  const loc = locationFromName(name);
+  if (loc === "Mumbai") return "mumbai";
+  if (loc === "Bangalore") return "bangalore";
+  return "other";
+};
+
+const layerOf = (kind: string, role?: string | null): string => {
+  if (kind === "external") return "EXTERNAL";
+  const r = (role || "").toUpperCase();
+  return ["SAR", "AG3", "AG2", "AG1"].includes(r) ? r : "OTHER";
+};
+
+interface XY {
+  x: number;
+  y: number;
+}
+
+function computePositions(nodes: { id: string; name: string; kind: string; role?: string | null }[]): Record<string, XY> {
+  const colW = 130;
+  const rowH = 60;
+  const topY = 60;
+  const layerPad = 46;
+  const buckets: Record<string, Record<string, typeof nodes>> = {};
+  nodes.forEach((n) => {
+    const g = groupOf(n.name);
+    const l = layerOf(n.kind, n.role);
+    (buckets[g] ??= {});
+    (buckets[g][l] ??= []).push(n);
+  });
+  const pos: Record<string, XY> = {};
+  for (const group of REGION_ORDER) {
+    const region = REGION[group];
+    let y = topY;
+    for (const layer of LAYER_ORDER) {
+      const cell = buckets[group]?.[layer] ?? [];
+      if (!cell.length) continue;
+      const cols = Math.max(1, Math.min(cell.length, Math.floor(region.width / colW)));
+      const rows = Math.ceil(cell.length / cols);
+      cell.forEach((node, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        pos[node.id] = { x: region.cx + (col - (cols - 1) / 2) * colW, y: y + row * rowH };
+      });
+      y += rows * rowH + layerPad;
+    }
+  }
+  return pos;
+}
 
 export function IpMplsTopologyPage() {
   const navigate = useNavigate();
@@ -121,33 +170,35 @@ export function IpMplsTopologyPage() {
     setSelectedLocations(new Set(locationsPresent));
   }, [locationsPresent]);
 
-  const { elements, shownCount } = useMemo(() => {
-    if (!topo) return { elements: [], shownCount: 0 };
-    const shownIds = new Set(
-      topo.nodes
-        .filter((n) => selectedRoles.has(roleKey(n.kind, n.role)) && selectedLocations.has(locationFromName(n.name)))
-        .map((n) => n.id)
+  const { elements, shownCount, positions } = useMemo(() => {
+    if (!topo) return { elements: [], shownCount: 0, positions: {} as Record<string, XY> };
+    const shownNodes = topo.nodes.filter(
+      (n) => selectedRoles.has(roleKey(n.kind, n.role)) && selectedLocations.has(locationFromName(n.name))
     );
-    const nodes = topo.nodes
-      .filter((n) => shownIds.has(n.id))
-      .map((n) => ({
-        data: {
-          id: n.id,
-          label: n.name,
-          kind: n.kind,
-          roleKey: roleKey(n.kind, n.role),
-          role: n.role ?? "",
-          site: n.site ?? "",
-          deviceId: n.device_id ?? ""
-        }
-      }));
+    const shownIds = new Set(shownNodes.map((n) => n.id));
+    const nodes = shownNodes.map((n) => ({
+      data: {
+        id: n.id,
+        label: n.name,
+        kind: n.kind,
+        roleKey: roleKey(n.kind, n.role),
+        role: n.role ?? "",
+        site: n.site ?? "",
+        deviceId: n.device_id ?? ""
+      }
+    }));
     const edges = topo.links
       .filter((l) => shownIds.has(l.source) && shownIds.has(l.target))
       .map((l) => ({
         data: { id: `${l.source}__${l.target}`, source: l.source, target: l.target, label: l.interfaces.join(", ") }
       }));
-    return { elements: [...nodes, ...edges], shownCount: shownIds.size };
+    return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: computePositions(shownNodes) };
   }, [topo, selectedRoles, selectedLocations]);
+
+  const layout = useMemo(
+    () => ({ name: "preset", positions, fit: true, padding: 40 }),
+    [positions]
+  );
 
   const roleCounts = useMemo(() => {
     const c: Record<string, number> = {};
