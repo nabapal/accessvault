@@ -95,6 +95,15 @@ def _derive_site_name(device: Dict[str, object]) -> Optional[str]:
     return "-".join(parts) if parts else None
 
 
+def compute_device_facts(device: Dict[str, object]) -> NautobotDeviceFacts:
+    """Return role/site/rack facts from a Nautobot device payload."""
+    return NautobotDeviceFacts(
+        role=_derive_role(device),
+        site=_derive_site_name(device),
+        rack=_derive_rack_location(device),
+    )
+
+
 async def fetch_nautobot_device_facts_by_name(
     base_url: str,
     token: str,
@@ -117,12 +126,7 @@ async def fetch_nautobot_device_facts_by_name(
         results = response.json().get("results", [])
         if not results or not isinstance(results[0], dict):
             return None
-        device = results[0]
-        return NautobotDeviceFacts(
-            role=_derive_role(device),
-            site=_derive_site_name(device),
-            rack=_derive_rack_location(device),
-        )
+        return compute_device_facts(results[0])
 
 
 async def fetch_nautobot_device_locations(
