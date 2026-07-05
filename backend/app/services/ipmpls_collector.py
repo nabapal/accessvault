@@ -104,14 +104,24 @@ def _collect_device_blocking(
         # XR prompt looks like "RP/0/RSP0/CPU0:HOSTNAME"; take the segment after the last ':'.
         hostname = prompt.split(":")[-1] if prompt else None
 
+        def safe(cmd: str):
+            # Parse each command independently: a TextFSM template error on one
+            # command (e.g. odd interface-description output) must not abort the
+            # whole device collection.
+            try:
+                return conn.send_command(cmd, use_textfsm=True)
+            except Exception as exc:  # pragma: no cover - parser/template robustness
+                logger.warning("Command %r failed to parse on %s: %s", cmd, host, exc)
+                return []
+
         is_xr = device_type == "cisco_xr"
         if_cmd = "show ipv4 interface brief" if is_xr else "show ip interface brief"
         return {
             "hostname": hostname or None,
-            "version": conn.send_command("show version", use_textfsm=True),
-            "inventory": conn.send_command("show inventory", use_textfsm=True),
-            "interfaces": conn.send_command(if_cmd, use_textfsm=True),
-            "descriptions": conn.send_command("show interfaces description", use_textfsm=True),
+            "version": safe("show version"),
+            "inventory": safe("show inventory"),
+            "interfaces": safe(if_cmd),
+            "descriptions": safe("show interfaces description"),
         }
     finally:
         conn.disconnect()
