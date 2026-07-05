@@ -11,23 +11,33 @@ interface AppShellProps {
 
 const SIDEBAR_SECTIONS = [
   {
-    title: "Infrastructure",
+    title: "VM Inventory",
     items: [
-  { label: "Dashboard", to: "/inventory" },
-      { label: "VM Center", to: "/inventory/virtual-machines" },
-      { label: "Collectors Admin", to: "/inventory/admin" },
-      { label: "Access Vault", to: "/accessvault" }
+      { label: "Dashboard", to: "/inventory" },
+      { label: "VM Center", to: "/inventory/virtual-machines" }
     ]
   },
   {
-    title: "Telco",
+    title: "Data Center Inventory",
     items: [
-      { label: "ACI Summary", to: "/telco/aci/summary" },
-      { label: "Cisco ACI Fabric", to: "/telco/aci" },
-      { label: "ACI Endpoints", to: "/telco/aci/endpoints" },
-      { label: "ACI Free Ports", to: "/telco/aci/free-ports" },
-      { label: "ACI VLANs", to: "/telco/aci/vlans" },
-      { label: "Fabric Onboarding", to: "/telco/onboarding" }
+      { label: "Fabric Summary", to: "/telco/aci/summary" },
+      { label: "Fabric Nodes", to: "/telco/aci" },
+      { label: "Endpoints", to: "/telco/aci/endpoints" },
+      { label: "Free Ports", to: "/telco/aci/free-ports" },
+      { label: "VLANs", to: "/telco/aci/vlans" }
+    ]
+  },
+  {
+    title: "Admin",
+    items: [
+      { label: "Fabric Onboarding", to: "/telco/onboarding" },
+      { label: "VM Collectors", to: "/inventory/admin" }
+    ]
+  },
+  {
+    title: "Access Vault",
+    items: [
+      { label: "Credentials", to: "/accessvault" }
     ]
   }
 ];
