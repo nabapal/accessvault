@@ -642,7 +642,7 @@ export function IpMplsTopologyPage() {
         </section>
 
         {linkInfo ? (
-          <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4 text-sm">
+          <div className="fixed bottom-4 right-4 z-50 w-[26rem] max-w-[90vw] max-h-[75vh] overflow-auto rounded-lg border border-primary-500/40 bg-brand-900 p-4 text-sm shadow-2xl shadow-black/60">
             <div className="mb-2 flex items-center justify-between">
               <span className="font-semibold text-white">{linkInfo.title}</span>
               <button type="button" onClick={() => setLinkInfo(null)} className="text-xs text-slate-400 hover:text-slate-200">
