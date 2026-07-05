@@ -5,6 +5,7 @@ import type { Core } from "cytoscape";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { fetchIpMplsTopology } from "@/services/ipmpls";
+import { locationFromName } from "@/utils/location";
 import { IpMplsTopology } from "@/types";
 
 const ROLE_COLORS: Record<string, string> = {
@@ -74,6 +75,7 @@ export function IpMplsTopologyPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ name: string; detail: string } | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
+  const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -105,15 +107,26 @@ export function IpMplsTopologyPage() {
     return Array.from(set).sort();
   }, [topo]);
 
-  // Default to showing all roles once the topology loads.
+  const locationsPresent = useMemo(() => {
+    const set = new Set<string>();
+    topo?.nodes.forEach((n) => set.add(locationFromName(n.name)));
+    return Array.from(set).sort();
+  }, [topo]);
+
+  // Default to showing all roles + locations once the topology loads.
   useEffect(() => {
     setSelectedRoles(new Set(rolesPresent));
   }, [rolesPresent]);
+  useEffect(() => {
+    setSelectedLocations(new Set(locationsPresent));
+  }, [locationsPresent]);
 
   const { elements, shownCount } = useMemo(() => {
     if (!topo) return { elements: [], shownCount: 0 };
     const shownIds = new Set(
-      topo.nodes.filter((n) => selectedRoles.has(roleKey(n.kind, n.role))).map((n) => n.id)
+      topo.nodes
+        .filter((n) => selectedRoles.has(roleKey(n.kind, n.role)) && selectedLocations.has(locationFromName(n.name)))
+        .map((n) => n.id)
     );
     const nodes = topo.nodes
       .filter((n) => shownIds.has(n.id))
@@ -134,7 +147,7 @@ export function IpMplsTopologyPage() {
         data: { id: `${l.source}__${l.target}`, source: l.source, target: l.target, label: l.interfaces.join(", ") }
       }));
     return { elements: [...nodes, ...edges], shownCount: shownIds.size };
-  }, [topo, selectedRoles]);
+  }, [topo, selectedRoles, selectedLocations]);
 
   const roleCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -154,6 +167,25 @@ export function IpMplsTopologyPage() {
     });
 
   const allSelected = rolesPresent.length > 0 && rolesPresent.every((r) => selectedRoles.has(r));
+
+  const locationCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    topo?.nodes.forEach((n) => {
+      const loc = locationFromName(n.name);
+      c[loc] = (c[loc] ?? 0) + 1;
+    });
+    return c;
+  }, [topo]);
+
+  const toggleLocation = (loc: string) =>
+    setSelectedLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(loc)) next.delete(loc);
+      else next.add(loc);
+      return next;
+    });
+
+  const allLocationsSelected = locationsPresent.length > 0 && locationsPresent.every((l) => selectedLocations.has(l));
 
   const registerCy = (cy: Core) => {
     cy.on("tap", "node", (evt) => {
@@ -236,6 +268,33 @@ export function IpMplsTopologyPage() {
                 );
               })}
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs uppercase tracking-wide text-slate-500">Show locations:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedLocations(new Set(allLocationsSelected ? [] : locationsPresent))}
+                className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
+                  allLocationsSelected ? "border-primary-500 bg-primary-600 text-white" : "border-brand-700 bg-brand-800/60 text-slate-200 hover:border-primary-500"
+                }`}
+              >
+                {allLocationsSelected ? "All" : "Select all"}
+              </button>
+              {locationsPresent.map((loc) => {
+                const on = selectedLocations.has(loc);
+                return (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => toggleLocation(loc)}
+                    className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
+                      on ? "border-primary-500 bg-brand-800/80 text-white" : "border-brand-700 bg-brand-900/40 text-slate-500 hover:border-primary-500/50"
+                    }`}
+                  >
+                    {loc} ({locationCounts[loc] ?? 0})
+                  </button>
+                );
+              })}
+            </div>
             <p className="text-xs text-slate-500">
               Showing {shownCount} of {topo?.total_nodes ?? 0} nodes • scroll to zoom, drag to pan/move • hover to highlight • click a device to open it
             </p>
@@ -247,7 +306,7 @@ export function IpMplsTopologyPage() {
             <div className="p-10 text-center text-sm text-slate-400">Loading topology…</div>
           ) : topo && topo.nodes.length ? (
             <CytoscapeComponent
-              key={Array.from(selectedRoles).sort().join(",")}
+              key={`${Array.from(selectedRoles).sort().join(",")}|${Array.from(selectedLocations).sort().join(",")}`}
               elements={elements}
               stylesheet={cyStylesheet}
               layout={layout}

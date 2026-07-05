@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { fetchIpMplsDevices, fetchIpMplsSummary } from "@/services/ipmpls";
 import { parseApiDate } from "@/utils/datetime";
+import { locationFromName } from "@/utils/location";
 import { IpMplsDevice, IpMplsPlatform, IpMplsSummary } from "@/types";
 
 const PLATFORM_FILTERS: { label: string; value: IpMplsPlatform | "all" }[] = [
@@ -25,20 +26,6 @@ const statusBadge: Record<string, string> = {
 };
 
 const DEFAULT_PAGE_SIZE = 25;
-
-// Location derived from the first 4 letters of the device name (extend as needed).
-const SITE_CODES: Record<string, string> = {
-  BGLR: "Bangalore",
-  MUMB: "Mumbai",
-  NVMB: "Navi Mumbai",
-  JMNR: "Jamnagar"
-};
-
-const locationFromName = (name?: string | null) => {
-  if (!name) return "--";
-  const code = name.slice(0, 4).toUpperCase();
-  return SITE_CODES[code] ?? code;
-};
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "--";
