@@ -21,7 +21,29 @@ InfraPulse is a secure infrastructure operations portal for multinational teams.
 ```
 backend/    # FastAPI application
 frontend/   # React + Vite + Tailwind SPA
+docs/       # Development playbook and design notes
 ```
+
+## API Documentation
+FastAPI auto-generates interactive docs from the code — every registered router
+appears automatically:
+
+| Surface | URL |
+| --- | --- |
+| Swagger UI | `/docs` |
+| ReDoc | `/redoc` |
+| OpenAPI schema | `/openapi.json` |
+
+Dev: `http://localhost:8200/docs`. Production: proxied through Nginx at
+`http://<host>/docs` (see `deployments/nginx.conf`). All portal data is exposed
+through authenticated JSON endpoints under `/api/v1`, which is what any MCP
+server / integration should consume.
+
+## Contributing / Adding Features
+See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for the standard feature
+workflow (model → migration → collector → schema → router → frontend → verify).
+Following it keeps the REST API, Swagger docs, and MCP-readiness consistent as
+new inventory domains are added.
 
 ## AccessVault Backend Setup
 1. Create and activate a Python 3.11+ virtual environment.
