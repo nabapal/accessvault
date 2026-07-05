@@ -58,6 +58,9 @@ async def list_devices(
                 func.lower(IpMplsDevice.mgmt_ip).like(pattern),
                 func.lower(func.coalesce(IpMplsDevice.model, "")).like(pattern),
                 func.lower(func.coalesce(IpMplsDevice.serial, "")).like(pattern),
+                func.lower(func.coalesce(IpMplsDevice.role, "")).like(pattern),
+                func.lower(func.coalesce(IpMplsDevice.site_name, "")).like(pattern),
+                func.lower(func.coalesce(IpMplsDevice.rack_location, "")).like(pattern),
             )
         )
 
