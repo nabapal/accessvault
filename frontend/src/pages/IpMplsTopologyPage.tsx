@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CytoscapeComponent from "react-cytoscapejs";
-import type { Core } from "cytoscape";
+import type { Core, ElementDefinition } from "cytoscape";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { fetchIpMplsTopology } from "@/services/ipmpls";
@@ -51,11 +51,65 @@ const cyStylesheet = [
       opacity: 0.5
     }
   },
+  {
+    selector: "node[agg]",
+    style: {
+      "text-valign": "center",
+      "text-halign": "center",
+      color: "#0b1325",
+      "font-size": 10,
+      "font-weight": 700,
+      "text-wrap": "wrap",
+      "text-max-width": 90,
+      width: 48,
+      height: 48,
+      "border-width": 2
+    }
+  },
+  { selector: "node[agg = 'loc']", style: { "background-color": "#38bdf8", width: 62, height: 62, "font-size": 11 } },
+  {
+    selector: "edge[agg]",
+    style: {
+      label: "data(label)",
+      "font-size": 9,
+      color: "#94a3b8",
+      "text-background-color": "#0b1325",
+      "text-background-opacity": 0.7,
+      "text-background-padding": 2,
+      width: "mapData(weight, 1, 30, 1.2, 7)"
+    }
+  },
   { selector: "node.dim", style: { opacity: 0.2 } },
   { selector: "edge.dim", style: { opacity: 0.08 } },
   { selector: "node.hl", style: { "border-color": "#22d3ee", "border-width": 3 } },
   { selector: "edge.hl", style: { "line-color": "#22d3ee", width: 2.4, opacity: 1 } }
 ];
+
+const LOCATION_LABEL: Record<string, string> = { mumbai: "Mumbai", bangalore: "Bangalore", other: "Other Sites" };
+
+// Collapse device nodes/links into aggregate groups keyed by keyFn.
+function buildAggregate(
+  nodes: { id: string; name: string; kind: string; role?: string | null }[],
+  links: { source: string; target: string; count: number }[],
+  keyFn: (n: { name: string; kind: string; role?: string | null }) => string
+) {
+  const members: Record<string, typeof nodes> = {};
+  const nodeKey: Record<string, string> = {};
+  nodes.forEach((n) => {
+    const k = keyFn(n);
+    (members[k] ??= []).push(n);
+    nodeKey[n.id] = k;
+  });
+  const edgeWeight: Record<string, number> = {};
+  links.forEach((l) => {
+    const a = nodeKey[l.source];
+    const b = nodeKey[l.target];
+    if (!a || !b || a === b) return;
+    const [x, y] = [a, b].sort();
+    edgeWeight[`${x}|${y}`] = (edgeWeight[`${x}|${y}`] ?? 0) + (l.count || 1);
+  });
+  return { members, edgeWeight };
+}
 
 // Structured layout: location columns (Mumbai left, Bangalore right, others far
 // right) × role layers stacked top→bottom (SAR, AG3, AG2, AG1, then other/external).
@@ -125,6 +179,7 @@ export function IpMplsTopologyPage() {
   const [selected, setSelected] = useState<{ name: string; detail: string } | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
+  const [groupBy, setGroupBy] = useState<"device" | "role" | "location">("device");
 
   useEffect(() => {
     let cancelled = false;
@@ -171,34 +226,58 @@ export function IpMplsTopologyPage() {
   }, [locationsPresent]);
 
   const { elements, shownCount, positions } = useMemo(() => {
-    if (!topo) return { elements: [], shownCount: 0, positions: {} as Record<string, XY> };
+    if (!topo) return { elements: [] as ElementDefinition[], shownCount: 0, positions: {} as Record<string, XY> };
+
     const shownNodes = topo.nodes.filter(
       (n) => selectedRoles.has(roleKey(n.kind, n.role)) && selectedLocations.has(locationFromName(n.name))
     );
     const shownIds = new Set(shownNodes.map((n) => n.id));
-    const nodes = shownNodes.map((n) => ({
-      data: {
-        id: n.id,
-        label: n.name,
-        kind: n.kind,
-        roleKey: roleKey(n.kind, n.role),
-        role: n.role ?? "",
-        site: n.site ?? "",
-        deviceId: n.device_id ?? ""
-      }
-    }));
-    const edges = topo.links
-      .filter((l) => shownIds.has(l.source) && shownIds.has(l.target))
-      .map((l) => ({
+    const shownLinks = topo.links.filter((l) => shownIds.has(l.source) && shownIds.has(l.target));
+
+    // Device level: individual nodes + links.
+    if (groupBy === "device") {
+      const nodes: ElementDefinition[] = shownNodes.map((n) => ({
+        data: {
+          id: n.id,
+          label: n.name,
+          kind: n.kind,
+          roleKey: roleKey(n.kind, n.role),
+          role: n.role ?? "",
+          site: n.site ?? "",
+          deviceId: n.device_id ?? ""
+        }
+      }));
+      const edges: ElementDefinition[] = shownLinks.map((l) => ({
         data: { id: `${l.source}__${l.target}`, source: l.source, target: l.target, label: l.interfaces.join(", ") }
       }));
-    return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: computePositions(shownNodes) };
-  }, [topo, selectedRoles, selectedLocations]);
+      return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: computePositions(shownNodes) };
+    }
 
-  const layout = useMemo(
-    () => ({ name: "preset", positions, fit: true, padding: 40 }),
-    [positions]
-  );
+    // Aggregate level: group by (location × role) or by location.
+    const keyFn =
+      groupBy === "role"
+        ? (n: { name: string; kind: string; role?: string | null }) => `${groupOf(n.name)}:${layerOf(n.kind, n.role)}`
+        : (n: { name: string; kind: string; role?: string | null }) => groupOf(n.name);
+    const { members, edgeWeight } = buildAggregate(shownNodes, shownLinks, keyFn);
+
+    const positionsMap: Record<string, XY> = {};
+    const nodes: ElementDefinition[] = Object.entries(members).map(([key, mem]) => {
+      if (groupBy === "role") {
+        const [grp, layer] = key.split(":");
+        positionsMap[key] = { x: REGION[grp].cx, y: 70 + LAYER_ORDER.indexOf(layer) * 150 };
+        return { data: { id: key, agg: "role", roleKey: layer, label: `${LOCATION_LABEL[grp] ?? grp} · ${layer} (${mem.length})` } };
+      }
+      positionsMap[key] = { x: REGION[key].cx, y: 340 };
+      return { data: { id: key, agg: "loc", label: `${LOCATION_LABEL[key] ?? key} (${mem.length})` } };
+    });
+    const edges: ElementDefinition[] = Object.entries(edgeWeight).map(([k, weight]) => {
+      const [a, b] = k.split("|");
+      return { data: { id: `e_${k}`, source: a, target: b, agg: 1, weight, label: String(weight) } };
+    });
+    return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: positionsMap };
+  }, [topo, selectedRoles, selectedLocations, groupBy]);
+
+  const layout = useMemo(() => ({ name: "preset", positions, fit: true, padding: 40 }), [positions]);
 
   const roleCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -241,7 +320,13 @@ export function IpMplsTopologyPage() {
   const registerCy = (cy: Core) => {
     cy.on("tap", "node", (evt) => {
       const d = evt.target.data();
-      if (d.deviceId) navigate(`/ipmpls/devices/${d.deviceId}`);
+      if (d.deviceId) {
+        navigate(`/ipmpls/devices/${d.deviceId}`);
+      } else if (d.agg === "loc") {
+        setGroupBy("role"); // drill down one level
+      } else if (d.agg === "role") {
+        setGroupBy("device");
+      }
     });
     cy.on("mouseover", "node", (evt) => {
       const node = evt.target;
@@ -249,13 +334,12 @@ export function IpMplsTopologyPage() {
       cy.elements().addClass("dim");
       neighborhood.removeClass("dim").addClass("hl");
       const d = node.data();
-      setSelected({
-        name: d.label,
-        detail:
-          d.kind === "device"
-            ? `${d.role || "--"} · ${d.site || "--"} · ${node.degree(false)} adjacencies`
-            : `external neighbor · ${node.degree(false)} adjacencies`
-      });
+      const detail = d.agg
+        ? `group · ${node.degree(false)} links`
+        : d.kind === "device"
+        ? `${d.role || "--"} · ${d.site || "--"} · ${node.degree(false)} adjacencies`
+        : `external neighbor · ${node.degree(false)} adjacencies`;
+      setSelected({ name: d.label, detail });
     });
     cy.on("mouseout", "node", () => {
       cy.elements().removeClass("dim hl");
@@ -288,6 +372,29 @@ export function IpMplsTopologyPage() {
         </header>
 
         {error ? <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div> : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs uppercase tracking-wide text-slate-500">Group by:</span>
+          {(["device", "role", "location"] as const).map((val) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setGroupBy(val)}
+              className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
+                groupBy === val ? "border-primary-500 bg-primary-600 text-white" : "border-brand-700 bg-brand-800/60 text-slate-200 hover:border-primary-500"
+              }`}
+            >
+              {val === "device" ? "Devices" : val === "role" ? "Role" : "Location"}
+            </button>
+          ))}
+          <span className="text-xs text-slate-500">
+            {groupBy === "device"
+              ? "individual routers"
+              : groupBy === "role"
+              ? "collapsed per location × role — click a group to expand"
+              : "collapsed per location — click a group to drill into roles"}
+          </span>
+        </div>
 
         {rolesPresent.length ? (
           <div className="space-y-2">
@@ -357,7 +464,7 @@ export function IpMplsTopologyPage() {
             <div className="p-10 text-center text-sm text-slate-400">Loading topology…</div>
           ) : topo && topo.nodes.length ? (
             <CytoscapeComponent
-              key={`${Array.from(selectedRoles).sort().join(",")}|${Array.from(selectedLocations).sort().join(",")}`}
+              key={`${groupBy}|${Array.from(selectedRoles).sort().join(",")}|${Array.from(selectedLocations).sort().join(",")}`}
               elements={elements}
               stylesheet={cyStylesheet}
               layout={layout}
