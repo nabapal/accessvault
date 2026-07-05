@@ -351,23 +351,37 @@ class InventoryPoller:
 			logger.info("Inventory poller stopped")
 
 	async def _run(self) -> None:
-		try:
-			while not self._shutdown.is_set():
+		while not self._shutdown.is_set():
+			# Guard each tick individually so a single failed cycle can never kill
+			# the loop: the poller must keep running until an explicit shutdown.
+			try:
 				await self._tick()
-				try:
-					await asyncio.wait_for(self._shutdown.wait(), timeout=self._tick_seconds)
-				except asyncio.TimeoutError:
-					continue
-		except Exception:  # pragma: no cover - defensive guardrail
-			logger.exception("Inventory poller encountered an unexpected error")
+			except Exception:  # pragma: no cover - defensive guardrail
+				logger.exception("Inventory poller tick failed; continuing")
+			try:
+				await asyncio.wait_for(self._shutdown.wait(), timeout=self._tick_seconds)
+			except asyncio.TimeoutError:
+				continue
 
 	async def _tick(self) -> None:
 		async with self._session() as session:
 			result = await session.execute(select(InventoryEndpoint))
-			for endpoint in result.scalars():
+			# Materialize before iterating: _process_endpoint commits per endpoint,
+			# which would otherwise invalidate a streaming result cursor.
+			endpoints = list(result.scalars().all())
+			for endpoint in endpoints:
 				if not self._should_poll(endpoint):
 					continue
-				await self._process_endpoint(session, endpoint)
+				# Isolate per-endpoint failures so one unreachable ESXi/vCenter
+				# cannot abort the cycle or stop the other endpoints from polling.
+				try:
+					await self._process_endpoint(session, endpoint)
+				except Exception:
+					logger.exception(
+						"Inventory endpoint poll failed",
+						extra={"endpoint": str(endpoint.id)},
+					)
+					await session.rollback()
 
 	async def _process_endpoint(self, session: AsyncSession, endpoint: InventoryEndpoint) -> None:
 		# Retry to soften transient SQLite "database is locked" errors when concurrent writers overlap.
