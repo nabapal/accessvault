@@ -6,9 +6,11 @@ import {
   IpMplsDevicePage,
   IpMplsInterface,
   IpMplsModule,
+  IpMplsNeighbor,
   IpMplsPlatform,
   IpMplsSummary,
-  IpMplsSyncResult
+  IpMplsSyncResult,
+  IpMplsVrf
 } from "@/types";
 
 interface FetchIpMplsDevicesOptions {
@@ -57,6 +59,16 @@ export const fetchIpMplsDeviceInterfaces = async (deviceId: string): Promise<IpM
 
 export const fetchIpMplsDeviceModules = async (deviceId: string): Promise<IpMplsModule[]> => {
   const { data } = await api.get<IpMplsModule[]>(`/ipmpls/devices/${deviceId}/modules`);
+  return data;
+};
+
+export const fetchIpMplsDeviceVrfs = async (deviceId: string): Promise<IpMplsVrf[]> => {
+  const { data } = await api.get<IpMplsVrf[]>(`/ipmpls/devices/${deviceId}/vrfs`);
+  return data;
+};
+
+export const fetchIpMplsDeviceNeighbors = async (deviceId: string): Promise<IpMplsNeighbor[]> => {
+  const { data } = await api.get<IpMplsNeighbor[]>(`/ipmpls/devices/${deviceId}/neighbors`);
   return data;
 };
 

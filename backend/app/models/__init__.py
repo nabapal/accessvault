@@ -26,7 +26,9 @@ from .ipmpls import (
     IpMplsDeviceStatus,
     IpMplsInterface,
     IpMplsModule,
+    IpMplsNeighbor,
     IpMplsPlatform,
+    IpMplsVrf,
 )
 
 __all__ = [
@@ -58,5 +60,7 @@ __all__ = [
     "IpMplsDeviceStatus",
     "IpMplsInterface",
     "IpMplsModule",
+    "IpMplsNeighbor",
     "IpMplsPlatform",
+    "IpMplsVrf",
 ]

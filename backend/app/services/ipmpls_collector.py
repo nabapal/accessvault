@@ -13,7 +13,15 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import IpMplsDevice, IpMplsDeviceStatus, IpMplsInterface, IpMplsModule, IpMplsPlatform
+from app.models import (
+    IpMplsDevice,
+    IpMplsDeviceStatus,
+    IpMplsInterface,
+    IpMplsModule,
+    IpMplsNeighbor,
+    IpMplsPlatform,
+    IpMplsVrf,
+)
 from app.services.crypto import decrypt_secret
 from app.services.nautobot import fetch_nautobot_device_facts_by_name
 
@@ -114,17 +122,162 @@ def _collect_device_blocking(
                 logger.warning("Command %r failed to parse on %s: %s", cmd, host, exc)
                 return []
 
+        def raw_cmd(cmd: str) -> str:
+            try:
+                return conn.send_command(cmd)
+            except Exception as exc:  # pragma: no cover - robustness
+                logger.warning("Command %r failed on %s: %s", cmd, host, exc)
+                return ""
+
         is_xr = device_type == "cisco_xr"
         if_cmd = "show ipv4 interface brief" if is_xr else "show ip interface brief"
         return {
+            "is_xr": is_xr,
             "hostname": hostname or None,
             "version": safe("show version"),
             "inventory": safe("show inventory"),
             "interfaces": safe(if_cmd),
             "descriptions": safe("show interfaces description"),
+            "vrf": safe("show vrf all detail" if is_xr else "show vrf"),
+            "isis": safe("show isis neighbors"),
+            # XR parses via TextFSM (brief); XE has no template, parse the raw block.
+            "ldp": safe("show mpls ldp neighbor brief") if is_xr else raw_cmd("show mpls ldp neighbor"),
         }
     finally:
         conn.disconnect()
+
+
+def _clean(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in ("not set", "<not set>", "none"):
+        return None
+    return text
+
+
+def _as_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    cleaned = _clean(value)
+    return [cleaned] if cleaned else []
+
+
+def _build_vrfs(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = raw.get("vrf") if isinstance(raw.get("vrf"), list) else []
+    results: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        name = _clean(row.get("vrf") or row.get("name"))
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        results.append(
+            {
+                "name": name,
+                "rd": _clean(row.get("rd") or row.get("default_rd")),
+                "rt_import": _as_list(row.get("rt_import")),
+                "rt_export": _as_list(row.get("rt_export")),
+                "interfaces": _as_list(row.get("interfaces")),
+                "protocols": _clean(row.get("protocols")),
+                "description": _clean(row.get("description")),
+            }
+        )
+    return results
+
+
+def _parse_xe_ldp(text: str) -> List[Dict[str, Any]]:
+    """Parse IOS-XE 'show mpls ldp neighbor' raw output (no TextFSM template)."""
+    results: List[Dict[str, Any]] = []
+    peer = state = uptime = None
+
+    def flush() -> None:
+        nonlocal peer, state, uptime
+        if peer:
+            results.append(
+                {
+                    "protocol": "ldp",
+                    "neighbor_id": peer,
+                    "address": peer.split(":")[0],
+                    "interface": None,
+                    "state": state,
+                    "uptime": uptime,
+                    "vrf": None,
+                    "attributes": {},
+                }
+            )
+        peer = state = uptime = None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        match = re.search(r"Peer LDP Ident:\s*(\S+?);", stripped)
+        if match:
+            flush()
+            peer = match.group(1)
+            continue
+        if peer:
+            state_match = re.search(r"State:\s*(\w+)", stripped)
+            if state_match:
+                state = state_match.group(1)
+            uptime_match = re.search(r"Up time:\s*(\S+)", stripped)
+            if uptime_match:
+                uptime = uptime_match.group(1)
+    flush()
+    return results
+
+
+def _build_neighbors(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+
+    # ISIS adjacencies (TextFSM-parsed on both platforms).
+    for row in raw.get("isis") if isinstance(raw.get("isis"), list) else []:
+        system_id = _clean(row.get("system_id"))
+        if not system_id:
+            continue
+        results.append(
+            {
+                "protocol": "isis",
+                "neighbor_id": system_id,
+                "address": _clean(row.get("ip_address")),
+                "interface": _clean(row.get("interface")),
+                "state": _clean(row.get("state")),
+                "uptime": None,
+                "vrf": None,
+                "attributes": {
+                    key: row.get(key)
+                    for key in ("type", "hold_time", "snpa", "circuit_id", "ietf_nsf")
+                    if row.get(key)
+                },
+            }
+        )
+
+    # LDP: XR is a TextFSM list ('brief'); XE is raw text parsed above.
+    ldp = raw.get("ldp")
+    if isinstance(ldp, list):
+        for row in ldp:
+            peer = _clean(row.get("peer"))
+            if not peer:
+                continue
+            results.append(
+                {
+                    "protocol": "ldp",
+                    "neighbor_id": peer,
+                    "address": peer.split(":")[0],
+                    "interface": None,
+                    "state": "Oper",
+                    "uptime": _clean(row.get("uptime")),
+                    "vrf": None,
+                    "attributes": {
+                        key: row.get(key)
+                        for key in ("gr", "nsr", "labels_ipv4", "addresses_ipv4", "discovery_ipv4")
+                        if row.get(key)
+                    },
+                }
+            )
+    elif isinstance(ldp, str) and ldp.strip():
+        results.extend(_parse_xe_ldp(ldp))
+
+    return results
 
 
 def _build_snapshot(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -190,7 +343,13 @@ def _build_snapshot(raw: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
-    return {"facts": facts, "interfaces": interfaces, "modules": modules}
+    return {
+        "facts": facts,
+        "interfaces": interfaces,
+        "modules": modules,
+        "vrfs": _build_vrfs(raw),
+        "neighbors": _build_neighbors(raw),
+    }
 
 
 async def _apply_snapshot(session: AsyncSession, device: IpMplsDevice, snapshot: Dict[str, Any]) -> None:
@@ -215,6 +374,14 @@ async def _apply_snapshot(session: AsyncSession, device: IpMplsDevice, snapshot:
     await session.execute(delete(IpMplsModule).where(IpMplsModule.device_id == device.id))
     for entry in snapshot["modules"]:
         session.add(IpMplsModule(device_id=device.id, **entry))
+
+    await session.execute(delete(IpMplsVrf).where(IpMplsVrf.device_id == device.id))
+    for entry in snapshot.get("vrfs", []):
+        session.add(IpMplsVrf(device_id=device.id, **entry))
+
+    await session.execute(delete(IpMplsNeighbor).where(IpMplsNeighbor.device_id == device.id))
+    for entry in snapshot.get("neighbors", []):
+        session.add(IpMplsNeighbor(device_id=device.id, **entry))
 
 
 async def _enrich_from_nautobot(device: IpMplsDevice) -> None:
@@ -296,5 +463,10 @@ async def run_collection_for_device(
     return IpMplsCollectionResult(
         success=True,
         timestamp=timestamp,
-        snapshot={"interfaces": len(snapshot["interfaces"]), "modules": len(snapshot["modules"])},
+        snapshot={
+            "interfaces": len(snapshot["interfaces"]),
+            "modules": len(snapshot["modules"]),
+            "vrfs": len(snapshot.get("vrfs", [])),
+            "neighbors": len(snapshot.get("neighbors", [])),
+        },
     )

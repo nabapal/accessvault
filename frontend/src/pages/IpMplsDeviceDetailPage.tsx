@@ -2,9 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
-import { fetchIpMplsDevice, fetchIpMplsDeviceInterfaces, fetchIpMplsDeviceModules } from "@/services/ipmpls";
+import {
+  fetchIpMplsDevice,
+  fetchIpMplsDeviceInterfaces,
+  fetchIpMplsDeviceModules,
+  fetchIpMplsDeviceNeighbors,
+  fetchIpMplsDeviceVrfs
+} from "@/services/ipmpls";
 import { parseApiDate } from "@/utils/datetime";
-import { IpMplsDevice, IpMplsInterface, IpMplsModule } from "@/types";
+import { IpMplsDevice, IpMplsInterface, IpMplsModule, IpMplsNeighbor, IpMplsVrf } from "@/types";
+
+const protoBadge: Record<string, string> = {
+  isis: "border-violet-500/40 bg-violet-500/10 text-violet-200",
+  ldp: "border-primary-500/40 bg-primary-500/10 text-primary-200",
+  bgp: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+  ospf: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+};
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "--";
@@ -37,6 +50,8 @@ export function IpMplsDeviceDetailPage() {
   const [device, setDevice] = useState<IpMplsDevice | null>(null);
   const [interfaces, setInterfaces] = useState<IpMplsInterface[]>([]);
   const [modules, setModules] = useState<IpMplsModule[]>([]);
+  const [vrfs, setVrfs] = useState<IpMplsVrf[]>([]);
+  const [neighbors, setNeighbors] = useState<IpMplsNeighbor[]>([]);
   const [filter, setFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,15 +65,19 @@ export function IpMplsDeviceDetailPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const [d, ifs, mods] = await Promise.all([
+        const [d, ifs, mods, vrfList, nbrs] = await Promise.all([
           fetchIpMplsDevice(deviceId),
           fetchIpMplsDeviceInterfaces(deviceId),
-          fetchIpMplsDeviceModules(deviceId)
+          fetchIpMplsDeviceModules(deviceId),
+          fetchIpMplsDeviceVrfs(deviceId),
+          fetchIpMplsDeviceNeighbors(deviceId)
         ]);
         if (cancelled) return;
         setDevice(d);
         setInterfaces(ifs);
         setModules(mods);
+        setVrfs(vrfList);
+        setNeighbors(nbrs);
         setError(null);
       } catch (err) {
         if (!cancelled) {
@@ -195,6 +214,86 @@ export function IpMplsDeviceDetailPage() {
                           <td className="px-4 py-3 font-mono text-xs text-slate-100">{i.ip_address ?? "--"}</td>
                           <td className="px-4 py-3 text-slate-100">{i.vrf ?? "--"}</td>
                           <td className="px-4 py-3 text-slate-300">{i.description ?? "--"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-brand-700 bg-brand-900/60">
+              <div className="border-b border-brand-800/70 px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-100">VRFs ({vrfs.length})</h2>
+                <p className="text-xs text-slate-400">L3VPN routing instances with route distinguisher and targets.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-brand-800/70 text-sm">
+                  <thead className="bg-brand-900/70 text-xs uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 text-left">VRF</th>
+                      <th className="px-4 py-3 text-left">RD</th>
+                      <th className="px-4 py-3 text-left">Import RT</th>
+                      <th className="px-4 py-3 text-left">Export RT</th>
+                      <th className="px-4 py-3 text-left">Interfaces</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-800/60 text-slate-200">
+                    {vrfs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-4 text-center text-sm text-slate-400">No VRFs.</td>
+                      </tr>
+                    ) : (
+                      vrfs.map((v) => (
+                        <tr key={v.id} className="hover:bg-brand-800/40 align-top">
+                          <td className="px-4 py-3 font-medium text-white">{v.name}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-100">{v.rd ?? "--"}</td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-slate-300">{v.rt_import.join(", ") || "--"}</td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-slate-300">{v.rt_export.join(", ") || "--"}</td>
+                          <td className="px-4 py-3 text-xs text-slate-300">{v.interfaces.join(", ") || "--"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-brand-700 bg-brand-900/60">
+              <div className="border-b border-brand-800/70 px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-100">Neighbors ({neighbors.length})</h2>
+                <p className="text-xs text-slate-400">ISIS adjacencies and LDP peers.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-brand-800/70 text-sm">
+                  <thead className="bg-brand-900/70 text-xs uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Protocol</th>
+                      <th className="px-4 py-3 text-left">Neighbor</th>
+                      <th className="px-4 py-3 text-left">Address</th>
+                      <th className="px-4 py-3 text-left">Interface</th>
+                      <th className="px-4 py-3 text-left">State</th>
+                      <th className="px-4 py-3 text-left">Uptime</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-800/60 text-slate-200">
+                    {neighbors.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-4 text-center text-sm text-slate-400">No neighbors.</td>
+                      </tr>
+                    ) : (
+                      neighbors.map((n) => (
+                        <tr key={n.id} className="hover:bg-brand-800/40">
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex rounded border px-2 py-0.5 text-[11px] uppercase tracking-wide ${protoBadge[n.protocol] ?? "border-slate-500/40 bg-slate-500/10 text-slate-200"}`}>
+                              {n.protocol}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-100">{n.neighbor_id ?? "--"}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-100">{n.address ?? "--"}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-100">{n.interface ?? "--"}</td>
+                          <td className="px-4 py-3 text-slate-100">{n.state ?? "--"}</td>
+                          <td className="px-4 py-3 text-slate-100">{n.uptime ?? "--"}</td>
                         </tr>
                       ))
                     )}

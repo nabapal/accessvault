@@ -12,7 +12,9 @@ from app.models import (
     IpMplsDevice,
     IpMplsInterface,
     IpMplsModule,
+    IpMplsNeighbor,
     IpMplsPlatform,
+    IpMplsVrf,
 )
 from app.schemas import (
     IpMplsDeviceCreate,
@@ -21,8 +23,10 @@ from app.schemas import (
     IpMplsDeviceUpdate,
     IpMplsInterfaceRead,
     IpMplsModuleRead,
+    IpMplsNeighborRead,
     IpMplsSummary,
     IpMplsSyncResult,
+    IpMplsVrfRead,
 )
 from app.services.crypto import encrypt_secret
 from app.services.ipmpls_collector import run_collection_for_device
@@ -182,6 +186,8 @@ async def sync_device_now(
         message=result.message,
         interfaces=snap.get("interfaces", 0),
         modules=snap.get("modules", 0),
+        vrfs=snap.get("vrfs", 0),
+        neighbors=snap.get("neighbors", 0),
         device=IpMplsDeviceRead.model_validate(device, from_attributes=True),
     )
 
@@ -210,6 +216,35 @@ async def list_device_modules(
         select(IpMplsModule).where(IpMplsModule.device_id == device.id).order_by(IpMplsModule.name)
     )
     return [IpMplsModuleRead.model_validate(m, from_attributes=True) for m in result.scalars()]
+
+
+@router.get("/devices/{device_id}/vrfs", response_model=List[IpMplsVrfRead])
+async def list_device_vrfs(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> list[IpMplsVrfRead]:
+    device = await _get_device(db, device_id)
+    result = await db.execute(
+        select(IpMplsVrf).where(IpMplsVrf.device_id == device.id).order_by(IpMplsVrf.name)
+    )
+    return [IpMplsVrfRead.model_validate(v, from_attributes=True) for v in result.scalars()]
+
+
+@router.get("/devices/{device_id}/neighbors", response_model=List[IpMplsNeighborRead])
+async def list_device_neighbors(
+    device_id: str,
+    protocol: Optional[str] = Query(default=None, description="Filter by protocol (isis/ldp/bgp/ospf)"),
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> list[IpMplsNeighborRead]:
+    device = await _get_device(db, device_id)
+    stmt = select(IpMplsNeighbor).where(IpMplsNeighbor.device_id == device.id)
+    if protocol:
+        stmt = stmt.where(IpMplsNeighbor.protocol == protocol.lower())
+    stmt = stmt.order_by(IpMplsNeighbor.protocol, IpMplsNeighbor.neighbor_id)
+    result = await db.execute(stmt)
+    return [IpMplsNeighborRead.model_validate(n, from_attributes=True) for n in result.scalars()]
 
 
 @router.get("/summary", response_model=IpMplsSummary)

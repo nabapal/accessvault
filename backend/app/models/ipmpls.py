@@ -82,6 +82,8 @@ class IpMplsDevice(Base):
 
     interfaces = relationship("IpMplsInterface", back_populates="device", cascade="all, delete-orphan")
     modules = relationship("IpMplsModule", back_populates="device", cascade="all, delete-orphan")
+    vrfs = relationship("IpMplsVrf", back_populates="device", cascade="all, delete-orphan")
+    neighbors = relationship("IpMplsNeighbor", back_populates="device", cascade="all, delete-orphan")
 
 
 class IpMplsInterface(Base):
@@ -122,3 +124,41 @@ class IpMplsModule(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     device = relationship("IpMplsDevice", back_populates="modules")
+
+
+class IpMplsVrf(Base):
+    __tablename__ = "ip_mpls_vrfs"
+    __table_args__ = (UniqueConstraint("device_id", "name", name="uq_ipmpls_vrf"),)
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    device_id = Column(GUID(), ForeignKey("ip_mpls_devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    rd = Column(String, nullable=True)
+    rt_import = Column(JSON, nullable=False, default=list)
+    rt_export = Column(JSON, nullable=False, default=list)
+    interfaces = Column(JSON, nullable=False, default=list)
+    protocols = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    device = relationship("IpMplsDevice", back_populates="vrfs")
+
+
+class IpMplsNeighbor(Base):
+    __tablename__ = "ip_mpls_neighbors"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    device_id = Column(GUID(), ForeignKey("ip_mpls_devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    protocol = Column(String, nullable=False)  # isis | ldp | bgp | ospf
+    neighbor_id = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    interface = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    uptime = Column(String, nullable=True)
+    vrf = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    device = relationship("IpMplsDevice", back_populates="neighbors")

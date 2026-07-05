@@ -604,3 +604,28 @@ export interface IpMplsDeviceCreate {
   password: string;
   enable?: string;
 }
+
+export interface IpMplsVrf {
+  id: string;
+  device_id: string;
+  name: string;
+  rd?: string | null;
+  rt_import: string[];
+  rt_export: string[];
+  interfaces: string[];
+  protocols?: string | null;
+  description?: string | null;
+}
+
+export interface IpMplsNeighbor {
+  id: string;
+  device_id: string;
+  protocol: string;
+  neighbor_id?: string | null;
+  address?: string | null;
+  interface?: string | null;
+  state?: string | null;
+  uptime?: string | null;
+  vrf?: string | null;
+  attributes: Record<string, unknown>;
+}

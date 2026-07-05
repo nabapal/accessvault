@@ -39,8 +39,10 @@ from .ipmpls import (
     IpMplsDeviceUpdate,
     IpMplsInterfaceRead,
     IpMplsModuleRead,
+    IpMplsNeighborRead,
     IpMplsSummary,
     IpMplsSyncResult,
+    IpMplsVrfRead,
 )
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
@@ -71,6 +73,8 @@ __all__ = [
     "IpMplsDevicePage",
     "IpMplsInterfaceRead",
     "IpMplsModuleRead",
+    "IpMplsNeighborRead",
+    "IpMplsVrfRead",
     "IpMplsSyncResult",
     "IpMplsSummary",
     "AciFreePortNode",

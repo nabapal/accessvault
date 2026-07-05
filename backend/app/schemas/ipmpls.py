@@ -102,6 +102,37 @@ class IpMplsModuleRead(BaseModel):
         from_attributes = True
 
 
+class IpMplsVrfRead(BaseModel):
+    id: UUID
+    device_id: UUID
+    name: str
+    rd: Optional[str] = None
+    rt_import: List[str] = Field(default_factory=list)
+    rt_export: List[str] = Field(default_factory=list)
+    interfaces: List[str] = Field(default_factory=list)
+    protocols: Optional[str] = None
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IpMplsNeighborRead(BaseModel):
+    id: UUID
+    device_id: UUID
+    protocol: str
+    neighbor_id: Optional[str] = None
+    address: Optional[str] = None
+    interface: Optional[str] = None
+    state: Optional[str] = None
+    uptime: Optional[str] = None
+    vrf: Optional[str] = None
+    attributes: dict = Field(default_factory=dict)
+
+    class Config:
+        from_attributes = True
+
+
 class IpMplsDevicePage(BaseModel):
     items: List[IpMplsDeviceRead]
     total: int
@@ -116,6 +147,8 @@ class IpMplsSyncResult(BaseModel):
     message: Optional[str] = None
     interfaces: int = 0
     modules: int = 0
+    vrfs: int = 0
+    neighbors: int = 0
     device: IpMplsDeviceRead
 
 
