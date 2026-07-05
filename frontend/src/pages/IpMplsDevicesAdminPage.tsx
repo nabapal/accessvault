@@ -7,7 +7,19 @@ import {
   fetchIpMplsDevices,
   syncIpMplsDevice
 } from "@/services/ipmpls";
+import { parseApiDate } from "@/utils/datetime";
 import { IpMplsDevice, IpMplsDeviceCreate, IpMplsPlatform } from "@/types";
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "--";
+  try {
+    return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }).format(
+      parseApiDate(value)
+    );
+  } catch {
+    return value;
+  }
+};
 
 const emptyForm: IpMplsDeviceCreate = {
   name: "",
@@ -174,13 +186,14 @@ export function IpMplsDevicesAdminPage() {
                   <th className="px-4 py-3 text-left">Mgmt IP</th>
                   <th className="px-4 py-3 text-left">Platform</th>
                   <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Last Poll</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {devices.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">No devices registered yet.</td>
+                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-400">No devices registered yet.</td>
                   </tr>
                 ) : (
                   devices.map((d) => (
@@ -192,6 +205,7 @@ export function IpMplsDevicesAdminPage() {
                         {d.status}
                         {d.last_error ? <div className="text-xs text-rose-300">{d.last_error}</div> : null}
                       </td>
+                      <td className="px-4 py-3 text-slate-100">{formatDateTime(d.last_polled_at)}</td>
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
