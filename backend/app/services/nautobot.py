@@ -81,12 +81,18 @@ def _derive_role(device: Dict[str, object]) -> Optional[str]:
 
 
 def _derive_site_name(device: Dict[str, object]) -> Optional[str]:
+    # Combine tenant + site as "<tenant>-<site>" (e.g. RCP-TC23-REPLICA-FF-TC23);
+    # fall back to whichever single value is present.
+    site_name = None
     for key in ("site", "location"):
         value = device.get(key)
         if isinstance(value, dict) and value.get("name"):
-            return value["name"]
+            site_name = value["name"]
+            break
     tenant = device.get("tenant")
-    return tenant.get("name") if isinstance(tenant, dict) else None
+    tenant_name = tenant.get("name") if isinstance(tenant, dict) else None
+    parts = [part for part in (tenant_name, site_name) if part]
+    return "-".join(parts) if parts else None
 
 
 async def fetch_nautobot_device_facts_by_name(

@@ -121,7 +121,7 @@ export function IpMplsDeviceDetailPage() {
                 <Fact label="Status" value={device.status} />
                 <Fact label="Last Poll" value={formatDateTime(device.last_polled_at)} />
                 <Fact label="Site" value={device.site_name} />
-                <Fact label="Rack" value={device.rack_location} />
+                <Fact label="Rack Location" value={device.rack_location} />
               </dl>
               {device.last_error ? (
                 <p className="mt-3 rounded border border-rose-500/40 bg-rose-500/10 p-2 text-xs text-rose-200">
