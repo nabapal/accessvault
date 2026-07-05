@@ -1,7 +1,7 @@
 import { GetState, SetState, StateCreator, create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { clearToken, login, setToken } from "@/services/api";
+import { clearToken, login, setToken, setUnauthorizedHandler } from "@/services/api";
 import { Role, TokenResponse, User } from "@/types";
 import api from "@/services/api";
 
@@ -61,3 +61,9 @@ export const useAuthStore = create<AuthState>()(
     name: "accessvault-auth"
   })
 );
+
+// On any 401 (e.g. expired token), clear auth state so ProtectedRoute redirects
+// to /login instead of the app silently showing no data.
+setUnauthorizedHandler(() => {
+  useAuthStore.getState().logout();
+});
