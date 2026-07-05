@@ -168,6 +168,8 @@ class IpMplsTopologyLink(BaseModel):
     protocol: str
     interfaces: List[str] = Field(default_factory=list)
     count: int = 0
+    # node_id -> local interface(s) that node uses for this adjacency.
+    endpoint_interfaces: Dict[str, List[str]] = Field(default_factory=dict)
 
 
 class IpMplsTopology(BaseModel):

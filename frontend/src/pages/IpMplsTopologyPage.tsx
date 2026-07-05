@@ -4,9 +4,27 @@ import CytoscapeComponent from "react-cytoscapejs";
 import type { Core, ElementDefinition } from "cytoscape";
 
 import { AppShell } from "@/components/layout/AppShell";
-import { fetchIpMplsTopology } from "@/services/ipmpls";
+import { fetchIpMplsDeviceInterfaces, fetchIpMplsTopology } from "@/services/ipmpls";
 import { locationFromName } from "@/utils/location";
-import { IpMplsTopology } from "@/types";
+import { IpMplsInterface, IpMplsTopology, IpMplsTopologyLink } from "@/types";
+
+interface IfDetail {
+  name: string;
+  admin?: string | null;
+  oper?: string | null;
+  ip?: string | null;
+  speed?: string | null;
+  vrf?: string | null;
+  mpls?: boolean | null;
+}
+interface LinkInfo {
+  kind: "device" | "group";
+  title: string;
+  protocol?: string;
+  count?: number;
+  endpoints?: { name: string; sub: string; ifs: IfDetail[] }[];
+  members?: { pair: string; interfaces: string; count: number }[];
+}
 
 const ROLE_COLORS: Record<string, string> = {
   SAR: "#22d3ee",
@@ -255,14 +273,41 @@ export function IpMplsTopologyPage() {
     setSelectedLocations(new Set(locationsPresent));
   }, [locationsPresent]);
 
+  const shownNodes = useMemo(
+    () =>
+      topo
+        ? topo.nodes.filter(
+            (n) => selectedRoles.has(roleKey(n.kind, n.role)) && selectedLocations.has(locationFromName(n.name))
+          )
+        : [],
+    [topo, selectedRoles, selectedLocations]
+  );
+  const shownIds = useMemo(() => new Set(shownNodes.map((n) => n.id)), [shownNodes]);
+  const shownLinks = useMemo(
+    () => (topo ? topo.links.filter((l) => shownIds.has(l.source) && shownIds.has(l.target)) : []),
+    [topo, shownIds]
+  );
+  const nodeById = useMemo(() => new Map((topo?.nodes ?? []).map((n) => [n.id, n])), [topo]);
+  const linkByPair = useMemo(() => {
+    const m = new Map<string, IpMplsTopologyLink>();
+    shownLinks.forEach((l) => {
+      m.set(`${l.source}__${l.target}`, l);
+      m.set(`${l.target}__${l.source}`, l);
+    });
+    return m;
+  }, [shownLinks]);
+
+  const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null);
+  const ifCache = useRef<Record<string, IpMplsInterface[]>>({});
+  const loadIfs = async (deviceId: string): Promise<IpMplsInterface[]> => {
+    if (ifCache.current[deviceId]) return ifCache.current[deviceId];
+    const list = await fetchIpMplsDeviceInterfaces(deviceId);
+    ifCache.current[deviceId] = list;
+    return list;
+  };
+
   const { elements, shownCount, positions } = useMemo(() => {
     if (!topo) return { elements: [] as ElementDefinition[], shownCount: 0, positions: {} as Record<string, XY> };
-
-    const shownNodes = topo.nodes.filter(
-      (n) => selectedRoles.has(roleKey(n.kind, n.role)) && selectedLocations.has(locationFromName(n.name))
-    );
-    const shownIds = new Set(shownNodes.map((n) => n.id));
-    const shownLinks = topo.links.filter((l) => shownIds.has(l.source) && shownIds.has(l.target));
 
     // Device level: individual nodes + links.
     if (groupBy === "device") {
@@ -305,7 +350,7 @@ export function IpMplsTopologyPage() {
       return { data: { id: `e_${k}`, source: a, target: b, agg: 1, weight, label: String(weight) } };
     });
     return { elements: [...nodes, ...edges], shownCount: shownIds.size, positions: positionsMap };
-  }, [topo, selectedRoles, selectedLocations, groupBy]);
+  }, [topo, shownNodes, shownIds, shownLinks, groupBy]);
 
   const layout = useMemo(() => ({ name: "preset", positions, fit: true, padding: 40 }), [positions]);
 
@@ -347,8 +392,87 @@ export function IpMplsTopologyPage() {
 
   const allLocationsSelected = locationsPresent.length > 0 && locationsPresent.every((l) => selectedLocations.has(l));
 
+  // Edge click → link detail. Re-bound when data/grouping changes so it isn't stale.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const keyOf = (id: string): string | null => {
+      const n = nodeById.get(id);
+      if (!n) return null;
+      if (groupBy === "role") return `${groupOf(n.name)}:${layerOf(n.kind, n.role)}`;
+      if (groupBy === "location") return groupOf(n.name);
+      return id;
+    };
+    const aggLabel = (key: string): string => {
+      if (key.includes(":")) {
+        const [grp, layer] = key.split(":");
+        return `${LOCATION_LABEL[grp] ?? grp} · ${layer}`;
+      }
+      return LOCATION_LABEL[key] ?? key;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onEdge = async (evt: any) => {
+      const d = evt.target.data();
+      if (d.agg) {
+        const [ka, kb] = String(d.id).replace(/^e_/, "").split("|");
+        const members = shownLinks
+          .filter((l) => {
+            const a = keyOf(l.source);
+            const b = keyOf(l.target);
+            return (a === ka && b === kb) || (a === kb && b === ka);
+          })
+          .map((l) => ({
+            pair: `${nodeById.get(l.source)?.name ?? l.source} ↔ ${nodeById.get(l.target)?.name ?? l.target}`,
+            interfaces: l.interfaces.join(", ") || "--",
+            count: l.count
+          }));
+        setLinkInfo({ kind: "group", title: `${aggLabel(ka)} ↔ ${aggLabel(kb)}`, count: d.weight, members });
+        return;
+      }
+      const link = linkByPair.get(`${d.source}__${d.target}`);
+      if (!link) return;
+      const endpoints = await Promise.all(
+        [link.source, link.target].map(async (nid) => {
+          const node = nodeById.get(nid);
+          const names = link.endpoint_interfaces?.[nid] ?? [];
+          let ifs: IfDetail[] = names.map((n) => ({ name: n }));
+          if (node?.device_id) {
+            const list = await loadIfs(node.device_id);
+            const byName = new Map(list.map((i) => [i.name, i]));
+            ifs = names.map((n) => {
+              const i = byName.get(n);
+              return i
+                ? { name: n, admin: i.admin_state, oper: i.oper_state, ip: i.ip_address, speed: i.speed, vrf: i.vrf, mpls: i.mpls_enabled }
+                : { name: n };
+            });
+          }
+          return {
+            name: node?.name ?? nid,
+            sub: node ? (node.kind === "device" ? `${node.role || "--"} · ${node.site || "--"}` : "external") : "",
+            ifs
+          };
+        })
+      );
+      setLinkInfo({
+        kind: "device",
+        title: `${nodeById.get(link.source)?.name ?? link.source} ↔ ${nodeById.get(link.target)?.name ?? link.target}`,
+        protocol: link.protocol,
+        count: link.count,
+        endpoints
+      });
+    };
+    cy.on("tap", "edge", onEdge);
+    return () => {
+      cy.removeListener("tap", "edge", onEdge);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownLinks, linkByPair, nodeById, groupBy]);
+
   const registerCy = (cy: Core) => {
     cyRef.current = cy;
+    cy.on("tap", (evt) => {
+      if (evt.target === cy) setLinkInfo(null);
+    });
     cy.on("tap", "node", (evt) => {
       const d = evt.target.data();
       if (d.deviceId) {
@@ -516,6 +640,86 @@ export function IpMplsTopologyPage() {
             </div>
           )}
         </section>
+
+        {linkInfo ? (
+          <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4 text-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-semibold text-white">{linkInfo.title}</span>
+              <button type="button" onClick={() => setLinkInfo(null)} className="text-xs text-slate-400 hover:text-slate-200">
+                ✕ close
+              </button>
+            </div>
+            {linkInfo.kind === "device" ? (
+              <>
+                <p className="mb-3 text-xs text-slate-400">
+                  Protocol {(linkInfo.protocol ?? "").toUpperCase()} · {linkInfo.count} adjacenc{linkInfo.count === 1 ? "y" : "ies"}
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {linkInfo.endpoints?.map((ep, idx) => (
+                    <div key={idx} className="rounded border border-brand-800/70 p-2">
+                      <div className="font-medium text-slate-100">{ep.name}</div>
+                      <div className="text-xs text-slate-500">{ep.sub}</div>
+                      <table className="mt-2 w-full text-xs">
+                        <thead className="text-slate-500">
+                          <tr>
+                            <th className="text-left font-normal">Interface</th>
+                            <th className="font-normal">Admin</th>
+                            <th className="font-normal">Oper</th>
+                            <th className="text-left font-normal">IP</th>
+                            <th className="font-normal">MPLS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ep.ifs.length ? (
+                            ep.ifs.map((f) => (
+                              <tr key={f.name}>
+                                <td className="font-mono text-slate-200">{f.name}</td>
+                                <td className="text-center text-slate-300">{f.admin ?? "--"}</td>
+                                <td className="text-center text-slate-300">{f.oper ?? "--"}</td>
+                                <td className="font-mono text-slate-300">{f.ip ?? "--"}</td>
+                                <td className="text-center text-primary-200">{f.mpls ? "✓" : "--"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="text-slate-500">--</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-slate-400">
+                  {linkInfo.count} adjacencies · {linkInfo.members?.length ?? 0} device links
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-slate-500">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-normal">Link</th>
+                        <th className="px-2 py-1 text-left font-normal">Interfaces</th>
+                        <th className="px-2 py-1 font-normal">Adj</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linkInfo.members?.map((m, i) => (
+                        <tr key={i} className="border-t border-brand-800/60">
+                          <td className="px-2 py-1 text-slate-200">{m.pair}</td>
+                          <td className="px-2 py-1 font-mono text-slate-300">{m.interfaces}</td>
+                          <td className="px-2 py-1 text-center text-slate-300">{m.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
 
         {selected ? (
           <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-3 text-sm text-slate-300">

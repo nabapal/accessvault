@@ -318,10 +318,17 @@ async def get_topology(
         key = (a, b, protocol)
         link = links.get(key)
         if link is None:
-            link = IpMplsTopologyLink(source=a, target=b, protocol=protocol, interfaces=[], count=0)
+            link = IpMplsTopologyLink(
+                source=a, target=b, protocol=protocol, interfaces=[], count=0, endpoint_interfaces={}
+            )
             links[key] = link
-        if nb.interface and nb.interface not in link.interfaces:
-            link.interfaces.append(nb.interface)
+        if nb.interface:
+            if nb.interface not in link.interfaces:
+                link.interfaces.append(nb.interface)
+            # source is the owner device that reported this local interface.
+            owner_ifaces = link.endpoint_interfaces.setdefault(source, [])
+            if nb.interface not in owner_ifaces:
+                owner_ifaces.append(nb.interface)
         link.count += 1
 
     return IpMplsTopology(

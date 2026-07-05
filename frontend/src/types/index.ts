@@ -646,6 +646,7 @@ export interface IpMplsTopologyLink {
   protocol: string;
   interfaces: string[];
   count: number;
+  endpoint_interfaces?: Record<string, string[]>;
 }
 
 export interface IpMplsTopology {
