@@ -62,7 +62,7 @@ const formatDateTime = (value?: string | null): string => {
     return "Unknown";
   }
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata",
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(value));

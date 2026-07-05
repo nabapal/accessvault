@@ -52,7 +52,7 @@ const formatDateTime = (value?: string | null) => {
     return "Never";
   }
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata",
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(value));
