@@ -73,6 +73,7 @@ export function IpMplsTopologyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ name: string; detail: string } | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -98,35 +99,61 @@ export function IpMplsTopologyPage() {
     };
   }, []);
 
-  const elements = useMemo(() => {
-    if (!topo) return [];
-    const nodes = topo.nodes.map((n) => ({
-      data: {
-        id: n.id,
-        label: n.name,
-        kind: n.kind,
-        roleKey: roleKey(n.kind, n.role),
-        role: n.role ?? "",
-        site: n.site ?? "",
-        deviceId: n.device_id ?? ""
-      }
-    }));
-    const edges = topo.links.map((l) => ({
-      data: {
-        id: `${l.source}__${l.target}`,
-        source: l.source,
-        target: l.target,
-        label: l.interfaces.join(", ")
-      }
-    }));
-    return [...nodes, ...edges];
-  }, [topo]);
-
   const rolesPresent = useMemo(() => {
     const set = new Set<string>();
     topo?.nodes.forEach((n) => set.add(roleKey(n.kind, n.role)));
-    return Array.from(set);
+    return Array.from(set).sort();
   }, [topo]);
+
+  // Default to showing all roles once the topology loads.
+  useEffect(() => {
+    setSelectedRoles(new Set(rolesPresent));
+  }, [rolesPresent]);
+
+  const { elements, shownCount } = useMemo(() => {
+    if (!topo) return { elements: [], shownCount: 0 };
+    const shownIds = new Set(
+      topo.nodes.filter((n) => selectedRoles.has(roleKey(n.kind, n.role))).map((n) => n.id)
+    );
+    const nodes = topo.nodes
+      .filter((n) => shownIds.has(n.id))
+      .map((n) => ({
+        data: {
+          id: n.id,
+          label: n.name,
+          kind: n.kind,
+          roleKey: roleKey(n.kind, n.role),
+          role: n.role ?? "",
+          site: n.site ?? "",
+          deviceId: n.device_id ?? ""
+        }
+      }));
+    const edges = topo.links
+      .filter((l) => shownIds.has(l.source) && shownIds.has(l.target))
+      .map((l) => ({
+        data: { id: `${l.source}__${l.target}`, source: l.source, target: l.target, label: l.interfaces.join(", ") }
+      }));
+    return { elements: [...nodes, ...edges], shownCount: shownIds.size };
+  }, [topo, selectedRoles]);
+
+  const roleCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    topo?.nodes.forEach((n) => {
+      const key = roleKey(n.kind, n.role);
+      c[key] = (c[key] ?? 0) + 1;
+    });
+    return c;
+  }, [topo]);
+
+  const toggleRole = (role: string) =>
+    setSelectedRoles((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+
+  const allSelected = rolesPresent.length > 0 && rolesPresent.every((r) => selectedRoles.has(r));
 
   const registerCy = (cy: Core) => {
     cy.on("tap", "node", (evt) => {
@@ -180,14 +207,38 @@ export function IpMplsTopologyPage() {
         {error ? <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div> : null}
 
         {rolesPresent.length ? (
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
-            {rolesPresent.map((r) => (
-              <span key={r} className="flex items-center gap-1.5">
-                <span className="inline-block h-3 w-3 rounded-full" style={{ background: ROLE_COLORS[r] ?? "#38bdf8" }} />
-                {r}
-              </span>
-            ))}
-            <span className="text-slate-500">• scroll to zoom, drag to pan/move • hover to highlight • click a device to open it</span>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs uppercase tracking-wide text-slate-500">Show roles:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedRoles(new Set(allSelected ? [] : rolesPresent))}
+                className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
+                  allSelected ? "border-primary-500 bg-primary-600 text-white" : "border-brand-700 bg-brand-800/60 text-slate-200 hover:border-primary-500"
+                }`}
+              >
+                {allSelected ? "All" : "Select all"}
+              </button>
+              {rolesPresent.map((r) => {
+                const on = selectedRoles.has(r);
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => toggleRole(r)}
+                    className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition ${
+                      on ? "border-primary-500 bg-brand-800/80 text-white" : "border-brand-700 bg-brand-900/40 text-slate-500 hover:border-primary-500/50"
+                    }`}
+                  >
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: ROLE_COLORS[r] ?? "#38bdf8", opacity: on ? 1 : 0.4 }} />
+                    {r} ({roleCounts[r] ?? 0})
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500">
+              Showing {shownCount} of {topo?.total_nodes ?? 0} nodes • scroll to zoom, drag to pan/move • hover to highlight • click a device to open it
+            </p>
           </div>
         ) : null}
 
@@ -196,6 +247,7 @@ export function IpMplsTopologyPage() {
             <div className="p-10 text-center text-sm text-slate-400">Loading topology…</div>
           ) : topo && topo.nodes.length ? (
             <CytoscapeComponent
+              key={Array.from(selectedRoles).sort().join(",")}
               elements={elements}
               stylesheet={cyStylesheet}
               layout={layout}
