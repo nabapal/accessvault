@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { toast } from "@/components/ui/toast";
 import {
   createIpMplsDevice,
@@ -129,10 +130,10 @@ export function IpMplsDevicesAdminPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header>
-          <h1 className="text-2xl font-semibold text-white">IP-MPLS Devices — Admin</h1>
-          <p className="mt-1 text-sm text-slate-300">Register Cisco IOS-XE/XR routers for SSH collection.</p>
-        </header>
+        <PageHeader
+          title="IP-MPLS Devices — Admin"
+          description="Register Cisco IOS-XE/XR routers for SSH collection."
+        />
 
         {message ? <div className="rounded border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">{message}</div> : null}
         {error ? <div className="rounded border border-rose-500/50 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</div> : null}

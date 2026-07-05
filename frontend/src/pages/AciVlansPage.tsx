@@ -3,6 +3,7 @@ import { Squares2X2Icon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchAciFabricVlans } from "@/services/aci";
 import { AciFabricVlan } from "@/types";
@@ -87,24 +88,22 @@ export function AciVlansPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Cisco ACI VLAN Inventory</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Deployed access VLANs per fabric, mapped to EPG / bridge domain / VRF, with leaf deployment count.
-            </p>
-          </div>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Search VLAN, EPG, tenant, BD, VRF, fabric..."
-            className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-96"
-          />
-        </header>
+        <PageHeader
+          title="Cisco ACI VLAN Inventory"
+          description="Deployed access VLANs per fabric, mapped to EPG / bridge domain / VRF, with leaf deployment count."
+          actions={
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search VLAN, EPG, tenant, BD, VRF, fabric..."
+              className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-96"
+            />
+          }
+        />
 
         {error ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div>

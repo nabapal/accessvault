@@ -4,6 +4,7 @@ import { ViewfinderCircleIcon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchAciFreePorts } from "@/services/aci";
 import { AciFreePortNode, AciFreePortReport } from "@/types";
@@ -162,18 +163,16 @@ export function AciFreePortsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">ACI Free Access Ports</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Free = operSt:down · operStQual:sfp-missing · fabric uplinks excluded — aggregated across all ACI fabrics.
-            </p>
-          </div>
-          <div className="rounded-lg border border-primary-500/30 bg-primary-500/10 px-6 py-3 text-right">
-            <p className="text-3xl font-semibold text-primary-200">{report ? report.total_free.toLocaleString() : "--"}</p>
-            <p className="text-[11px] uppercase tracking-wide text-primary-300">Free Access Ports</p>
-          </div>
-        </header>
+        <PageHeader
+          title="ACI Free Access Ports"
+          description="Free = operSt:down · operStQual:sfp-missing · fabric uplinks excluded — aggregated across all ACI fabrics."
+          actions={
+            <div className="rounded-lg border border-primary-500/30 bg-primary-500/10 px-6 py-3 text-right">
+              <p className="text-3xl font-semibold text-primary-200">{report ? report.total_free.toLocaleString() : "--"}</p>
+              <p className="text-[11px] uppercase tracking-wide text-primary-300">Free Access Ports</p>
+            </div>
+          }
+        />
 
         {error ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div>

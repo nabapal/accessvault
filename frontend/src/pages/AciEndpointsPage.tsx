@@ -3,6 +3,7 @@ import { MapPinIcon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchAciFabricEndpoints } from "@/services/aci";
 import { AciFabricEndpoint } from "@/types";
@@ -93,24 +94,22 @@ export function AciEndpointsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Cisco ACI Endpoints</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Locally-attached endpoints (MAC/IP) learned across all ACI fabrics. Tunnel-learned (remote) endpoints are excluded.
-            </p>
-          </div>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Search MAC, IP, tenant, EPG, encap, BD, VRF, interface, fabric..."
-            className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-96"
-          />
-        </header>
+        <PageHeader
+          title="Cisco ACI Endpoints"
+          description="Locally-attached endpoints (MAC/IP) learned across all ACI fabrics. Tunnel-learned (remote) endpoints are excluded."
+          actions={
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search MAC, IP, tenant, EPG, encap, BD, VRF, interface, fabric..."
+              className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-96"
+            />
+          }
+        />
 
         {error ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { fetchAciFabricNodes, fetchAciFabricSummary } from "@/services/aci";
 import { AciFabricNode, AciFabricSummary, AciNodeRole } from "@/types";
 
@@ -147,43 +148,41 @@ export function AciInventoryPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Cisco ACI Fabric Inventory</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Leaf, spine, and controller visibility sourced from APIC fabricNode telemetry.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex rounded-md border border-brand-700 bg-brand-800/60 p-1 text-xs font-medium">
-              {ROLE_FILTERS.map((filter) => (
-                <button
-                  key={filter.value}
-                  type="button"
-                  onClick={() => {
-                    setRoleFilter(filter.value);
-                    setPage(1);
-                  }}
-                  className={`rounded px-3 py-1 transition ${
-                    roleFilter === filter.value ? "bg-primary-600 text-white" : "text-slate-200 hover:bg-brand-700"
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
+        <PageHeader
+          title="Cisco ACI Fabric Inventory"
+          description="Leaf, spine, and controller visibility sourced from APIC fabricNode telemetry."
+          actions={
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex rounded-md border border-brand-700 bg-brand-800/60 p-1 text-xs font-medium">
+                {ROLE_FILTERS.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => {
+                      setRoleFilter(filter.value);
+                      setPage(1);
+                    }}
+                    className={`rounded px-3 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+                      roleFilter === filter.value ? "bg-primary-600 text-white" : "text-slate-200 hover:bg-brand-700"
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search name, fabric, site, location, serial, model, IP..."
+                className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-72"
+              />
             </div>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search name, fabric, site, location, serial, model, IP..."
-              className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-72"
-            />
-          </div>
-        </header>
+          }
+        />
 
         {error ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div>

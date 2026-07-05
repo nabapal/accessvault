@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { CHART_PALETTE, Donut, DonutLegend } from "@/components/ui/charts";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { fetchAciFabricSummaryDetails } from "@/services/aci";
 import { AciFabricSummaryDetails, AciFabricSummaryFabric } from "@/types";
 
@@ -154,22 +156,18 @@ export function AciFabricSummaryPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Cisco ACI Fabric Summary</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Aggregated view of fabrics, hardware models, software versions, and health state by onboarding context.
-            </p>
-          </div>
-          <div className="flex gap-2">
+        <PageHeader
+          title="Cisco ACI Fabric Summary"
+          description="Aggregated view of fabrics, hardware models, software versions, and health state by onboarding context."
+          actions={
             <Link
               to="/telco/aci"
-              className="inline-flex items-center gap-2 rounded-md border border-primary-500/60 bg-primary-500/15 px-4 py-2 text-sm font-semibold text-primary-100 transition hover:border-primary-400 hover:bg-primary-500/25"
+              className="inline-flex items-center gap-2 rounded-md border border-primary-500/60 bg-primary-500/15 px-4 py-2 text-sm font-semibold text-primary-100 transition hover:border-primary-400 hover:bg-primary-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             >
               View Fabric Directory
             </Link>
-          </div>
-        </header>
+          }
+        />
 
         {error ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div>
@@ -241,6 +239,44 @@ export function AciFabricSummaryPage() {
           </div>
         </section>
 
+        {!isLoading && data ? (
+          <section className="grid gap-4 lg:grid-cols-3">
+            {(() => {
+              const roleSlices = [
+                { label: "Leaf", value: aggregatedRoleTotals.leaf },
+                { label: "Spine", value: aggregatedRoleTotals.spine },
+                { label: "Controller", value: aggregatedRoleTotals.controller },
+                { label: "Unspecified", value: aggregatedRoleTotals.unspecified }
+              ].map((s, i) => ({ ...s, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+              const modelSlices = aggregatedModelEntries.map(([label, value], i) => ({
+                label,
+                value,
+                color: CHART_PALETTE[i % CHART_PALETTE.length]
+              }));
+              const stateSlices = aggregatedStateEntries.map(([label, value], i) => ({
+                label,
+                value,
+                color: CHART_PALETTE[i % CHART_PALETTE.length]
+              }));
+              const cards: Array<{ title: string; slices: typeof roleSlices }> = [
+                { title: "Nodes by Role", slices: roleSlices },
+                { title: "Nodes by Model", slices: modelSlices },
+                { title: "Nodes by State", slices: stateSlices }
+              ];
+              return cards.map((c) => (
+                <div key={c.title} className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                  <h2 className="mb-3 text-sm font-semibold text-slate-100">{c.title}</h2>
+                  <div className="flex items-center gap-4">
+                    <Donut data={c.slices} size={140} centerValue={data.total_nodes} centerLabel="nodes" />
+                    <div className="min-w-0 flex-1">
+                      <DonutLegend data={c.slices} />
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </section>
+        ) : null}
 
         <section className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-lg border border-brand-700 bg-brand-900/60">

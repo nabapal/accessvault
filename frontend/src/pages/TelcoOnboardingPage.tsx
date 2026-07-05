@@ -2,6 +2,7 @@ import { parseApiDate } from "@/utils/datetime";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   createTelcoOnboardingJob,
   deleteTelcoOnboardingJob,
@@ -247,14 +248,11 @@ export function TelcoOnboardingPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary-200">Telco</p>
-          <h1 className="text-2xl font-semibold text-white">Fabric Onboarding</h1>
-          <p className="text-sm text-slate-300">
-            Provision Cisco ACI and NX-OS fabrics into the AccessVault inventory, including credential checks and
-            telemetry bootstrap.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="Telco"
+          title="Fabric Onboarding"
+          description="Provision Cisco ACI and NX-OS fabrics into the AccessVault inventory, including credential checks and telemetry bootstrap."
+        />
 
         {feedback ? <div className="rounded border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">{feedback}</div> : null}
         {error ? <div className="rounded border border-rose-500/50 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</div> : null}
