@@ -631,6 +631,7 @@ async def _upsert_aci_nodes(
     job: TelcoFabricOnboardingJob,
 ) -> int:
     total = 0
+    seen_dns: set[str] = set()
     for item in items:
         attributes = item.get("fabricNode", {}).get("attributes") if isinstance(item, dict) else None
         if not attributes:
@@ -638,6 +639,7 @@ async def _upsert_aci_nodes(
         dn = attributes.get("dn")
         if not dn:
             continue
+        seen_dns.add(dn)
         result = await session.execute(
             select(AciFabricNode).where(
                 AciFabricNode.distinguished_name == dn,
@@ -657,6 +659,28 @@ async def _upsert_aci_nodes(
             node.fabric_job_id = job.id
         node.update_from_attributes(attributes)
         total += 1
+
+    # Prune nodes that are no longer present in the fabric (decommissioned / unregistered).
+    # Guard: only prune when this poll actually returned nodes, so a transient empty or
+    # failed fabricNode response can never wipe the fabric's inventory. Children are removed
+    # explicitly (interfaces + detail) rather than relying on SQLite FK cascade.
+    if seen_dns:
+        existing_nodes = (
+            await session.execute(
+                select(AciFabricNode).where(AciFabricNode.fabric_job_id == job.id)
+            )
+        ).scalars().all()
+        stale_ids = [node.id for node in existing_nodes if node.distinguished_name not in seen_dns]
+        if stale_ids:
+            await session.execute(
+                delete(AciFabricNodeInterface).where(AciFabricNodeInterface.node_id.in_(stale_ids))
+            )
+            await session.execute(
+                delete(AciFabricNodeDetail).where(AciFabricNodeDetail.node_id.in_(stale_ids))
+            )
+            await session.execute(delete(AciFabricNode).where(AciFabricNode.id.in_(stale_ids)))
+            logger.info("Pruned %d stale ACI node(s) for job %s", len(stale_ids), job.id)
+
     return total
 
 
