@@ -154,6 +154,7 @@ class AciFabricNodeInterface(Base):
     description = Column(String, nullable=True)
     admin_state = Column(String, nullable=True)
     oper_state = Column(String, nullable=True)
+    oper_st_qual = Column(String, nullable=True)
     oper_speed = Column(String, nullable=True)
     usage = Column(String, nullable=True)
     last_link_change_at = Column(DateTime(timezone=True), nullable=True)
@@ -175,3 +176,92 @@ class AciFabricNodeInterface(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     node = relationship("AciFabricNode", back_populates="interfaces")
+
+
+class AciFabricEndpoint(Base):
+    __tablename__ = "aci_fabric_endpoints"
+    __table_args__ = (
+        UniqueConstraint("fabric_job_id", "distinguished_name", name="uq_aci_fabric_endpoint"),
+    )
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    fabric_job_id = Column(
+        GUID(), ForeignKey("telco_fabric_onboarding_jobs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    distinguished_name = Column(String, nullable=False)
+    mac = Column(String, nullable=True, index=True)
+    ip_addresses = Column(JSON, nullable=False, default=list)
+    tenant = Column(String, nullable=True)
+    app_profile = Column(String, nullable=True)
+    epg = Column(String, nullable=True)
+    encap = Column(String, nullable=True)
+    bridge_domain = Column(String, nullable=True)
+    vrf = Column(String, nullable=True)
+    pod = Column(String, nullable=True)
+    nodes = Column(JSON, nullable=False, default=list)
+    interface = Column(String, nullable=True)
+    path_dn = Column(String, nullable=True)
+    learning_source = Column(String, nullable=True)
+    last_modified_at = Column(DateTime(timezone=True), nullable=True)
+    raw_attributes = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # One-directional link to the owning fabric job; the job side is not back-populated
+    # because endpoints are refreshed wholesale on each poll rather than tracked individually.
+    fabric_job = relationship("TelcoFabricOnboardingJob", lazy="selectin")
+
+    @property
+    def fabric_name(self) -> str | None:
+        if self.fabric_job is None:
+            return None
+        return self.fabric_job.name
+
+    @property
+    def fabric_ip(self) -> str | None:
+        if self.fabric_job is None:
+            return None
+        return self.fabric_job.target_host
+
+
+class AciFabricVlan(Base):
+    __tablename__ = "aci_fabric_vlans"
+    __table_args__ = (
+        UniqueConstraint("fabric_job_id", "encap", name="uq_aci_fabric_vlan"),
+    )
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    fabric_job_id = Column(
+        GUID(), ForeignKey("telco_fabric_onboarding_jobs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    vlan_id = Column(Integer, nullable=True, index=True)
+    encap = Column(String, nullable=False)
+    fab_encap = Column(String, nullable=True)
+    epg = Column(String, nullable=True)
+    tenant = Column(String, nullable=True)
+    app_profile = Column(String, nullable=True)
+    bridge_domain = Column(String, nullable=True)
+    vrf = Column(String, nullable=True)
+    pc_tag = Column(String, nullable=True)
+    mode = Column(String, nullable=True)
+    admin_state = Column(String, nullable=True)
+    oper_state = Column(String, nullable=True)
+    node_count = Column(Integer, nullable=False, default=0)
+    nodes = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Wholesale-refreshed per poll, so the owning job side is not back-populated.
+    fabric_job = relationship("TelcoFabricOnboardingJob", lazy="selectin")
+
+    @property
+    def fabric_name(self) -> str | None:
+        if self.fabric_job is None:
+            return None
+        return self.fabric_job.name
+
+    @property
+    def fabric_ip(self) -> str | None:
+        if self.fabric_job is None:
+            return None
+        return self.fabric_job.target_host

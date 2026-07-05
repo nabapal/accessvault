@@ -1,6 +1,9 @@
 import api from "./api";
 
 import {
+  AciFabricEndpointPage,
+  AciFabricVlanPage,
+  AciFreePortReport,
   AciFabricNodeDetail,
   AciFabricNodeInterface,
   AciFabricNodePage,
@@ -31,6 +34,35 @@ export const fetchAciFabricNodes = async (options: FetchAciFabricNodesOptions = 
     params.page_size = String(options.pageSize);
   }
   const { data } = await api.get<AciFabricNodePage>("/aci/fabric/nodes", {
+    params: Object.keys(params).length ? params : undefined
+  });
+  return data;
+};
+
+interface FetchAciFabricEndpointsOptions {
+  fabric?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export const fetchAciFabricEndpoints = async (
+  options: FetchAciFabricEndpointsOptions = {}
+): Promise<AciFabricEndpointPage> => {
+  const params: Record<string, string> = {};
+  if (options.fabric) {
+    params.fabric = options.fabric;
+  }
+  if (options.search) {
+    params.search = options.search;
+  }
+  if (typeof options.page === "number") {
+    params.page = String(options.page);
+  }
+  if (typeof options.pageSize === "number") {
+    params.page_size = String(options.pageSize);
+  }
+  const { data } = await api.get<AciFabricEndpointPage>("/aci/fabric/endpoints", {
     params: Object.keys(params).length ? params : undefined
   });
   return data;
@@ -72,6 +104,40 @@ export const fetchAciFabricSummaryDetails = async (
   const { data } = await api.get<AciFabricSummaryDetails>("/aci/fabric/summary/details", {
     params: Object.keys(params).length ? params : undefined
   });
+  return data;
+};
+
+interface FetchAciFabricVlansOptions {
+  fabric?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export const fetchAciFabricVlans = async (
+  options: FetchAciFabricVlansOptions = {}
+): Promise<AciFabricVlanPage> => {
+  const params: Record<string, string> = {};
+  if (options.fabric) {
+    params.fabric = options.fabric;
+  }
+  if (options.search) {
+    params.search = options.search;
+  }
+  if (typeof options.page === "number") {
+    params.page = String(options.page);
+  }
+  if (typeof options.pageSize === "number") {
+    params.page_size = String(options.pageSize);
+  }
+  const { data } = await api.get<AciFabricVlanPage>("/aci/fabric/vlans", {
+    params: Object.keys(params).length ? params : undefined
+  });
+  return data;
+};
+
+export const fetchAciFreePorts = async (): Promise<AciFreePortReport> => {
+  const { data } = await api.get<AciFreePortReport>("/aci/fabric/free-ports");
   return data;
 };
 

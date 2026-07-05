@@ -58,7 +58,7 @@ UVICORN_LOG_LEVEL="${UVICORN_LOG_LEVEL:-info}"
 if [[ "${DEV_DEBUG_BACKEND}" == "1" ]]; then
   UVICORN_LOG_LEVEL="debug"
 fi
-backend_cmd=(uvicorn app.main:app --reload --host 0.0.0.0 --port 8002 --log-level "${UVICORN_LOG_LEVEL}")
+backend_cmd=(uvicorn app.main:app --reload --host 0.0.0.0 --port 8200 --log-level "${UVICORN_LOG_LEVEL}")
 if [[ "${DEV_DEBUG_BACKEND}" == "1" ]]; then
   echo "[dev][debug] Launching backend: ${backend_cmd[*]}"
 fi
@@ -66,7 +66,7 @@ fi
 BACKEND_PID=$!
 popd >/dev/null
 
-echo "[dev] FastAPI backend running on http://localhost:8002 (pid: ${BACKEND_PID})"
+echo "[dev] FastAPI backend running on http://localhost:8200 (pid: ${BACKEND_PID})"
 echo "[dev] Backend log: ${LOG_DIR}/backend.log"
 
 cleanup() {

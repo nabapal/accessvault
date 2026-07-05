@@ -192,6 +192,108 @@ export interface AciFabricNodePage {
   has_prev: boolean;
 }
 
+export interface AciFabricEndpoint {
+  id: string;
+  fabric_job_id?: string | null;
+  fabric_name?: string | null;
+  fabric_ip?: string | null;
+  distinguished_name: string;
+  mac?: string | null;
+  ip_addresses: string[];
+  tenant?: string | null;
+  app_profile?: string | null;
+  epg?: string | null;
+  encap?: string | null;
+  bridge_domain?: string | null;
+  vrf?: string | null;
+  pod?: string | null;
+  nodes: string[];
+  interface?: string | null;
+  path_dn?: string | null;
+  learning_source?: string | null;
+  last_modified_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AciFabricEndpointPage {
+  items: AciFabricEndpoint[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface AciFabricVlan {
+  id: string;
+  fabric_job_id?: string | null;
+  fabric_name?: string | null;
+  fabric_ip?: string | null;
+  vlan_id?: number | null;
+  encap: string;
+  fab_encap?: string | null;
+  epg?: string | null;
+  tenant?: string | null;
+  app_profile?: string | null;
+  bridge_domain?: string | null;
+  vrf?: string | null;
+  pc_tag?: string | null;
+  mode?: string | null;
+  admin_state?: string | null;
+  oper_state?: string | null;
+  node_count: number;
+  nodes: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AciFabricVlanPage {
+  items: AciFabricVlan[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface AciFreePortNode {
+  node_uuid: string;
+  fabric_job_id?: string | null;
+  fabric_name?: string | null;
+  fabric_ip?: string | null;
+  node_id: string;
+  name: string;
+  model?: string | null;
+  role: string;
+  pod?: string | null;
+  free: number;
+  excluded: number;
+  sfp_missing: number;
+  free_ports: string[];
+}
+
+export interface AciFreePortFabric {
+  fabric_job_id?: string | null;
+  fabric_name: string;
+  fabric_ip?: string | null;
+  free: number;
+  excluded: number;
+  sfp_missing: number;
+  nodes_with_free: number;
+  total_nodes: number;
+}
+
+export interface AciFreePortReport {
+  fabrics: AciFreePortFabric[];
+  nodes: AciFreePortNode[];
+  total_free: number;
+  total_excluded: number;
+  total_sfp_missing: number;
+  total_fabrics: number;
+  total_nodes: number;
+}
+
 export interface AciFabricSummaryFabric {
   fabric_job_id?: string | null;
   fabric_name: string;

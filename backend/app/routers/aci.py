@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from typing import List, Optional
 
@@ -10,8 +11,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_current_user, get_db
-from app.models import AciFabricNode, AciFabricNodeDetail, AciFabricNodeInterface, AciNodeRole, TelcoFabricOnboardingJob
+from app.models import (
+    AciFabricEndpoint,
+    AciFabricNode,
+    AciFabricNodeDetail,
+    AciFabricNodeInterface,
+    AciFabricVlan,
+    AciNodeRole,
+    TelcoFabricOnboardingJob,
+)
 from app.schemas import (
+    AciFabricEndpointPage,
+    AciFabricEndpointRead,
+    AciFabricVlanPage,
+    AciFabricVlanRead,
+    AciFreePortFabric,
+    AciFreePortNode,
+    AciFreePortReport,
     AciFabricNodeDetailRead,
     AciFabricNodeInterfaceRead,
     AciFabricNodePage,
@@ -173,6 +189,294 @@ async def list_fabric_node_interfaces(
     )
     interfaces = result.scalars().all()
     return [AciFabricNodeInterfaceRead.model_validate(item, from_attributes=True) for item in interfaces]
+
+
+@router.get("/fabric/endpoints", response_model=AciFabricEndpointPage)
+async def list_fabric_endpoints(
+    page: int = Query(default=1, ge=1, description="1-indexed page number"),
+    page_size: int = Query(default=25, ge=1, le=200, description="Number of records per page"),
+    fabric: Optional[str] = Query(default=None, description="Case-insensitive match on fabric name or IP"),
+    search: Optional[str] = Query(
+        default=None,
+        description="Case-insensitive search across MAC, tenant, EPG, encap, bridge domain, VRF, interface, or fabric",
+    ),
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> AciFabricEndpointPage:
+    telco_alias = aliased(TelcoFabricOnboardingJob)
+
+    conditions = []
+    stmt = (
+        select(AciFabricEndpoint)
+        .options(selectinload(AciFabricEndpoint.fabric_job))
+        .outerjoin(telco_alias, AciFabricEndpoint.fabric_job_id == telco_alias.id)
+        .order_by(AciFabricEndpoint.mac, AciFabricEndpoint.distinguished_name)
+    )
+    count_stmt = select(func.count()).select_from(AciFabricEndpoint).outerjoin(
+        telco_alias, AciFabricEndpoint.fabric_job_id == telco_alias.id
+    )
+
+    if fabric:
+        fabric_pattern = f"%{fabric.strip().lower()}%"
+        conditions.append(
+            or_(
+                func.lower(func.coalesce(telco_alias.name, "")).like(fabric_pattern),
+                func.lower(func.coalesce(telco_alias.target_host, "")).like(fabric_pattern),
+            )
+        )
+
+    if search:
+        pattern = f"%{search.strip().lower()}%"
+        conditions.append(
+            or_(
+                func.lower(func.coalesce(AciFabricEndpoint.mac, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.tenant, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.app_profile, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.epg, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.encap, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.bridge_domain, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.vrf, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.interface, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricEndpoint.learning_source, "")).like(pattern),
+                func.lower(func.coalesce(telco_alias.name, "")).like(pattern),
+                func.lower(func.coalesce(telco_alias.target_host, "")).like(pattern),
+            )
+        )
+
+    for condition in conditions:
+        stmt = stmt.where(condition)
+        count_stmt = count_stmt.where(condition)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    if total == 0:
+        page = 1
+    else:
+        last_page = max(1, (total + page_size - 1) // page_size)
+        if page > last_page:
+            page = last_page
+
+    offset = (page - 1) * page_size
+    stmt = stmt.offset(offset).limit(page_size)
+
+    result = await db.execute(stmt)
+    endpoints = result.scalars().all()
+
+    items = [AciFabricEndpointRead.model_validate(item, from_attributes=True) for item in endpoints]
+    has_next = offset + len(items) < total
+    has_prev = page > 1
+
+    return AciFabricEndpointPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=has_next,
+        has_prev=has_prev,
+    )
+
+
+@router.get("/fabric/vlans", response_model=AciFabricVlanPage)
+async def list_fabric_vlans(
+    page: int = Query(default=1, ge=1, description="1-indexed page number"),
+    page_size: int = Query(default=25, ge=1, le=200, description="Number of records per page"),
+    fabric: Optional[str] = Query(default=None, description="Case-insensitive match on fabric name or IP"),
+    search: Optional[str] = Query(
+        default=None,
+        description="Case-insensitive search across VLAN id, encap, EPG, tenant, app, BD, VRF, or fabric",
+    ),
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> AciFabricVlanPage:
+    telco_alias = aliased(TelcoFabricOnboardingJob)
+
+    conditions = []
+    stmt = (
+        select(AciFabricVlan)
+        .options(selectinload(AciFabricVlan.fabric_job))
+        .outerjoin(telco_alias, AciFabricVlan.fabric_job_id == telco_alias.id)
+        .order_by(AciFabricVlan.vlan_id, AciFabricVlan.encap)
+    )
+    count_stmt = select(func.count()).select_from(AciFabricVlan).outerjoin(
+        telco_alias, AciFabricVlan.fabric_job_id == telco_alias.id
+    )
+
+    if fabric:
+        fabric_pattern = f"%{fabric.strip().lower()}%"
+        conditions.append(
+            or_(
+                func.lower(func.coalesce(telco_alias.name, "")).like(fabric_pattern),
+                func.lower(func.coalesce(telco_alias.target_host, "")).like(fabric_pattern),
+            )
+        )
+
+    if search:
+        pattern = f"%{search.strip().lower()}%"
+        conditions.append(
+            or_(
+                func.lower(func.coalesce(AciFabricVlan.encap, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.epg, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.tenant, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.app_profile, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.bridge_domain, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.vrf, "")).like(pattern),
+                func.lower(func.coalesce(telco_alias.name, "")).like(pattern),
+                func.lower(func.coalesce(telco_alias.target_host, "")).like(pattern),
+            )
+        )
+
+    for condition in conditions:
+        stmt = stmt.where(condition)
+        count_stmt = count_stmt.where(condition)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    if total == 0:
+        page = 1
+    else:
+        last_page = max(1, (total + page_size - 1) // page_size)
+        if page > last_page:
+            page = last_page
+
+    offset = (page - 1) * page_size
+    stmt = stmt.offset(offset).limit(page_size)
+
+    result = await db.execute(stmt)
+    vlans = result.scalars().all()
+
+    items = [AciFabricVlanRead.model_validate(item, from_attributes=True) for item in vlans]
+    has_next = offset + len(items) < total
+    has_prev = page > 1
+
+    return AciFabricVlanPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=has_next,
+        has_prev=has_prev,
+    )
+
+
+def _natural_port_key(name: str) -> list:
+    """Sort key so eth1/2 precedes eth1/10 (numeric segments compared as ints)."""
+    return [int(token) if token.isdigit() else token for token in re.split(r"(\d+)", name or "")]
+
+
+@router.get("/fabric/free-ports", response_model=AciFreePortReport)
+async def get_fabric_free_ports(
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> AciFreePortReport:
+    """Cross-fabric free access-port report.
+
+    A port is free when operSt=down AND operStQual=sfp-missing AND its usage is not a
+    fabric uplink (``fabric`` not present in the usage string). Down + sfp-missing ports
+    that ARE fabric uplinks are reported as excluded rather than free.
+    """
+    switch_roles = [AciNodeRole.LEAF, AciNodeRole.SPINE]
+
+    node_result = await db.execute(
+        select(AciFabricNode)
+        .options(selectinload(AciFabricNode.fabric_job))
+        .where(AciFabricNode.role.in_(switch_roles))
+        .order_by(AciFabricNode.name)
+    )
+    nodes = node_result.scalars().all()
+    node_ids = [node.id for node in nodes]
+
+    # Only the down + sfp-missing interfaces are relevant to the report.
+    interfaces_by_node: dict[object, list[AciFabricNodeInterface]] = defaultdict(list)
+    if node_ids:
+        iface_result = await db.execute(
+            select(AciFabricNodeInterface).where(
+                AciFabricNodeInterface.node_id.in_(node_ids),
+                func.lower(AciFabricNodeInterface.oper_state) == "down",
+                func.lower(func.coalesce(AciFabricNodeInterface.oper_st_qual, "")) == "sfp-missing",
+            )
+        )
+        for iface in iface_result.scalars():
+            interfaces_by_node[iface.node_id].append(iface)
+
+    node_rows: list[AciFreePortNode] = []
+    fabric_groups: dict[str, dict[str, object]] = {}
+
+    for node in nodes:
+        matches = interfaces_by_node.get(node.id, [])
+        free_ports: list[str] = []
+        excluded = 0
+        for iface in matches:
+            if "fabric" in (iface.usage or "").lower():
+                excluded += 1
+            else:
+                free_ports.append(iface.name)
+        free_ports.sort(key=_natural_port_key)
+        free = len(free_ports)
+        sfp_missing = free + excluded
+
+        node_rows.append(
+            AciFreePortNode(
+                node_uuid=node.id,
+                fabric_job_id=node.fabric_job_id,
+                fabric_name=node.fabric_name,
+                fabric_ip=node.fabric_ip,
+                node_id=node.node_id,
+                name=node.name,
+                model=node.model,
+                role=node.role.value if isinstance(node.role, AciNodeRole) else str(node.role),
+                pod=node.pod,
+                free=free,
+                excluded=excluded,
+                sfp_missing=sfp_missing,
+                free_ports=free_ports,
+            )
+        )
+
+        group_key = str(node.fabric_job_id) if node.fabric_job_id else "__unassigned__"
+        summary = fabric_groups.get(group_key)
+        if summary is None:
+            summary = {
+                "fabric_job_id": node.fabric_job_id,
+                "fabric_name": node.fabric_name or "Unassigned Fabric",
+                "fabric_ip": node.fabric_ip,
+                "free": 0,
+                "excluded": 0,
+                "sfp_missing": 0,
+                "nodes_with_free": 0,
+                "total_nodes": 0,
+            }
+            fabric_groups[group_key] = summary
+        summary["free"] = int(summary["free"]) + free
+        summary["excluded"] = int(summary["excluded"]) + excluded
+        summary["sfp_missing"] = int(summary["sfp_missing"]) + sfp_missing
+        summary["total_nodes"] = int(summary["total_nodes"]) + 1
+        if free > 0:
+            summary["nodes_with_free"] = int(summary["nodes_with_free"]) + 1
+
+    fabrics = [
+        AciFreePortFabric(
+            fabric_job_id=value["fabric_job_id"],
+            fabric_name=value["fabric_name"],
+            fabric_ip=value["fabric_ip"],
+            free=value["free"],
+            excluded=value["excluded"],
+            sfp_missing=value["sfp_missing"],
+            nodes_with_free=value["nodes_with_free"],
+            total_nodes=value["total_nodes"],
+        )
+        for value in fabric_groups.values()
+    ]
+    fabrics.sort(key=lambda item: (-item.free, item.fabric_name.lower()))
+
+    return AciFreePortReport(
+        fabrics=fabrics,
+        nodes=node_rows,
+        total_free=sum(item.free for item in node_rows),
+        total_excluded=sum(item.excluded for item in node_rows),
+        total_sfp_missing=sum(item.sfp_missing for item in node_rows),
+        total_fabrics=len(fabrics),
+        total_nodes=len(node_rows),
+    )
 
 
 @router.get("/fabric/summary", response_model=AciFabricNodeSummary)

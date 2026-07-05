@@ -199,6 +199,114 @@ class AciFabricNodeDetailRead(BaseModel):
     port_channels: List[AciFabricNodePortChannel] = Field(default_factory=list)
 
 
+class AciFabricVlanRead(BaseModel):
+    id: UUID
+    fabric_job_id: UUID | None = None
+    fabric_name: str | None = None
+    fabric_ip: str | None = None
+    vlan_id: int | None = None
+    encap: str
+    fab_encap: str | None = None
+    epg: str | None = None
+    tenant: str | None = None
+    app_profile: str | None = None
+    bridge_domain: str | None = None
+    vrf: str | None = None
+    pc_tag: str | None = None
+    mode: str | None = None
+    admin_state: str | None = None
+    oper_state: str | None = None
+    node_count: int
+    nodes: List[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AciFabricVlanPage(BaseModel):
+    items: list[AciFabricVlanRead]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
+    has_prev: bool
+
+
+class AciFreePortNode(BaseModel):
+    node_uuid: UUID
+    fabric_job_id: UUID | None = None
+    fabric_name: str | None = None
+    fabric_ip: str | None = None
+    node_id: str
+    name: str
+    model: str | None = None
+    role: str
+    pod: str | None = None
+    free: int
+    excluded: int
+    sfp_missing: int
+    free_ports: List[str] = Field(default_factory=list)
+
+
+class AciFreePortFabric(BaseModel):
+    fabric_job_id: UUID | None = None
+    fabric_name: str
+    fabric_ip: str | None = None
+    free: int
+    excluded: int
+    sfp_missing: int
+    nodes_with_free: int
+    total_nodes: int
+
+
+class AciFreePortReport(BaseModel):
+    fabrics: List[AciFreePortFabric] = Field(default_factory=list)
+    nodes: List[AciFreePortNode] = Field(default_factory=list)
+    total_free: int
+    total_excluded: int
+    total_sfp_missing: int
+    total_fabrics: int
+    total_nodes: int
+
+
+class AciFabricEndpointRead(BaseModel):
+    id: UUID
+    fabric_job_id: UUID | None = None
+    fabric_name: str | None = None
+    fabric_ip: str | None = None
+    distinguished_name: str
+    mac: str | None = None
+    ip_addresses: List[str] = Field(default_factory=list)
+    tenant: str | None = None
+    app_profile: str | None = None
+    epg: str | None = None
+    encap: str | None = None
+    bridge_domain: str | None = None
+    vrf: str | None = None
+    pod: str | None = None
+    nodes: List[str] = Field(default_factory=list)
+    interface: str | None = None
+    path_dn: str | None = None
+    learning_source: str | None = None
+    last_modified_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AciFabricEndpointPage(BaseModel):
+    items: list[AciFabricEndpointRead]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
+    has_prev: bool
+
+
 class AciFabricNodeInterfaceRead(BaseModel):
     id: UUID
     node_id: UUID
@@ -207,6 +315,7 @@ class AciFabricNodeInterfaceRead(BaseModel):
     description: str | None = None
     admin_state: str | None = None
     oper_state: str | None = None
+    oper_st_qual: str | None = None
     oper_speed: str | None = None
     usage: str | None = None
     last_link_change_at: datetime | None = None

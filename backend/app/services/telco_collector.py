@@ -13,7 +13,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
-from app.models import AciFabricNode, AciFabricNodeDetail, AciFabricNodeInterface
+from app.models import AciFabricEndpoint, AciFabricNode, AciFabricNodeDetail, AciFabricNodeInterface, AciFabricVlan
 from app.models.telco import TelcoFabricOnboardingJob, TelcoFabricType, TelcoOnboardingStatus
 from app.services.crypto import decrypt_secret
 from app.services.nautobot import fetch_nautobot_device_locations
@@ -160,6 +160,131 @@ def _parse_l3out_binding(dn: str | None) -> str | None:
     if parts:
         return " / ".join(parts)
     return None
+
+
+def _parse_endpoint_identity(dn: str | None) -> Tuple[str | None, str | None, str | None, str | None]:
+    """Parse tenant / application-profile / EPG / MAC from an fvCEp distinguished name.
+
+    Example: uni/tn-TENANT/ap-APP/epg-EPG/cep-00:50:56:BB:D3:E8
+    """
+    tenant = app_profile = epg = mac = None
+    if not dn:
+        return tenant, app_profile, epg, mac
+    for segment in dn.split("/"):
+        if segment.startswith("tn-"):
+            tenant = segment[3:]
+        elif segment.startswith("ap-"):
+            app_profile = segment[3:]
+        elif segment.startswith("epg-"):
+            epg = segment[4:]
+        elif segment.startswith("cep-"):
+            mac = segment[4:]
+    return tenant, app_profile, epg, mac
+
+
+def _parse_named_segment(dn: str | None, prefix: str) -> str | None:
+    if not dn:
+        return None
+    for segment in dn.split("/"):
+        if segment.startswith(prefix):
+            return segment[len(prefix):]
+    return None
+
+
+def _parse_endpoint_path(path_dn: str | None) -> Tuple[str | None, List[str], str | None, bool]:
+    """Return (pod, nodes, interface, is_tunnel) from an fvCEp fabricPathDn.
+
+    Physical:     topology/pod-1/paths-701/pathep-[eth1/13]  -> nodes=["701"]
+    vPC:          topology/pod-1/protpaths-701-751/pathep-[IPG-VPC-...] -> nodes=["701","751"]
+    Tunnel:       topology/pod-1/paths-701/pathep-[tunnel3]   -> is_tunnel=True
+    """
+    if not path_dn:
+        return None, [], None, False
+    pod = None
+    nodes: List[str] = []
+    for segment in path_dn.split("/"):
+        if segment.startswith("pod-"):
+            pod = segment
+        elif segment.startswith("protpaths-"):
+            nodes = [part for part in segment[len("protpaths-"):].split("-") if part]
+        elif segment.startswith("paths-"):
+            nodes = [segment[len("paths-"):]]
+    interface = _extract_interface_name(path_dn)
+    is_tunnel = bool(interface and interface.lower().startswith("tunnel"))
+    return pod, nodes, interface, is_tunnel
+
+
+def _strip_ip_prefix(addr: Any) -> str | None:
+    """Drop the CIDR suffix from an fvIp address (e.g. 10.61.3.100/32 -> 10.61.3.100)."""
+    cleaned = _clean_string(addr)
+    if not cleaned:
+        return None
+    return cleaned.split("/", 1)[0]
+
+
+def _build_fabric_endpoints(
+    cep_items: List[Dict[str, Any]],
+    ip_items: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Assemble endpoint records from fvCEp, joining fvIp children for IP addresses.
+
+    Endpoints attached to a VXLAN tunnel interface (remote learns) are dropped so the
+    table only reflects locally-attached endpoints.
+    """
+    # Map parent fvCEp dn -> sorted list of IP addresses (an endpoint may have v4 + v6).
+    ip_by_cep: Dict[str, List[str]] = defaultdict(list)
+    for item in ip_items:
+        attributes = item.get("fvIp", {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        dn = attributes.get("dn") or ""
+        if "/ip-[" not in dn or "/cep-" not in dn:
+            continue
+        parent_dn = dn.split("/ip-[", 1)[0]
+        addr = _strip_ip_prefix(attributes.get("addr"))
+        if addr and addr not in ip_by_cep[parent_dn]:
+            ip_by_cep[parent_dn].append(addr)
+
+    endpoints: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in cep_items:
+        attributes = item.get("fvCEp", {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        dn = attributes.get("dn")
+        if not dn or dn in seen:
+            continue
+
+        path_dn = _clean_string(attributes.get("fabricPathDn"))
+        pod, nodes, interface, is_tunnel = _parse_endpoint_path(path_dn)
+        if is_tunnel:
+            # Remote-learned via tunnel interface; ignore per requirement.
+            continue
+
+        seen.add(dn)
+        tenant, app_profile, epg, mac = _parse_endpoint_identity(dn)
+        endpoints.append(
+            {
+                "distinguished_name": dn,
+                "mac": mac or _clean_string(attributes.get("mac")),
+                "ip_addresses": sorted(ip_by_cep.get(dn, [])),
+                "tenant": tenant,
+                "app_profile": app_profile,
+                "epg": epg,
+                "encap": _clean_string(attributes.get("encap")),
+                "bridge_domain": _parse_named_segment(attributes.get("bdDn"), "BD-"),
+                "vrf": _parse_named_segment(attributes.get("vrfDn"), "ctx-"),
+                "pod": pod,
+                "nodes": nodes,
+                "interface": interface,
+                "path_dn": path_dn,
+                "learning_source": _clean_string(attributes.get("lcC")),
+                "last_modified_at": _parse_datetime(attributes.get("modTs")),
+                "raw_attributes": attributes,
+            }
+        )
+    endpoints.sort(key=lambda entry: (entry.get("mac") or "", entry.get("distinguished_name") or ""))
+    return endpoints
 
 
 def _parse_path_binding_target(path_dn: str | None) -> Tuple[str | None, str | None, str | None]:
@@ -347,6 +472,8 @@ async def _collect_aci_fabric(
 
     detail_counts = {"node_detail_count": 0, "interface_count": 0}
     nautobot_enriched = 0
+    endpoint_count = 0
+    vlan_count = 0
     count = 0
     nodes: List[AciFabricNode] = []
 
@@ -374,11 +501,16 @@ async def _collect_aci_fabric(
         if nodes:
             detail_counts = await _collect_and_upsert_aci_node_details(session, client, job, nodes)
 
+        endpoint_count = await _collect_and_upsert_aci_endpoints(session, client, job)
+        vlan_count = await _collect_and_upsert_aci_vlans(session, client, job)
+
     if nodes:
         nautobot_enriched = await _enrich_nodes_with_nautobot(session, nodes)
 
     snapshot = {"fabric_node_count": count}
     snapshot.update(detail_counts)
+    snapshot["endpoint_count"] = endpoint_count
+    snapshot["vlan_count"] = vlan_count
     if nautobot_enriched:
         snapshot["nautobot_enriched_nodes"] = nautobot_enriched
     return snapshot
@@ -917,6 +1049,7 @@ def _build_node_snapshots(
             "description": l1.get("descr") or _clean_string(l1.get("name")),
             "admin_state": l1.get("adminSt"),
             "oper_state": ethpm.get("operSt") or l1.get("adminSt"),
+            "oper_st_qual": ethpm.get("operStQual"),
             "oper_speed": ethpm.get("operSpeed") or l1.get("speed"),
             "usage": ethpm.get("usage") or l1.get("usage"),
             "last_link_change_at": _parse_datetime(ethpm.get("lastLinkStChg")),
@@ -1028,6 +1161,7 @@ async def _replace_node_interfaces(
                     description=entry.get("description"),
                     admin_state=entry.get("admin_state"),
                     oper_state=entry.get("oper_state"),
+                    oper_st_qual=entry.get("oper_st_qual"),
                     oper_speed=entry.get("oper_speed"),
                     usage=entry.get("usage"),
                     last_link_change_at=entry.get("last_link_change_at"),
@@ -1051,6 +1185,227 @@ async def _replace_node_interfaces(
     if interface_models:
         session.add_all(interface_models)
     return len(interface_models)
+
+
+async def _collect_and_upsert_aci_endpoints(
+    session: AsyncSession,
+    client: httpx.AsyncClient,
+    job: TelcoFabricOnboardingJob,
+) -> int:
+    """Fetch fabric-wide endpoints (fvCEp + fvIp) and replace the stored rows for this job."""
+    try:
+        responses = await asyncio.gather(
+            client.get("/api/class/fvCEp.json"),
+            client.get("/api/class/fvIp.json"),
+        )
+        cep_response, ip_response = responses
+        cep_response.raise_for_status()
+        ip_response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to fetch ACI endpoints for job %s: %s", job.id, exc)
+        return 0
+
+    cep_items = cep_response.json().get("imdata", [])
+    ip_items = ip_response.json().get("imdata", [])
+    endpoints = _build_fabric_endpoints(
+        cep_items if isinstance(cep_items, list) else [],
+        ip_items if isinstance(ip_items, list) else [],
+    )
+    return await _replace_fabric_endpoints(session, job, endpoints)
+
+
+async def _replace_fabric_endpoints(
+    session: AsyncSession,
+    job: TelcoFabricOnboardingJob,
+    endpoints: List[Dict[str, Any]],
+) -> int:
+    await session.execute(delete(AciFabricEndpoint).where(AciFabricEndpoint.fabric_job_id == job.id))
+
+    models: List[AciFabricEndpoint] = []
+    for entry in endpoints:
+        dn_value = entry.get("distinguished_name")
+        if not dn_value:
+            continue
+        models.append(
+            AciFabricEndpoint(
+                fabric_job_id=job.id,
+                distinguished_name=dn_value,
+                mac=entry.get("mac"),
+                ip_addresses=entry.get("ip_addresses") or [],
+                tenant=entry.get("tenant"),
+                app_profile=entry.get("app_profile"),
+                epg=entry.get("epg"),
+                encap=entry.get("encap"),
+                bridge_domain=entry.get("bridge_domain"),
+                vrf=entry.get("vrf"),
+                pod=entry.get("pod"),
+                nodes=entry.get("nodes") or [],
+                interface=entry.get("interface"),
+                path_dn=entry.get("path_dn"),
+                learning_source=entry.get("learning_source"),
+                last_modified_at=entry.get("last_modified_at"),
+                raw_attributes=entry.get("raw_attributes") or {},
+            )
+        )
+
+    if models:
+        session.add_all(models)
+    return len(models)
+
+
+def _extract_vlanckt_segments(dn: str | None) -> Tuple[str | None, str | None, str | None]:
+    """From a vlanCktEp dn return (node_id, ctx_seg, bd_seg).
+
+    Example: topology/pod-1/node-203/sys/ctx-[vxlan-2097152]/bd-[vxlan-15171532]/vlan-[vlan-3161]
+    """
+    node = ctx_seg = bd_seg = None
+    if not dn:
+        return node, ctx_seg, bd_seg
+    for segment in dn.split("/"):
+        if segment.startswith("node-"):
+            node = segment[len("node-"):]
+        elif segment.startswith("ctx-["):
+            ctx_seg = segment[len("ctx-["):].rstrip("]").replace("vxlan-", "")
+        elif segment.startswith("bd-["):
+            bd_seg = segment[len("bd-["):].rstrip("]").replace("vxlan-", "")
+    return node, ctx_seg, bd_seg
+
+
+def _vlan_id_from_encap(encap: str | None) -> int | None:
+    if not encap:
+        return None
+    text = encap.strip()
+    if text.startswith("vlan-"):
+        text = text[len("vlan-"):]
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _build_seg_name_map(items: Iterable[Dict[str, Any]], cls: str) -> Dict[str, str]:
+    """Map an object's fabric segment id (seg) to its name, for fvBD / fvCtx lookups."""
+    result: Dict[str, str] = {}
+    for item in items:
+        attributes = item.get(cls, {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        seg = _clean_string(attributes.get("seg"))
+        name = _clean_string(attributes.get("name"))
+        if seg and name:
+            result[seg] = name
+    return result
+
+
+def _build_fabric_vlans(
+    vlan_items: List[Dict[str, Any]],
+    bd_name_by_seg: Dict[str, str],
+    vrf_name_by_seg: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Aggregate node-level vlanCktEp records into one entry per access VLAN encap."""
+    aggregates: Dict[str, Dict[str, Any]] = {}
+    for item in vlan_items:
+        attributes = item.get("vlanCktEp", {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        encap = _clean_string(attributes.get("encap"))
+        if not encap or not encap.startswith("vlan-"):
+            continue  # skip non-access (e.g. vxlan) circuit endpoints
+        node, ctx_seg, bd_seg = _extract_vlanckt_segments(attributes.get("dn"))
+        entry = aggregates.get(encap)
+        if entry is None:
+            tenant, app_profile, epg, _ = _parse_endpoint_identity(attributes.get("epgDn"))
+            entry = {
+                "encap": encap,
+                "vlan_id": _vlan_id_from_encap(encap),
+                "fab_encap": _clean_string(attributes.get("fabEncap")),
+                "epg": epg,
+                "tenant": tenant,
+                "app_profile": app_profile,
+                "bridge_domain": bd_name_by_seg.get(bd_seg or ""),
+                "vrf": vrf_name_by_seg.get(ctx_seg or ""),
+                "pc_tag": _clean_string(attributes.get("pcTag")),
+                "mode": _clean_string(attributes.get("mode")),
+                "admin_state": _clean_string(attributes.get("adminSt")),
+                "oper_state": _clean_string(attributes.get("operSt")),
+                "_nodes": set(),
+            }
+            aggregates[encap] = entry
+        if node:
+            entry["_nodes"].add(node)
+        # A VLAN reported "up" on any leaf is considered up overall.
+        if (attributes.get("operSt") or "").lower() == "up":
+            entry["oper_state"] = "up"
+
+    results: List[Dict[str, Any]] = []
+    for entry in aggregates.values():
+        node_list = sorted(entry.pop("_nodes"), key=lambda n: (int(n) if str(n).isdigit() else 0, str(n)))
+        entry["nodes"] = node_list
+        entry["node_count"] = len(node_list)
+        results.append(entry)
+    results.sort(key=lambda e: (e.get("vlan_id") or 0, e.get("encap") or ""))
+    return results
+
+
+async def _collect_and_upsert_aci_vlans(
+    session: AsyncSession,
+    client: httpx.AsyncClient,
+    job: TelcoFabricOnboardingJob,
+) -> int:
+    """Fetch deployed VLANs (vlanCktEp) plus BD/VRF name maps and replace stored rows."""
+    try:
+        vlan_resp, bd_resp, ctx_resp = await asyncio.gather(
+            client.get("/api/node/class/vlanCktEp.json"),
+            client.get("/api/class/fvBD.json"),
+            client.get("/api/class/fvCtx.json"),
+        )
+        vlan_resp.raise_for_status()
+        bd_resp.raise_for_status()
+        ctx_resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to fetch ACI VLANs for job %s: %s", job.id, exc)
+        return 0
+
+    bd_map = _build_seg_name_map(bd_resp.json().get("imdata", []), "fvBD")
+    vrf_map = _build_seg_name_map(ctx_resp.json().get("imdata", []), "fvCtx")
+    vlan_items = vlan_resp.json().get("imdata", [])
+    vlans = _build_fabric_vlans(vlan_items if isinstance(vlan_items, list) else [], bd_map, vrf_map)
+    return await _replace_fabric_vlans(session, job, vlans)
+
+
+async def _replace_fabric_vlans(
+    session: AsyncSession,
+    job: TelcoFabricOnboardingJob,
+    vlans: List[Dict[str, Any]],
+) -> int:
+    await session.execute(delete(AciFabricVlan).where(AciFabricVlan.fabric_job_id == job.id))
+    models: List[AciFabricVlan] = []
+    for entry in vlans:
+        encap = entry.get("encap")
+        if not encap:
+            continue
+        models.append(
+            AciFabricVlan(
+                fabric_job_id=job.id,
+                vlan_id=entry.get("vlan_id"),
+                encap=encap,
+                fab_encap=entry.get("fab_encap"),
+                epg=entry.get("epg"),
+                tenant=entry.get("tenant"),
+                app_profile=entry.get("app_profile"),
+                bridge_domain=entry.get("bridge_domain"),
+                vrf=entry.get("vrf"),
+                pc_tag=entry.get("pc_tag"),
+                mode=entry.get("mode"),
+                admin_state=entry.get("admin_state"),
+                oper_state=entry.get("oper_state"),
+                node_count=entry.get("node_count") or 0,
+                nodes=entry.get("nodes") or [],
+            )
+        )
+    if models:
+        session.add_all(models)
+    return len(models)
 
 
 def _parse_nxos_inventory(data: Dict[str, Any]) -> List[Dict[str, Any]]:

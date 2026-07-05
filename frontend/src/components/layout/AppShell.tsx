@@ -24,6 +24,9 @@ const SIDEBAR_SECTIONS = [
     items: [
       { label: "ACI Summary", to: "/telco/aci/summary" },
       { label: "Cisco ACI Fabric", to: "/telco/aci" },
+      { label: "ACI Endpoints", to: "/telco/aci/endpoints" },
+      { label: "ACI Free Ports", to: "/telco/aci/free-ports" },
+      { label: "ACI VLANs", to: "/telco/aci/vlans" },
       { label: "Fabric Onboarding", to: "/telco/onboarding" }
     ]
   }
