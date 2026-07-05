@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
+import { ToastContainer } from "@/components/ui/toast";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AccessVaultPage } from "@/pages/DashboardPage";
 import { AciInventoryPage } from "@/pages/AciInventoryPage";
@@ -21,6 +22,7 @@ import { VirtualMachinesPage } from "@/pages/VirtualMachinesPage";
 
 export default function App() {
   return (
+    <>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
@@ -51,5 +53,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <ToastContainer />
+    </>
   );
 }

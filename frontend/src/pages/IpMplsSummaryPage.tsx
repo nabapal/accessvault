@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  BoltIcon,
+  CheckCircleIcon,
+  CircleStackIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  ServerIcon,
+  ShareIcon,
+  SignalIcon
+} from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton, StatTileSkeleton } from "@/components/ui/Skeleton";
+import { StatTile } from "@/components/ui/StatTile";
+import { toast } from "@/components/ui/toast";
 import { fetchIpMplsSummary } from "@/services/ipmpls";
 import { locationLabelFromCode } from "@/utils/location";
 import { IpMplsSummary } from "@/types";
@@ -62,19 +76,17 @@ function BreakdownCard({
   );
 }
 
-const KPI_TONE: Record<string, string> = {
-  default: "text-white",
-  good: "text-emerald-300",
-  warn: "text-amber-300",
-  bad: "text-rose-300"
-};
-
-function Kpi({ label, value, hint, tone = "default" }: { label: string; value: number; hint?: string; tone?: keyof typeof KPI_TONE }) {
+function BreakdownCardSkeleton() {
   return (
-    <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${KPI_TONE[tone]}`}>{value.toLocaleString()}</p>
-      {hint ? <p className="mt-1 text-[13px] text-slate-500">{hint}</p> : null}
+    <div className="rounded-lg border border-brand-700 bg-brand-900/60">
+      <div className="border-b border-brand-800/70 px-4 py-3">
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <div className="space-y-3 px-4 py-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-3 w-full" />
+        ))}
+      </div>
     </div>
   );
 }
@@ -98,6 +110,7 @@ export function IpMplsSummaryPage() {
         if (!cancelled) {
           console.error("Failed to load IP-MPLS summary", err);
           setError("Unable to load IP-MPLS summary. Please retry.");
+          toast.error("Failed to load summary", "Could not reach the IP-MPLS summary endpoint.");
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -119,35 +132,60 @@ export function IpMplsSummaryPage() {
           </p>
         </header>
 
-        {error ? (
-          <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div>
-        ) : null}
-
-        {isLoading || !summary ? (
-          <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-8 text-center text-sm text-slate-400">
-            {isLoading ? "Loading IP-MPLS summary…" : "No summary data."}
-          </div>
+        {isLoading ? (
+          <>
+            <StatTileSkeleton count={8} />
+            <section className="grid gap-4 lg:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <BreakdownCardSkeleton key={i} />
+              ))}
+            </section>
+          </>
+        ) : error ? (
+          <EmptyState
+            icon={ExclamationTriangleIcon}
+            title="Couldn't load the summary"
+            description={error}
+          />
+        ) : !summary || summary.total === 0 ? (
+          <EmptyState
+            icon={ServerIcon}
+            title="No IP-MPLS devices yet"
+            description="Onboard devices from Admin → IP-MPLS Devices to populate the fleet summary."
+          />
         ) : (
           <>
             {/* Scale + health KPIs */}
             <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Kpi label="Devices" value={summary.total} hint="Onboarded IP-MPLS devices" />
-              <Kpi label="Interfaces" value={summary.total_interfaces} hint={`${summary.interfaces_up} up · ${summary.mpls_interfaces} MPLS-enabled`} />
-              <Kpi label="VRFs (unique)" value={summary.unique_vrfs} hint={`${summary.total_vrfs} instances across the fleet`} />
-              <Kpi label="Neighbors" value={summary.total_neighbors} hint="IGP/LDP/BGP adjacencies" />
-              <Kpi label="MPLS Interfaces" value={summary.mpls_interfaces} hint="Interfaces with MPLS enabled" tone="good" />
-              <Kpi label="Interfaces Up" value={summary.interfaces_up} hint="Operational (oper up)" tone="good" />
-              <Kpi
+              <StatTile label="Devices" value={summary.total} hint="Onboarded IP-MPLS devices" icon={ServerIcon} />
+              <StatTile
+                label="Interfaces"
+                value={summary.total_interfaces}
+                hint={`${summary.interfaces_up} up · ${summary.mpls_interfaces} MPLS`}
+                icon={SignalIcon}
+              />
+              <StatTile
+                label="VRFs (unique)"
+                value={summary.unique_vrfs}
+                hint={`${summary.total_vrfs} instances across the fleet`}
+                icon={CircleStackIcon}
+              />
+              <StatTile label="Neighbors" value={summary.total_neighbors} hint="IGP/LDP/BGP adjacencies" icon={ShareIcon} />
+              <StatTile label="MPLS Interfaces" value={summary.mpls_interfaces} hint="MPLS enabled" tone="good" icon={BoltIcon} />
+              <StatTile label="Interfaces Up" value={summary.interfaces_up} hint="Operational (oper up)" tone="good" icon={CheckCircleIcon} />
+              <StatTile
                 label="Devices in Error"
                 value={summary.error_devices}
                 hint="Last poll failed"
                 tone={summary.error_devices > 0 ? "bad" : "good"}
+                icon={ExclamationTriangleIcon}
               />
-              <Kpi
+              <StatTile
                 label="Stale Devices"
                 value={summary.stale_devices}
                 hint="Not polled within 2× interval"
                 tone={summary.stale_devices > 0 ? "warn" : "good"}
+                icon={ClockIcon}
               />
             </section>
 

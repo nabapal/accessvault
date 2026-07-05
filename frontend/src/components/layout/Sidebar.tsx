@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ComponentType, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { BrandMark } from "@/components/layout/BrandMark";
@@ -6,6 +6,7 @@ import { BrandMark } from "@/components/layout/BrandMark";
 interface SidebarItem {
   label: string;
   to: string;
+  icon?: ComponentType<{ className?: string }>;
 }
 
 interface SidebarSection {
@@ -131,15 +132,19 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
                   const badgeClasses = active
                     ? "border-primary-500/60 bg-primary-500/15 text-primary-100"
                     : "border-brand-700 bg-brand-900/70 text-slate-300";
+                  const Icon = item.icon;
                   return (
                     <li key={item.to}>
                       <Link to={item.to} className={`${baseClasses} ${activeClasses}`} title={isCollapsed ? item.label : undefined}>
                         {isCollapsed ? (
-                          <span className={`flex h-8 w-8 items-center justify-center rounded-md border text-xs font-semibold uppercase ${badgeClasses}`}>
-                            {item.label.slice(0, 2)}
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-md border ${badgeClasses}`}>
+                            {Icon ? <Icon className="h-4 w-4" /> : <span className="text-xs font-semibold uppercase">{item.label.slice(0, 2)}</span>}
                           </span>
                         ) : (
-                          <span className="truncate">{item.label}</span>
+                          <>
+                            {Icon ? <Icon className="h-4 w-4 shrink-0 opacity-80" /> : null}
+                            <span className="truncate">{item.label}</span>
+                          </>
                         )}
                       </Link>
                     </li>

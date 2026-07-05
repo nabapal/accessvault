@@ -1,5 +1,21 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import {
+  ChartBarSquareIcon,
+  ChartPieIcon,
+  CloudArrowDownIcon,
+  CpuChipIcon,
+  KeyIcon,
+  MapPinIcon,
+  PlusCircleIcon,
+  RectangleGroupIcon,
+  ServerIcon,
+  ServerStackIcon,
+  ShareIcon,
+  Squares2X2Icon,
+  ViewfinderCircleIcon,
+  WrenchScrewdriverIcon
+} from "@heroicons/react/24/outline";
 
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -13,40 +29,40 @@ const SIDEBAR_SECTIONS = [
   {
     title: "VM Inventory",
     items: [
-      { label: "Dashboard", to: "/inventory" },
-      { label: "VM Center", to: "/inventory/virtual-machines" }
+      { label: "Dashboard", to: "/inventory", icon: ChartBarSquareIcon },
+      { label: "VM Center", to: "/inventory/virtual-machines", icon: ServerStackIcon }
     ]
   },
   {
     title: "Data Center Inventory",
     items: [
-      { label: "Fabric Summary", to: "/telco/aci/summary" },
-      { label: "Fabric Nodes", to: "/telco/aci" },
-      { label: "Endpoints", to: "/telco/aci/endpoints" },
-      { label: "Free Ports", to: "/telco/aci/free-ports" },
-      { label: "VLANs", to: "/telco/aci/vlans" }
+      { label: "Fabric Summary", to: "/telco/aci/summary", icon: RectangleGroupIcon },
+      { label: "Fabric Nodes", to: "/telco/aci", icon: CpuChipIcon },
+      { label: "Endpoints", to: "/telco/aci/endpoints", icon: MapPinIcon },
+      { label: "Free Ports", to: "/telco/aci/free-ports", icon: ViewfinderCircleIcon },
+      { label: "VLANs", to: "/telco/aci/vlans", icon: Squares2X2Icon }
     ]
   },
   {
     title: "IP-MPLS Inventory",
     items: [
-      { label: "Summary", to: "/ipmpls/summary" },
-      { label: "Devices", to: "/ipmpls/devices" },
-      { label: "Topology", to: "/ipmpls/topology" }
+      { label: "Summary", to: "/ipmpls/summary", icon: ChartPieIcon },
+      { label: "Devices", to: "/ipmpls/devices", icon: ServerIcon },
+      { label: "Topology", to: "/ipmpls/topology", icon: ShareIcon }
     ]
   },
   {
     title: "Admin",
     items: [
-      { label: "Fabric Onboarding", to: "/telco/onboarding" },
-      { label: "VM Collectors", to: "/inventory/admin" },
-      { label: "IP-MPLS Devices", to: "/ipmpls/admin" }
+      { label: "Fabric Onboarding", to: "/telco/onboarding", icon: PlusCircleIcon },
+      { label: "VM Collectors", to: "/inventory/admin", icon: CloudArrowDownIcon },
+      { label: "IP-MPLS Devices", to: "/ipmpls/admin", icon: WrenchScrewdriverIcon }
     ]
   },
   {
     title: "Access Vault",
     items: [
-      { label: "Credentials", to: "/accessvault" }
+      { label: "Credentials", to: "/accessvault", icon: KeyIcon }
     ]
   }
 ];
