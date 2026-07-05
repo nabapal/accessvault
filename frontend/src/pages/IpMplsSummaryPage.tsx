@@ -133,7 +133,7 @@ export function IpMplsSummaryPage() {
             <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi label="Devices" value={summary.total} hint="Onboarded IP-MPLS devices" />
               <Kpi label="Interfaces" value={summary.total_interfaces} hint={`${summary.interfaces_up} up · ${summary.mpls_interfaces} MPLS-enabled`} />
-              <Kpi label="VRFs" value={summary.total_vrfs} hint="Total VRFs across the fleet" />
+              <Kpi label="VRFs (unique)" value={summary.unique_vrfs} hint={`${summary.total_vrfs} instances across the fleet`} />
               <Kpi label="Neighbors" value={summary.total_neighbors} hint="IGP/LDP/BGP adjacencies" />
               <Kpi label="MPLS Interfaces" value={summary.mpls_interfaces} hint="Interfaces with MPLS enabled" tone="good" />
               <Kpi label="Interfaces Up" value={summary.interfaces_up} hint="Operational (oper up)" tone="good" />

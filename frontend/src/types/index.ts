@@ -580,6 +580,7 @@ export interface IpMplsSummary {
   total: number;
   total_interfaces: number;
   total_vrfs: number;
+  unique_vrfs: number;
   total_neighbors: number;
   mpls_interfaces: number;
   interfaces_up: number;

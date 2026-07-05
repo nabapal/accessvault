@@ -184,6 +184,7 @@ class IpMplsSummary(BaseModel):
     total: int
     total_interfaces: int
     total_vrfs: int
+    unique_vrfs: int
     total_neighbors: int
     mpls_interfaces: int
     interfaces_up: int

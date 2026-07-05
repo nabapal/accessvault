@@ -350,6 +350,7 @@ async def get_summary(
 
     total_interfaces = (await db.execute(select(func.count()).select_from(IpMplsInterface))).scalar_one()
     total_vrfs = (await db.execute(select(func.count()).select_from(IpMplsVrf))).scalar_one()
+    unique_vrfs = (await db.execute(select(func.count(func.distinct(IpMplsVrf.name))))).scalar_one()
     total_neighbors = (await db.execute(select(func.count()).select_from(IpMplsNeighbor))).scalar_one()
     mpls_interfaces = (
         await db.execute(
@@ -389,6 +390,7 @@ async def get_summary(
         total=len(devices),
         total_interfaces=total_interfaces,
         total_vrfs=total_vrfs,
+        unique_vrfs=unique_vrfs,
         total_neighbors=total_neighbors,
         mpls_interfaces=mpls_interfaces,
         interfaces_up=interfaces_up,
