@@ -26,6 +26,20 @@ const statusBadge: Record<string, string> = {
 
 const DEFAULT_PAGE_SIZE = 25;
 
+// Location derived from the first 4 letters of the device name (extend as needed).
+const SITE_CODES: Record<string, string> = {
+  BGLR: "Bangalore",
+  MUMB: "Mumbai",
+  NVMB: "Navi Mumbai",
+  JMNR: "Jamnagar"
+};
+
+const locationFromName = (name?: string | null) => {
+  if (!name) return "--";
+  const code = name.slice(0, 4).toUpperCase();
+  return SITE_CODES[code] ?? code;
+};
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "--";
   try {
@@ -151,6 +165,7 @@ export function IpMplsDevicesPage() {
               <thead className="bg-brand-900/70 text-xs uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="px-4 py-3 text-left">Device</th>
+                  <th className="px-4 py-3 text-left">Location</th>
                   <th className="px-4 py-3 text-left">Mgmt IP</th>
                   <th className="px-4 py-3 text-left">Platform</th>
                   <th className="px-4 py-3 text-left">Role</th>
@@ -165,11 +180,11 @@ export function IpMplsDevicesPage() {
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-400">Loading devices…</td>
+                    <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-400">Loading devices…</td>
                   </tr>
                 ) : devices.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-400">
+                    <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-400">
                       No devices found. Register devices under Admin → IP-MPLS Devices.
                     </td>
                   </tr>
@@ -184,6 +199,7 @@ export function IpMplsDevicesPage() {
                           <div className="text-xs text-slate-500">{d.name}</div>
                         ) : null}
                       </td>
+                      <td className="px-4 py-3 text-slate-100">{locationFromName(d.hostname || d.name)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-100">{d.mgmt_ip}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide ${platformBadge[d.platform] ?? platformBadge.unknown}`}>
