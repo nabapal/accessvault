@@ -42,6 +42,9 @@ from .ipmpls import (
     IpMplsNeighborRead,
     IpMplsSummary,
     IpMplsSyncResult,
+    IpMplsTopology,
+    IpMplsTopologyLink,
+    IpMplsTopologyNode,
     IpMplsVrfRead,
 )
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
@@ -77,6 +80,9 @@ __all__ = [
     "IpMplsVrfRead",
     "IpMplsSyncResult",
     "IpMplsSummary",
+    "IpMplsTopology",
+    "IpMplsTopologyNode",
+    "IpMplsTopologyLink",
     "AciFreePortNode",
     "AciFreePortFabric",
     "AciFreePortReport",

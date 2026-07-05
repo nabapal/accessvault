@@ -26,6 +26,9 @@ from app.schemas import (
     IpMplsNeighborRead,
     IpMplsSummary,
     IpMplsSyncResult,
+    IpMplsTopology,
+    IpMplsTopologyLink,
+    IpMplsTopologyNode,
     IpMplsVrfRead,
 )
 from app.services.crypto import encrypt_secret
@@ -245,6 +248,89 @@ async def list_device_neighbors(
     stmt = stmt.order_by(IpMplsNeighbor.protocol, IpMplsNeighbor.neighbor_id)
     result = await db.execute(stmt)
     return [IpMplsNeighborRead.model_validate(n, from_attributes=True) for n in result.scalars()]
+
+
+@router.get("/topology", response_model=IpMplsTopology)
+async def get_topology(
+    protocol: str = Query(default="isis", description="Adjacency protocol to build the graph from (isis/ldp)"),
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> IpMplsTopology:
+    """Cross-device link-state topology built from collected adjacencies.
+
+    Every neighbor of the chosen protocol becomes a link; the neighbor is matched
+    to a registered device by hostname (else shown as an external node).
+    """
+    protocol = protocol.lower()
+    devices = (await db.execute(select(IpMplsDevice))).scalars().all()
+
+    by_id = {device.id: device for device in devices}
+    by_name: dict[str, IpMplsDevice] = {}
+    for device in devices:
+        for key in (device.hostname, device.name):
+            if key:
+                by_name[key.lower()] = device
+
+    nodes: dict[str, IpMplsTopologyNode] = {}
+
+    def platform_value(device: IpMplsDevice) -> str:
+        return device.platform.value if hasattr(device.platform, "value") else str(device.platform)
+
+    def device_node(device: IpMplsDevice) -> str:
+        node_id = str(device.id)
+        if node_id not in nodes:
+            nodes[node_id] = IpMplsTopologyNode(
+                id=node_id,
+                name=device.hostname or device.name,
+                kind="device",
+                role=device.role,
+                platform=platform_value(device),
+                site=device.site_name,
+                device_id=device.id,
+            )
+        return node_id
+
+    def external_node(system_id: str) -> str:
+        node_id = f"ext:{system_id}"
+        if node_id not in nodes:
+            nodes[node_id] = IpMplsTopologyNode(id=node_id, name=system_id, kind="external")
+        return node_id
+
+    # Include every registered device so isolated nodes still appear.
+    for device in devices:
+        device_node(device)
+
+    neighbors = (
+        await db.execute(select(IpMplsNeighbor).where(IpMplsNeighbor.protocol == protocol))
+    ).scalars().all()
+
+    links: dict[tuple, IpMplsTopologyLink] = {}
+    for nb in neighbors:
+        owner = by_id.get(nb.device_id)
+        if owner is None:
+            continue
+        source = device_node(owner)
+        target_device = by_name.get((nb.neighbor_id or "").lower())
+        target = device_node(target_device) if target_device else external_node(nb.neighbor_id or "unknown")
+        if source == target:
+            continue
+        a, b = sorted((source, target))
+        key = (a, b, protocol)
+        link = links.get(key)
+        if link is None:
+            link = IpMplsTopologyLink(source=a, target=b, protocol=protocol, interfaces=[], count=0)
+            links[key] = link
+        if nb.interface and nb.interface not in link.interfaces:
+            link.interfaces.append(nb.interface)
+        link.count += 1
+
+    return IpMplsTopology(
+        nodes=list(nodes.values()),
+        links=list(links.values()),
+        total_nodes=len(nodes),
+        total_links=len(links),
+        protocol=protocol,
+    )
 
 
 @router.get("/summary", response_model=IpMplsSummary)

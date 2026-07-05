@@ -85,3 +85,8 @@ export const syncIpMplsDevice = async (deviceId: string): Promise<IpMplsSyncResu
   const { data } = await api.post<IpMplsSyncResult>(`/ipmpls/devices/${deviceId}/sync`);
   return data;
 };
+
+export const fetchIpMplsTopology = async (protocol = "isis"): Promise<import("@/types").IpMplsTopology> => {
+  const { data } = await api.get<import("@/types").IpMplsTopology>("/ipmpls/topology", { params: { protocol } });
+  return data;
+};

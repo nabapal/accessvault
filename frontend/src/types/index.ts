@@ -629,3 +629,29 @@ export interface IpMplsNeighbor {
   vrf?: string | null;
   attributes: Record<string, unknown>;
 }
+
+export interface IpMplsTopologyNode {
+  id: string;
+  name: string;
+  kind: string;
+  role?: string | null;
+  platform?: string | null;
+  site?: string | null;
+  device_id?: string | null;
+}
+
+export interface IpMplsTopologyLink {
+  source: string;
+  target: string;
+  protocol: string;
+  interfaces: string[];
+  count: number;
+}
+
+export interface IpMplsTopology {
+  nodes: IpMplsTopologyNode[];
+  links: IpMplsTopologyLink[];
+  total_nodes: number;
+  total_links: number;
+  protocol: string;
+}

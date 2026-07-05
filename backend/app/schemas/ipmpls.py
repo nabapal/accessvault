@@ -152,6 +152,32 @@ class IpMplsSyncResult(BaseModel):
     device: IpMplsDeviceRead
 
 
+class IpMplsTopologyNode(BaseModel):
+    id: str
+    name: str
+    kind: str  # "device" | "external"
+    role: Optional[str] = None
+    platform: Optional[str] = None
+    site: Optional[str] = None
+    device_id: Optional[UUID] = None
+
+
+class IpMplsTopologyLink(BaseModel):
+    source: str
+    target: str
+    protocol: str
+    interfaces: List[str] = Field(default_factory=list)
+    count: int = 0
+
+
+class IpMplsTopology(BaseModel):
+    nodes: List[IpMplsTopologyNode] = Field(default_factory=list)
+    links: List[IpMplsTopologyLink] = Field(default_factory=list)
+    total_nodes: int
+    total_links: int
+    protocol: str
+
+
 class IpMplsSummary(BaseModel):
     total: int
     total_interfaces: int
