@@ -11,7 +11,9 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { CHART_PALETTE, Donut, DonutLegend, RadialGauge } from "@/components/ui/charts";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton, StatTileSkeleton } from "@/components/ui/Skeleton";
 import { StatTile } from "@/components/ui/StatTile";
 import { toast } from "@/components/ui/toast";
@@ -125,12 +127,10 @@ export function IpMplsSummaryPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header>
-          <h1 className="text-2xl font-semibold text-white">IP-MPLS Summary</h1>
-          <p className="mt-1 text-sm text-slate-300">
-            Fleet-wide rollup across location, role, platform, model, OS, and routing footprint.
-          </p>
-        </header>
+        <PageHeader
+          title="IP-MPLS Summary"
+          description="Fleet-wide rollup across location, role, platform, model, OS, and routing footprint."
+        />
 
         {isLoading ? (
           <>
@@ -187,6 +187,32 @@ export function IpMplsSummaryPage() {
                 tone={summary.stale_devices > 0 ? "warn" : "good"}
                 icon={ClockIcon}
               />
+            </section>
+
+            {/* Visual overview: ratios + role distribution */}
+            <section className="grid gap-4 lg:grid-cols-3">
+              <div className="flex items-center justify-center rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                <RadialGauge value={summary.interfaces_up} max={summary.total_interfaces} label="Interfaces Up" tone="good" />
+              </div>
+              <div className="flex items-center justify-center rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                <RadialGauge value={summary.mpls_interfaces} max={summary.total_interfaces} label="MPLS Coverage" tone="default" />
+              </div>
+              <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                <h2 className="mb-3 text-sm font-semibold text-slate-100">Devices by Role</h2>
+                {(() => {
+                  const slices = Object.entries(summary.by_role)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([label, value], i) => ({ label, value, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+                  return (
+                    <div className="flex items-center gap-4">
+                      <Donut data={slices} size={150} centerValue={summary.total} centerLabel="devices" />
+                      <div className="min-w-0 flex-1">
+                        <DonutLegend data={slices} />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </section>
 
             {/* Dimension breakdowns */}

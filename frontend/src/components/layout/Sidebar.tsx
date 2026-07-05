@@ -94,7 +94,7 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
           <button
             type="button"
             onClick={onToggle}
-            className="rounded border border-brand-700 bg-brand-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white"
+            className="rounded border border-brand-700 bg-brand-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
           >
             {isCollapsed ? ">" : "<"}
@@ -114,7 +114,7 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
                   type="button"
                   onClick={() => toggleSection(section.title)}
                   aria-expanded={open}
-                  className="flex w-full items-center justify-between rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:text-slate-300"
+                  className="flex w-full items-center justify-between rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                 >
                   <span>{section.title}</span>
                   <span className={`text-[10px] text-slate-600 transition-transform ${open ? "rotate-90" : ""}`}>▸</span>

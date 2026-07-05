@@ -4,6 +4,7 @@ import { ServerIcon } from "@heroicons/react/24/outline";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { fetchIpMplsDevices, fetchIpMplsSummary } from "@/services/ipmpls";
 import { parseApiDate } from "@/utils/datetime";
@@ -92,41 +93,41 @@ export function IpMplsDevicesPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">IP-MPLS Devices</h1>
-            <p className="mt-1 text-sm text-slate-300">Cisco IOS-XE and IOS-XR routers collected over SSH.</p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex rounded-md border border-brand-700 bg-brand-800/60 p-1 text-xs font-medium">
-              {PLATFORM_FILTERS.map((f) => (
-                <button
-                  key={f.value}
-                  type="button"
-                  onClick={() => {
-                    setPlatform(f.value);
-                    setPage(1);
-                  }}
-                  className={`rounded px-3 py-1 transition ${
-                    platform === f.value ? "bg-primary-600 text-white" : "text-slate-200 hover:bg-brand-700"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
+        <PageHeader
+          title="IP-MPLS Devices"
+          description="Cisco IOS-XE and IOS-XR routers collected over SSH."
+          actions={
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex rounded-md border border-brand-700 bg-brand-800/60 p-1 text-xs font-medium">
+                {PLATFORM_FILTERS.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => {
+                      setPlatform(f.value);
+                      setPage(1);
+                    }}
+                    className={`rounded px-3 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+                      platform === f.value ? "bg-primary-600 text-white" : "text-slate-200 hover:bg-brand-700"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search name, IP, role, site, rack, model, serial..."
+                className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-80"
+              />
             </div>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search name, IP, role, site, rack, model, serial..."
-              className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-80"
-            />
-          </div>
-        </header>
+          }
+        />
 
         {error ? <div className="rounded border border-rose-500/50 bg-rose-500/10 p-4 text-sm text-rose-100">{error}</div> : null}
 
