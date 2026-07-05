@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("mgmt_ip", sa.String(), nullable=False),
         sa.Column("port", sa.Integer(), nullable=False, server_default="22"),
         sa.Column("platform", sa.String(), nullable=False, server_default="unknown"),
-        sa.Column("role", sa.String(), nullable=False, server_default="unknown"),
+        sa.Column("role", sa.String(), nullable=True),
         sa.Column("model", sa.String(), nullable=True),
         sa.Column("serial", sa.String(), nullable=True),
         sa.Column("os_version", sa.String(), nullable=True),

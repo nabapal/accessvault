@@ -10,8 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, require_admin
 from app.models import (
     IpMplsDevice,
-    IpMplsDeviceRole,
-    IpMplsDeviceStatus,
     IpMplsInterface,
     IpMplsModule,
     IpMplsPlatform,
@@ -227,5 +225,5 @@ async def get_summary(
         total_interfaces=total_interfaces,
         by_platform=dict(Counter(value(d.platform) for d in devices)),
         by_status=dict(Counter(value(d.status) for d in devices)),
-        by_role=dict(Counter(value(d.role) for d in devices)),
+        by_role=dict(Counter((d.role or "unknown") for d in devices)),
     )

@@ -512,7 +512,6 @@ export interface TelcoOnboardingJob {
 }
 
 export type IpMplsPlatform = "iosxe" | "iosxr" | "unknown";
-export type IpMplsDeviceRole = "pe" | "p" | "rr" | "ce" | "unknown";
 export type IpMplsDeviceStatus = "pending" | "ok" | "error";
 
 export interface IpMplsDevice {
@@ -522,7 +521,7 @@ export interface IpMplsDevice {
   mgmt_ip: string;
   port: number;
   platform: IpMplsPlatform;
-  role: IpMplsDeviceRole;
+  role?: string | null;
   model?: string | null;
   serial?: string | null;
   os_version?: string | null;
@@ -598,7 +597,7 @@ export interface IpMplsDeviceCreate {
   mgmt_ip: string;
   port?: number;
   platform?: IpMplsPlatform;
-  role?: IpMplsDeviceRole;
+  role?: string;
   description?: string;
   poll_interval_seconds?: number;
   username: string;

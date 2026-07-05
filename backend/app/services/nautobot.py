@@ -65,6 +65,60 @@ def compute_device_location(device: Dict[str, object]) -> DeviceLocation:
     return site_name, rack_location
 
 
+@dataclass
+class NautobotDeviceFacts:
+    role: Optional[str]
+    site: Optional[str]
+    rack: Optional[str]
+
+
+def _derive_role(device: Dict[str, object]) -> Optional[str]:
+    # Nautobot 2.x exposes "role"; 1.x used "device_role".
+    role = device.get("role") or device.get("device_role")
+    if isinstance(role, dict):
+        return role.get("name") or role.get("display") or role.get("slug")
+    return role if isinstance(role, str) else None
+
+
+def _derive_site_name(device: Dict[str, object]) -> Optional[str]:
+    for key in ("site", "location"):
+        value = device.get(key)
+        if isinstance(value, dict) and value.get("name"):
+            return value["name"]
+    tenant = device.get("tenant")
+    return tenant.get("name") if isinstance(tenant, dict) else None
+
+
+async def fetch_nautobot_device_facts_by_name(
+    base_url: str,
+    token: str,
+    name: str,
+    *,
+    timeout: float = 15.0,
+) -> Optional[NautobotDeviceFacts]:
+    """Look up a single device by exact name and return its role/site/rack."""
+    if not name:
+        return None
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Token {token}",
+        "User-Agent": "InfraPulse-Collector/1.0",
+    }
+    timeout_config = httpx.Timeout(timeout, read=timeout)
+    async with httpx.AsyncClient(base_url=base_url.rstrip("/"), headers=headers, timeout=timeout_config) as client:
+        response = await client.get("/dcim/devices/", params={"name": name, "limit": "1"})
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        if not results or not isinstance(results[0], dict):
+            return None
+        device = results[0]
+        return NautobotDeviceFacts(
+            role=_derive_role(device),
+            site=_derive_site_name(device),
+            rack=_derive_rack_location(device),
+        )
+
+
 async def fetch_nautobot_device_locations(
     base_url: str,
     token: str,

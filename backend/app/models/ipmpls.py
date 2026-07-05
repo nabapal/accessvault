@@ -48,14 +48,6 @@ class IpMplsDeviceStatus(str, PyEnum):
     ERROR = "error"
 
 
-class IpMplsDeviceRole(str, PyEnum):
-    PE = "pe"
-    P = "p"
-    RR = "rr"
-    CE = "ce"
-    UNKNOWN = "unknown"
-
-
 class IpMplsDevice(Base):
     __tablename__ = "ip_mpls_devices"
     __table_args__ = (UniqueConstraint("mgmt_ip", name="uq_ipmpls_device_mgmt_ip"),)
@@ -66,7 +58,8 @@ class IpMplsDevice(Base):
     mgmt_ip = Column(String, nullable=False)
     port = Column(Integer, nullable=False, default=22)
     platform = Column(Enum(IpMplsPlatform), nullable=False, default=IpMplsPlatform.UNKNOWN)
-    role = Column(Enum(IpMplsDeviceRole), nullable=False, default=IpMplsDeviceRole.UNKNOWN)
+    # Free-text role sourced from Nautobot's device role (e.g. SAR, CAR, CRR, CPE).
+    role = Column(String, nullable=True)
     model = Column(String, nullable=True)
     serial = Column(String, nullable=True)
     os_version = Column(String, nullable=True)

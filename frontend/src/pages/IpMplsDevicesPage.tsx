@@ -153,6 +153,8 @@ export function IpMplsDevicesPage() {
                   <th className="px-4 py-3 text-left">Device</th>
                   <th className="px-4 py-3 text-left">Mgmt IP</th>
                   <th className="px-4 py-3 text-left">Platform</th>
+                  <th className="px-4 py-3 text-left">Role</th>
+                  <th className="px-4 py-3 text-left">Site</th>
                   <th className="px-4 py-3 text-left">Model</th>
                   <th className="px-4 py-3 text-left">Serial</th>
                   <th className="px-4 py-3 text-left">OS Version</th>
@@ -163,11 +165,11 @@ export function IpMplsDevicesPage() {
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-400">Loading devices…</td>
+                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-400">Loading devices…</td>
                   </tr>
                 ) : devices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-400">
+                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-400">
                       No devices found. Register devices under Admin → IP-MPLS Devices.
                     </td>
                   </tr>
@@ -188,6 +190,8 @@ export function IpMplsDevicesPage() {
                           {d.platform}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-slate-100">{d.role ?? "--"}</td>
+                      <td className="px-4 py-3 text-slate-100">{d.site_name ?? "--"}</td>
                       <td className="px-4 py-3 text-slate-100">{d.model ?? "--"}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-300">{d.serial ?? "--"}</td>
                       <td className="px-4 py-3 text-slate-100">{d.os_version ?? "--"}</td>

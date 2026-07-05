@@ -23,7 +23,6 @@ from .aci import (
 from .telco import TelcoFabricOnboardingJob, TelcoFabricType, TelcoOnboardingStatus
 from .ipmpls import (
     IpMplsDevice,
-    IpMplsDeviceRole,
     IpMplsDeviceStatus,
     IpMplsInterface,
     IpMplsModule,
@@ -56,7 +55,6 @@ __all__ = [
     "TelcoFabricType",
     "TelcoOnboardingStatus",
     "IpMplsDevice",
-    "IpMplsDeviceRole",
     "IpMplsDeviceStatus",
     "IpMplsInterface",
     "IpMplsModule",

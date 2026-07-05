@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models.ipmpls import IpMplsDeviceRole, IpMplsDeviceStatus, IpMplsPlatform
+from app.models.ipmpls import IpMplsDeviceStatus, IpMplsPlatform
 
 
 class IpMplsDeviceBase(BaseModel):
@@ -14,7 +14,7 @@ class IpMplsDeviceBase(BaseModel):
     mgmt_ip: str
     port: int = 22
     platform: IpMplsPlatform = IpMplsPlatform.UNKNOWN
-    role: IpMplsDeviceRole = IpMplsDeviceRole.UNKNOWN
+    role: Optional[str] = None
     description: Optional[str] = None
     poll_interval_seconds: int = 900
     connection_params: Dict[str, Any] = Field(default_factory=dict)
@@ -31,7 +31,7 @@ class IpMplsDeviceUpdate(BaseModel):
     mgmt_ip: Optional[str] = None
     port: Optional[int] = None
     platform: Optional[IpMplsPlatform] = None
-    role: Optional[IpMplsDeviceRole] = None
+    role: Optional[str] = None
     description: Optional[str] = None
     poll_interval_seconds: Optional[int] = None
     connection_params: Optional[Dict[str, Any]] = None
@@ -47,7 +47,7 @@ class IpMplsDeviceRead(BaseModel):
     mgmt_ip: str
     port: int
     platform: IpMplsPlatform
-    role: IpMplsDeviceRole
+    role: Optional[str] = None
     model: Optional[str] = None
     serial: Optional[str] = None
     os_version: Optional[str] = None

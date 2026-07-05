@@ -7,12 +7,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import httpx
 from netmiko import ConnectHandler
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import IpMplsDevice, IpMplsDeviceStatus, IpMplsInterface, IpMplsModule, IpMplsPlatform
 from app.services.crypto import decrypt_secret
+from app.services.nautobot import fetch_nautobot_device_facts_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +207,35 @@ async def _apply_snapshot(session: AsyncSession, device: IpMplsDevice, snapshot:
         session.add(IpMplsModule(device_id=device.id, **entry))
 
 
+async def _enrich_from_nautobot(device: IpMplsDevice) -> None:
+    """Populate role / site / rack from Nautobot, matched by device name (hostname first)."""
+    settings = get_settings()
+    base_url = settings.nautobot_base_url
+    token = settings.nautobot_token
+    if not base_url or not token:
+        return
+
+    candidates = [name for name in (device.hostname, device.name) if name]
+    facts = None
+    for candidate in dict.fromkeys(candidates):  # de-dup, preserve order
+        try:
+            facts = await fetch_nautobot_device_facts_by_name(base_url, token, candidate)
+        except httpx.HTTPError as exc:
+            logger.debug("Nautobot lookup failed for %s: %s", candidate, exc)
+            return
+        if facts is not None:
+            break
+
+    if facts is None:
+        return
+    if facts.role:
+        device.role = facts.role
+    if facts.site:
+        device.site_name = facts.site
+    if facts.rack:
+        device.rack_location = facts.rack
+
+
 async def run_collection_for_device(
     session: AsyncSession,
     device: IpMplsDevice,
@@ -243,6 +275,11 @@ async def run_collection_for_device(
 
     snapshot = _build_snapshot(raw)
     await _apply_snapshot(session, device, snapshot)
+    # Best-effort enrichment; never fail the poll because Nautobot is unavailable.
+    try:
+        await _enrich_from_nautobot(device)
+    except Exception:  # pragma: no cover - enrichment must not break collection
+        logger.debug("Nautobot enrichment error for %s", device.mgmt_ip, exc_info=True)
     device.last_polled_at = timestamp
     device.status = IpMplsDeviceStatus.OK
     device.last_error = None
