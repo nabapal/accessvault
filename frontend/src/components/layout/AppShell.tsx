@@ -11,7 +11,7 @@ interface AppShellProps {
 
 const SIDEBAR_SECTIONS = [
   {
-    title: "IPSE",
+    title: "Infrastructure",
     items: [
   { label: "Dashboard", to: "/inventory" },
       { label: "VM Center", to: "/inventory/virtual-machines" },

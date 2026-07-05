@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import { BrandMark } from "@/components/layout/BrandMark";
+
 interface SidebarItem {
   label: string;
   to: string;
@@ -38,7 +40,16 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between">
-          {!isCollapsed ? <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary-200">IPSE</p> : null}
+          {!isCollapsed ? (
+            <div className="flex items-center gap-2">
+              <BrandMark size={28} />
+              <span className="text-sm font-semibold tracking-wide text-white">
+                Infra<span className="text-primary-300">Pulse</span>
+              </span>
+            </div>
+          ) : (
+            <BrandMark size={28} />
+          )}
           <button
             type="button"
             onClick={onToggle}

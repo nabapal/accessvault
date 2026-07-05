@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
+import { BrandMark } from "@/components/layout/BrandMark";
 import { AuthState, useAuthStore } from "@/stores/auth";
 
 export function LoginPage() {
@@ -25,9 +26,14 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-brand-900 px-4">
-      <div className="w-full max-w-md rounded-lg border border-brand-700 bg-brand-900/80 p-8 shadow-xl shadow-black/40">
-        <h1 className="mb-2 text-center text-2xl font-semibold text-slate-100 tracking-wide">InfraPulse</h1>
-        <p className="mb-6 text-center text-xs uppercase tracking-[0.35em] text-primary-200">Secure operations portal</p>
+      <div className="w-full max-w-md rounded-2xl border border-brand-700 bg-brand-900/80 p-8 shadow-xl shadow-black/40">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <BrandMark size={52} className="rounded-xl" />
+          <h1 className="mt-4 text-2xl font-semibold tracking-wide text-white">
+            Infra<span className="text-primary-300">Pulse</span>
+          </h1>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.35em] text-primary-200/80">Unified infrastructure intelligence</p>
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-400" htmlFor="email">

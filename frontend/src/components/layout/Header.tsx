@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/layout/BrandMark";
 import { AuthState, useAuthStore } from "@/stores/auth";
 
 export function Header() {
@@ -5,10 +6,15 @@ export function Header() {
   const logout = useAuthStore((state: AuthState) => state.logout);
 
   return (
-    <header className="flex items-center justify-between border-b border-brand-800 bg-brand-900/80 px-6 py-4">
-      <div>
-        <h1 className="text-lg font-semibold text-white tracking-wide">InfraPulse</h1>
-        <p className="text-xs uppercase tracking-[0.3em] text-primary-200">Unified infrastructure intelligence</p>
+    <header className="flex items-center justify-between border-b border-brand-800 bg-gradient-to-b from-brand-900 to-brand-900/80 px-6 py-4">
+      <div className="flex items-center gap-3">
+        <BrandMark size={36} />
+        <div>
+          <h1 className="text-lg font-semibold tracking-wide text-white">
+            Infra<span className="text-primary-300">Pulse</span>
+          </h1>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-primary-200/80">Unified infrastructure intelligence</p>
+        </div>
       </div>
       <div className="flex items-center gap-4">
         {user && (
