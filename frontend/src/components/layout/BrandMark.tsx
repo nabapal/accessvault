@@ -3,7 +3,8 @@ interface BrandMarkProps {
   className?: string;
 }
 
-// NetVerse AI logo mark: a pulse/heartbeat line on a teal gradient tile.
+// NetVerse AI logo mark: a connected-node network (central hub + satellites)
+// on a teal gradient tile — "network universe / infrastructure intelligence".
 export function BrandMark({ size = 32, className = "" }: BrandMarkProps) {
   return (
     <span
@@ -12,16 +13,25 @@ export function BrandMark({ size = 32, className = "" }: BrandMarkProps) {
       aria-hidden="true"
     >
       <svg
-        width={size * 0.62}
-        height={size * 0.62}
+        width={size * 0.64}
+        height={size * 0.64}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2.4"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M2 12h4l2.5-7 4 14 2.5-7H22" />
+        {/* links from the central hub to the satellite nodes */}
+        <line x1="12" y1="12" x2="12" y2="4.5" />
+        <line x1="12" y1="12" x2="5.5" y2="18" />
+        <line x1="12" y1="12" x2="18.5" y2="18" />
+        {/* satellite nodes */}
+        <circle cx="12" cy="4.5" r="2" fill="currentColor" stroke="none" />
+        <circle cx="5.5" cy="18" r="2" fill="currentColor" stroke="none" />
+        <circle cx="18.5" cy="18" r="2" fill="currentColor" stroke="none" />
+        {/* central hub */}
+        <circle cx="12" cy="12" r="2.7" fill="currentColor" stroke="none" />
       </svg>
     </span>
   );
