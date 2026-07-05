@@ -19,5 +19,7 @@ pytest
 pytest-asyncio
 httpx
 pyvmomi
+netmiko
+ntc-templates
 eval-type-backport
 alembic

@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     apic_verify_ssl: bool = False
     nautobot_base_url: Optional[str] = None
     nautobot_token: Optional[str] = None
+    ipmpls_poller_enabled: bool = True
+    ipmpls_poll_tick_seconds: int = Field(default=30, ge=5, le=600)
+    # Optional default SSH credentials for IP-MPLS devices (per-device creds in the
+    # DB take precedence; these are a convenience fallback, e.g. for a shared lab).
+    net_username: Optional[str] = None
+    net_password: Optional[str] = None
+    net_enable: Optional[str] = None
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",

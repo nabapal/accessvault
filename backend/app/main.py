@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.migrator import run_migrations
 from app.services.inventory_poller import build_inventory_poller
+from app.services.ipmpls_poller import build_ipmpls_poller
 from app.services.telco_collector import build_telco_poller
 
 settings = get_settings()
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
 
     inventory_poller = None
     telco_poller = None
+    ipmpls_poller = None
 
     if settings.inventory_poller_enabled:
         inventory_poller = build_inventory_poller(
@@ -41,9 +43,20 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
     else:
         logger.info("Telco poller disabled via configuration")
 
+    if settings.ipmpls_poller_enabled:
+        ipmpls_poller = build_ipmpls_poller(
+            session_factory=AsyncSessionLocal,
+            tick_seconds=settings.ipmpls_poll_tick_seconds,
+        )
+        await ipmpls_poller.start()
+    else:
+        logger.info("IP-MPLS poller disabled via configuration")
+
     try:
         yield
     finally:
+        if ipmpls_poller:
+            await ipmpls_poller.stop()
         if telco_poller:
             await telco_poller.stop()
         if inventory_poller:

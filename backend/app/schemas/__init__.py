@@ -32,6 +32,16 @@ from .telco import (
     TelcoOnboardingJobRead,
     TelcoOnboardingValidationRequest,
 )
+from .ipmpls import (
+    IpMplsDeviceCreate,
+    IpMplsDevicePage,
+    IpMplsDeviceRead,
+    IpMplsDeviceUpdate,
+    IpMplsInterfaceRead,
+    IpMplsModuleRead,
+    IpMplsSummary,
+    IpMplsSyncResult,
+)
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
 
@@ -55,6 +65,14 @@ __all__ = [
     "AciFabricEndpointPage",
     "AciFabricVlanRead",
     "AciFabricVlanPage",
+    "IpMplsDeviceCreate",
+    "IpMplsDeviceUpdate",
+    "IpMplsDeviceRead",
+    "IpMplsDevicePage",
+    "IpMplsInterfaceRead",
+    "IpMplsModuleRead",
+    "IpMplsSyncResult",
+    "IpMplsSummary",
     "AciFreePortNode",
     "AciFreePortFabric",
     "AciFreePortReport",

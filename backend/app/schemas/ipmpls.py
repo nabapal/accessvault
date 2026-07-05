@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+from app.models.ipmpls import IpMplsDeviceRole, IpMplsDeviceStatus, IpMplsPlatform
+
+
+class IpMplsDeviceBase(BaseModel):
+    name: str
+    mgmt_ip: str
+    port: int = 22
+    platform: IpMplsPlatform = IpMplsPlatform.UNKNOWN
+    role: IpMplsDeviceRole = IpMplsDeviceRole.UNKNOWN
+    description: Optional[str] = None
+    poll_interval_seconds: int = 900
+    connection_params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class IpMplsDeviceCreate(IpMplsDeviceBase):
+    username: str
+    password: str
+    enable: Optional[str] = None
+
+
+class IpMplsDeviceUpdate(BaseModel):
+    name: Optional[str] = None
+    mgmt_ip: Optional[str] = None
+    port: Optional[int] = None
+    platform: Optional[IpMplsPlatform] = None
+    role: Optional[IpMplsDeviceRole] = None
+    description: Optional[str] = None
+    poll_interval_seconds: Optional[int] = None
+    connection_params: Optional[Dict[str, Any]] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    enable: Optional[str] = None
+
+
+class IpMplsDeviceRead(BaseModel):
+    id: UUID
+    name: str
+    hostname: Optional[str] = None
+    mgmt_ip: str
+    port: int
+    platform: IpMplsPlatform
+    role: IpMplsDeviceRole
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    os_version: Optional[str] = None
+    uptime_seconds: Optional[int] = None
+    uptime_text: Optional[str] = None
+    description: Optional[str] = None
+    site_name: Optional[str] = None
+    rack_location: Optional[str] = None
+    poll_interval_seconds: int
+    status: IpMplsDeviceStatus
+    last_polled_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    username: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IpMplsInterfaceRead(BaseModel):
+    id: UUID
+    device_id: UUID
+    name: str
+    description: Optional[str] = None
+    admin_state: Optional[str] = None
+    oper_state: Optional[str] = None
+    ip_address: Optional[str] = None
+    prefix_len: Optional[int] = None
+    vrf: Optional[str] = None
+    speed: Optional[str] = None
+    mtu: Optional[int] = None
+    mac: Optional[str] = None
+    mpls_enabled: Optional[bool] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IpMplsModuleRead(BaseModel):
+    id: UUID
+    device_id: UUID
+    name: Optional[str] = None
+    description: Optional[str] = None
+    pid: Optional[str] = None
+    vid: Optional[str] = None
+    serial: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IpMplsDevicePage(BaseModel):
+    items: List[IpMplsDeviceRead]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
+    has_prev: bool
+
+
+class IpMplsSyncResult(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    interfaces: int = 0
+    modules: int = 0
+    device: IpMplsDeviceRead
+
+
+class IpMplsSummary(BaseModel):
+    total: int
+    total_interfaces: int
+    by_platform: Dict[str, int]
+    by_status: Dict[str, int]
+    by_role: Dict[str, int]
