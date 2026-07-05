@@ -1,3 +1,4 @@
+import { parseApiDate } from "@/utils/datetime";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -190,7 +191,7 @@ export function InventoryVMsPage() {
       return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata",
         dateStyle: "medium",
         timeStyle: "short"
-      }).format(new Date(value));
+      }).format(parseApiDate(value));
     } catch {
       return value;
     }

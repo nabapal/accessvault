@@ -1,3 +1,4 @@
+import { parseApiDate } from "@/utils/datetime";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -69,7 +70,7 @@ const formatDateTime = (value?: string | null) => {
     return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata",
       dateStyle: "medium",
       timeStyle: "short"
-    }).format(new Date(value));
+    }).format(parseApiDate(value));
   } catch {
     return value;
   }

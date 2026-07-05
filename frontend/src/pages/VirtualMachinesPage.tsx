@@ -1,3 +1,4 @@
+import { parseApiDate } from "@/utils/datetime";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { Dialog, Transition } from "@headlessui/react";
@@ -65,7 +66,7 @@ const formatDateTime = (value?: string | null): string => {
     return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata",
       dateStyle: "medium",
       timeStyle: "short"
-    }).format(new Date(value));
+    }).format(parseApiDate(value));
   } catch {
     return value;
   }
