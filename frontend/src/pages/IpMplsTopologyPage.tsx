@@ -431,26 +431,33 @@ export function IpMplsTopologyPage() {
 
   const allLocationsSelected = locationsPresent.length > 0 && locationsPresent.every((l) => selectedLocations.has(l));
 
-  // Edge click → link detail. Re-bound when data/grouping changes so it isn't stale.
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    const keyOf = (id: string): string | null => {
-      const n = nodeById.get(id);
-      if (!n) return null;
-      if (groupBy === "role") return `${groupOf(n.name)}:${roleKey(n.kind, n.role)}`;
-      if (groupBy === "location") return groupOf(n.name);
-      return id;
-    };
-    const aggLabel = (key: string): string => {
-      if (key.includes(":")) {
-        const [grp, layer] = key.split(":");
-        return `${LOCATION_LABEL[grp] ?? grp} · ${layer}`;
-      }
-      return LOCATION_LABEL[key] ?? key;
-    };
+  // Latest data for the edge-tap handler, which is bound once per graph in registerCy
+  // (reading a ref avoids stale closures / effect-timing races).
+  const edgeDataRef = useRef({ shownLinks, linkByPair, nodeById, groupBy });
+  edgeDataRef.current = { shownLinks, linkByPair, nodeById, groupBy };
+
+  const registerCy = (cy: Core) => {
+    cyRef.current = cy;
+    cy.on("tap", (evt) => {
+      if (evt.target === cy) setLinkInfo(null);
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const onEdge = async (evt: any) => {
+    cy.on("tap", "edge", async (evt: any) => {
+      const { shownLinks, linkByPair, nodeById, groupBy } = edgeDataRef.current;
+      const keyOf = (id: string): string | null => {
+        const n = nodeById.get(id);
+        if (!n) return null;
+        if (groupBy === "role") return `${groupOf(n.name)}:${roleKey(n.kind, n.role)}`;
+        if (groupBy === "location") return groupOf(n.name);
+        return id;
+      };
+      const aggLabel = (key: string): string => {
+        if (key.includes(":")) {
+          const [grp, layer] = key.split(":");
+          return `${LOCATION_LABEL[grp] ?? grp} · ${layer}`;
+        }
+        return LOCATION_LABEL[key] ?? key;
+      };
       const d = evt.target.data();
       if (d.agg) {
         const [ka, kb] = String(d.id).replace(/^e_/, "").split("|");
@@ -499,18 +506,6 @@ export function IpMplsTopologyPage() {
         count: link.count,
         endpoints
       });
-    };
-    cy.on("tap", "edge", onEdge);
-    return () => {
-      cy.removeListener("tap", "edge", onEdge);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shownLinks, linkByPair, nodeById, groupBy]);
-
-  const registerCy = (cy: Core) => {
-    cyRef.current = cy;
-    cy.on("tap", (evt) => {
-      if (evt.target === cy) setLinkInfo(null);
     });
     cy.on("tap", "node", (evt) => {
       const d = evt.target.data();
