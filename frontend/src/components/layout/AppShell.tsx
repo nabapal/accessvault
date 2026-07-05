@@ -30,6 +30,7 @@ const SIDEBAR_SECTIONS = [
   {
     title: "IP-MPLS Inventory",
     items: [
+      { label: "Summary", to: "/ipmpls/summary" },
       { label: "Devices", to: "/ipmpls/devices" },
       { label: "Topology", to: "/ipmpls/topology" }
     ]

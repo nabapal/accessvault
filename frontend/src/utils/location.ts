@@ -12,3 +12,9 @@ export const locationFromName = (name?: string | null): string => {
   const code = name.slice(0, 4).toUpperCase();
   return SITE_CODES[code] ?? code;
 };
+
+// Map a raw 4-letter site code (as returned by the summary API) to its display name.
+export const locationLabelFromCode = (code?: string | null): string => {
+  if (!code || code === "unknown") return "Unknown";
+  return SITE_CODES[code.toUpperCase()] ?? code;
+};

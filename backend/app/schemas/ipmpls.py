@@ -183,6 +183,16 @@ class IpMplsTopology(BaseModel):
 class IpMplsSummary(BaseModel):
     total: int
     total_interfaces: int
+    total_vrfs: int
+    total_neighbors: int
+    mpls_interfaces: int
+    interfaces_up: int
+    error_devices: int
+    stale_devices: int
     by_platform: Dict[str, int]
     by_status: Dict[str, int]
     by_role: Dict[str, int]
+    by_location: Dict[str, int]
+    by_model: Dict[str, int]
+    by_os: Dict[str, int]
+    by_neighbor_protocol: Dict[str, int]

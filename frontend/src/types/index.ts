@@ -579,9 +579,19 @@ export interface IpMplsModule {
 export interface IpMplsSummary {
   total: number;
   total_interfaces: number;
+  total_vrfs: number;
+  total_neighbors: number;
+  mpls_interfaces: number;
+  interfaces_up: number;
+  error_devices: number;
+  stale_devices: number;
   by_platform: Record<string, number>;
   by_status: Record<string, number>;
   by_role: Record<string, number>;
+  by_location: Record<string, number>;
+  by_model: Record<string, number>;
+  by_os: Record<string, number>;
+  by_neighbor_protocol: Record<string, number>;
 }
 
 export interface IpMplsSyncResult {

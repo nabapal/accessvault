@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -346,15 +347,58 @@ async def get_summary(
     _: object = Depends(get_current_user),
 ) -> IpMplsSummary:
     devices = (await db.execute(select(IpMplsDevice))).scalars().all()
+
     total_interfaces = (await db.execute(select(func.count()).select_from(IpMplsInterface))).scalar_one()
+    total_vrfs = (await db.execute(select(func.count()).select_from(IpMplsVrf))).scalar_one()
+    total_neighbors = (await db.execute(select(func.count()).select_from(IpMplsNeighbor))).scalar_one()
+    mpls_interfaces = (
+        await db.execute(
+            select(func.count()).select_from(IpMplsInterface).where(IpMplsInterface.mpls_enabled.is_(True))
+        )
+    ).scalar_one()
+    interfaces_up = (
+        await db.execute(
+            select(func.count())
+            .select_from(IpMplsInterface)
+            .where(func.lower(IpMplsInterface.oper_state) == "up")
+        )
+    ).scalar_one()
+    protocol_rows = (
+        await db.execute(select(IpMplsNeighbor.protocol, func.count()).group_by(IpMplsNeighbor.protocol))
+    ).all()
 
     def value(item) -> str:
         return item.value if hasattr(item, "value") else str(item)
 
+    def location_code(device: IpMplsDevice) -> str:
+        source = (device.hostname or device.name or "").strip()
+        return source[:4].upper() if len(source) >= 4 else (source.upper() or "unknown")
+
+    now = datetime.now(timezone.utc)
+
+    def is_stale(device: IpMplsDevice) -> bool:
+        if device.last_polled_at is None:
+            return True
+        last = device.last_polled_at
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        interval = device.poll_interval_seconds or 900
+        return (now - last).total_seconds() > interval * 2
+
     return IpMplsSummary(
         total=len(devices),
         total_interfaces=total_interfaces,
+        total_vrfs=total_vrfs,
+        total_neighbors=total_neighbors,
+        mpls_interfaces=mpls_interfaces,
+        interfaces_up=interfaces_up,
+        error_devices=sum(1 for d in devices if value(d.status) == "error"),
+        stale_devices=sum(1 for d in devices if is_stale(d)),
         by_platform=dict(Counter(value(d.platform) for d in devices)),
         by_status=dict(Counter(value(d.status) for d in devices)),
         by_role=dict(Counter((d.role or "unknown") for d in devices)),
+        by_location=dict(Counter(location_code(d) for d in devices)),
+        by_model=dict(Counter((d.model or "unknown") for d in devices)),
+        by_os=dict(Counter((d.os_version or "unknown") for d in devices)),
+        by_neighbor_protocol={value(p): c for p, c in protocol_rows},
     )
