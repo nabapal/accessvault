@@ -197,13 +197,14 @@ export function IpMplsDeviceDetailPage() {
                       <th className="px-4 py-3 text-left">Oper</th>
                       <th className="px-4 py-3 text-left">IP Address</th>
                       <th className="px-4 py-3 text-left">VRF</th>
+                      <th className="px-4 py-3 text-left">MPLS</th>
                       <th className="px-4 py-3 text-left">Description</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-brand-800/60 text-slate-200">
                     {filteredInterfaces.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-4 text-center text-sm text-slate-400">No interfaces match.</td>
+                        <td colSpan={7} className="px-4 py-4 text-center text-sm text-slate-400">No interfaces match.</td>
                       </tr>
                     ) : (
                       filteredInterfaces.map((i) => (
@@ -213,6 +214,13 @@ export function IpMplsDeviceDetailPage() {
                           <td className="px-4 py-3 text-slate-100">{i.oper_state ?? "--"}</td>
                           <td className="px-4 py-3 font-mono text-xs text-slate-100">{i.ip_address ?? "--"}</td>
                           <td className="px-4 py-3 text-slate-100">{i.vrf ?? "--"}</td>
+                          <td className="px-4 py-3">
+                            {i.mpls_enabled ? (
+                              <span className="inline-flex rounded border border-primary-500/40 bg-primary-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-primary-200">MPLS</span>
+                            ) : (
+                              <span className="text-slate-600">--</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-slate-300">{i.description ?? "--"}</td>
                         </tr>
                       ))

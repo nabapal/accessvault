@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
+from genie.conf.base import Device as GenieDevice
 from netmiko import ConnectHandler
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,19 +65,34 @@ def _parse_uptime_to_seconds(text: str | None) -> int | None:
     return total if found else None
 
 
-def _pick_chassis(inventory: List[Dict[str, Any]]) -> tuple[str | None, str | None]:
-    """Model + serial from the chassis/rack row of `show inventory`."""
-    def is_chassis(row: Dict[str, Any]) -> bool:
-        name = (row.get("name") or "").strip().lower()
-        return "chassis" in name or name.startswith("rack ") or name == "0"
+def _iter_modules(obj: Any, key: str | None = None):
+    """Recursively yield inventory module dicts (any node carrying pid + sn)."""
+    if isinstance(obj, dict):
+        if "pid" in obj and "sn" in obj:
+            yield {
+                "name": obj.get("name") or key,
+                "description": obj.get("descr") or obj.get("description"),
+                "pid": obj.get("pid"),
+                "vid": obj.get("vid"),
+                "serial": obj.get("sn"),
+            }
+        for child_key, value in obj.items():
+            yield from _iter_modules(value, child_key)
+    elif isinstance(obj, list):
+        for value in obj:
+            yield from _iter_modules(value)
 
-    chosen = next((row for row in inventory if is_chassis(row)), None) or (inventory[0] if inventory else None)
+
+def _pick_chassis(modules: List[Dict[str, Any]]) -> tuple[str | None, str | None]:
+    def is_chassis(module: Dict[str, Any]) -> bool:
+        name = (module.get("name") or "").strip().lower()
+        descr = (module.get("description") or "").lower()
+        return name in ("rack 0", "chassis", "0") or "chassis" in name or "chassis" in descr
+
+    chosen = next((m for m in modules if is_chassis(m)), None) or (modules[0] if modules else None)
     if not chosen:
         return None, None
-    return (
-        _first(chosen, ["pid", "productid"]),
-        _first(chosen, ["sn", "serial"]),
-    )
+    return chosen.get("pid"), chosen.get("serial")
 
 
 def _collect_device_blocking(
@@ -87,7 +103,7 @@ def _collect_device_blocking(
     password: str,
     enable: str | None,
 ) -> Dict[str, Any]:
-    """Synchronous Netmiko collection — must run in a worker thread."""
+    """Netmiko transport + Genie offline parsing — must run in a worker thread."""
     params: Dict[str, Any] = {
         "device_type": device_type,
         "host": host,
@@ -99,6 +115,11 @@ def _collect_device_blocking(
     }
     if enable:
         params["secret"] = enable
+
+    is_xr = device_type == "cisco_xr"
+    genie_os = "iosxr" if is_xr else "iosxe"
+    gdev = GenieDevice(name="ipmpls", os=genie_os)
+    gdev.custom.setdefault("abstraction", {})["order"] = ["os"]
 
     conn = ConnectHandler(**params)
     try:
@@ -112,36 +133,33 @@ def _collect_device_blocking(
         # XR prompt looks like "RP/0/RSP0/CPU0:HOSTNAME"; take the segment after the last ':'.
         hostname = prompt.split(":")[-1] if prompt else None
 
-        def safe(cmd: str):
-            # Parse each command independently: a TextFSM template error on one
-            # command (e.g. odd interface-description output) must not abort the
-            # whole device collection.
+        def parse(cmd: str) -> Dict[str, Any]:
+            # Netmiko fetches the text; Genie parses it offline. A parser miss on one
+            # command must never abort the whole device collection.
             try:
-                return conn.send_command(cmd, use_textfsm=True)
-            except Exception as exc:  # pragma: no cover - parser/template robustness
-                logger.warning("Command %r failed to parse on %s: %s", cmd, host, exc)
-                return []
-
-        def raw_cmd(cmd: str) -> str:
-            try:
-                return conn.send_command(cmd)
-            except Exception as exc:  # pragma: no cover - robustness
+                raw = conn.send_command(cmd) or ""
+            except Exception as exc:  # pragma: no cover - transport robustness
                 logger.warning("Command %r failed on %s: %s", cmd, host, exc)
-                return ""
+                return {}
+            try:
+                return gdev.parse(cmd, output=raw)
+            except Exception as exc:  # pragma: no cover - parser robustness
+                logger.warning("Genie parse of %r failed on %s: %s", cmd, host, str(exc)[:120])
+                return {}
 
-        is_xr = device_type == "cisco_xr"
         if_cmd = "show ipv4 interface brief" if is_xr else "show ip interface brief"
+        bgp_cmd = "show bgp vpnv4 unicast summary" if is_xr else "show ip bgp vpnv4 all summary"
         return {
             "is_xr": is_xr,
             "hostname": hostname or None,
-            "version": safe("show version"),
-            "inventory": safe("show inventory"),
-            "interfaces": safe(if_cmd),
-            "descriptions": safe("show interfaces description"),
-            "vrf": safe("show vrf all detail" if is_xr else "show vrf"),
-            "isis": safe("show isis neighbors"),
-            # XR parses via TextFSM (brief); XE has no template, parse the raw block.
-            "ldp": safe("show mpls ldp neighbor brief") if is_xr else raw_cmd("show mpls ldp neighbor"),
+            "version": parse("show version"),
+            "inventory": parse("show inventory"),
+            "interfaces": parse(if_cmd),
+            "vrf": parse("show vrf all detail" if is_xr else "show vrf"),
+            "isis": parse("show isis neighbors"),
+            "ldp": parse("show mpls ldp neighbor"),
+            "bgp": parse(bgp_cmd),
+            "mpls_if": parse("show mpls interfaces"),
         }
     finally:
         conn.disconnect()
@@ -163,183 +181,200 @@ def _as_list(value: Any) -> List[str]:
     return [cleaned] if cleaned else []
 
 
+def _version_dict(raw_version: Any) -> Dict[str, Any]:
+    if not isinstance(raw_version, dict):
+        return {}
+    inner = raw_version.get("version")
+    return inner if isinstance(inner, dict) else raw_version  # XE nests under 'version'; XR is flat
+
+
+def _vrf_items(raw_vrf: Any) -> Dict[str, Any]:
+    if not isinstance(raw_vrf, dict):
+        return {}
+    inner = raw_vrf.get("vrf")
+    return inner if isinstance(inner, dict) else raw_vrf  # XE nests under 'vrf'; XR keys are vrf names
+
+
 def _build_vrfs(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows = raw.get("vrf") if isinstance(raw.get("vrf"), list) else []
     results: List[Dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in rows:
-        name = _clean(row.get("vrf") or row.get("name"))
-        if not name or name in seen:
+    for name, entry in _vrf_items(raw.get("vrf")).items():
+        if not isinstance(entry, dict):
             continue
-        seen.add(name)
+        rt_import: List[str] = []
+        rt_export: List[str] = []
+        address_family = entry.get("address_family") or {}
+        for af in address_family.values():
+            for rt_key, rt in (af.get("route_target") or {}).items():
+                value = (rt.get("route_target") if isinstance(rt, dict) else None) or rt_key
+                rt_type = rt.get("rt_type") if isinstance(rt, dict) else None
+                if rt_type == "export":
+                    rt_export.append(value)
+                elif rt_type in ("both", "import_export"):
+                    rt_import.append(value)
+                    rt_export.append(value)
+                else:
+                    rt_import.append(value)
+        protocols = entry.get("protocols")
+        if isinstance(protocols, list):
+            protocols = ", ".join(protocols)
+        elif address_family:
+            protocols = ", ".join(address_family.keys())
         results.append(
             {
-                "name": name,
-                "rd": _clean(row.get("rd") or row.get("default_rd")),
-                "rt_import": _as_list(row.get("rt_import")),
-                "rt_export": _as_list(row.get("rt_export")),
-                "interfaces": _as_list(row.get("interfaces")),
-                "protocols": _clean(row.get("protocols")),
-                "description": _clean(row.get("description")),
+                "name": str(name),
+                "rd": _clean(entry.get("route_distinguisher")),
+                "rt_import": sorted(set(rt_import)),
+                "rt_export": sorted(set(rt_export)),
+                "interfaces": _as_list(entry.get("interfaces")),
+                "protocols": _clean(protocols),
+                "description": _clean(entry.get("description")),
             }
         )
     return results
 
 
-def _parse_xe_ldp(text: str) -> List[Dict[str, Any]]:
-    """Parse IOS-XE 'show mpls ldp neighbor' raw output (no TextFSM template)."""
-    results: List[Dict[str, Any]] = []
-    peer = state = uptime = None
-
-    def flush() -> None:
-        nonlocal peer, state, uptime
-        if peer:
-            results.append(
-                {
-                    "protocol": "ldp",
-                    "neighbor_id": peer,
-                    "address": peer.split(":")[0],
-                    "interface": None,
-                    "state": state,
-                    "uptime": uptime,
-                    "vrf": None,
-                    "attributes": {},
-                }
-            )
-        peer = state = uptime = None
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        match = re.search(r"Peer LDP Ident:\s*(\S+?);", stripped)
-        if match:
-            flush()
-            peer = match.group(1)
-            continue
-        if peer:
-            state_match = re.search(r"State:\s*(\w+)", stripped)
-            if state_match:
-                state = state_match.group(1)
-            uptime_match = re.search(r"Up time:\s*(\S+)", stripped)
-            if uptime_match:
-                uptime = uptime_match.group(1)
-    flush()
-    return results
+def _vrf_label(name: str) -> str | None:
+    return None if not name or name == "default" else name
 
 
 def _build_neighbors(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
 
-    # ISIS adjacencies (TextFSM-parsed on both platforms).
-    for row in raw.get("isis") if isinstance(raw.get("isis"), list) else []:
-        system_id = _clean(row.get("system_id"))
-        if not system_id:
-            continue
+    def _isis_neighbor(system_id, intf, nd, vrf_name=None, level=None):
+        attrs = {k: nd.get(k) for k in ("type", "holdtime", "snpa", "circuit_id", "ietf_nsf") if nd.get(k)}
+        if level and "type" not in attrs:
+            attrs["type"] = level
         results.append(
             {
                 "protocol": "isis",
-                "neighbor_id": system_id,
-                "address": _clean(row.get("ip_address")),
-                "interface": _clean(row.get("interface")),
-                "state": _clean(row.get("state")),
+                "neighbor_id": str(system_id),
+                "address": _clean(nd.get("ip_address")),
+                "interface": intf,
+                "state": _clean(nd.get("state")),
                 "uptime": None,
-                "vrf": None,
-                "attributes": {
-                    key: row.get(key)
-                    for key in ("type", "hold_time", "snpa", "circuit_id", "ietf_nsf")
-                    if row.get(key)
-                },
+                "vrf": _vrf_label(vrf_name),
+                "attributes": attrs,
             }
         )
 
-    # LDP: XR is a TextFSM list ('brief'); XE is raw text parsed above.
-    ldp = raw.get("ldp")
-    if isinstance(ldp, list):
-        for row in ldp:
-            peer = _clean(row.get("peer"))
-            if not peer:
-                continue
+    isis = raw.get("isis") if isinstance(raw.get("isis"), dict) else {}
+    for tag_data in (isis.get("isis") or {}).values():
+        if "vrf" in tag_data:  # IOS-XR: tag -> vrf -> interfaces -> neighbors -> <system_id>
+            for vrf_name, vrf_data in (tag_data.get("vrf") or {}).items():
+                for intf, intf_data in (vrf_data.get("interfaces") or {}).items():
+                    for system_id, nd in (intf_data.get("neighbors") or {}).items():
+                        _isis_neighbor(system_id, intf, nd, vrf_name=vrf_name)
+        elif "neighbors" in tag_data:  # IOS-XE: tag -> neighbors -> <sysid> -> type -> <level> -> interfaces -> <intf>
+            for system_id, sdata in tag_data["neighbors"].items():
+                for level, ldata in (sdata.get("type") or {}).items():
+                    for intf, nd in (ldata.get("interfaces") or {}).items():
+                        _isis_neighbor(system_id, intf, nd, level=level)
+
+    # LDP: vrf.<vrf>.peers.<peer>.label_space_id.<id>
+    ldp = raw.get("ldp") if isinstance(raw.get("ldp"), dict) else {}
+    for vrf_name, vrf_data in (ldp.get("vrf") or {}).items():
+        for peer, peer_data in (vrf_data.get("peers") or {}).items():
+            for lsid, ld in (peer_data.get("label_space_id") or {}).items():
+                results.append(
+                    {
+                        "protocol": "ldp",
+                        "neighbor_id": f"{peer}:{lsid}",
+                        "address": str(peer),
+                        "interface": None,
+                        "state": _clean(ld.get("state")),
+                        "uptime": _clean(ld.get("uptime")),
+                        "vrf": _vrf_label(vrf_name),
+                        "attributes": {
+                            k: ld.get(k) for k in ("session_holdtime", "graceful_restart") if ld.get(k)
+                        },
+                    }
+                )
+
+    # BGP: XR instance.<inst>.vrf.<vrf>.neighbor.<n>; XE vrf.<vrf>.neighbor.<n>
+    bgp = raw.get("bgp") if isinstance(raw.get("bgp"), dict) else {}
+    bgp_vrfs: Dict[str, Any] = {}
+    if "instance" in bgp:
+        for inst in bgp["instance"].values():
+            bgp_vrfs.update(inst.get("vrf") or {})
+    elif "vrf" in bgp:
+        bgp_vrfs = bgp["vrf"]
+    for vrf_name, vrf_data in bgp_vrfs.items():
+        for nbr, nd in (vrf_data.get("neighbor") or {}).items():
+            state = up_down = None
+            remote_as = nd.get("remote_as")
+            for af in (nd.get("address_family") or {}).values():
+                state = af.get("state_pfxrcd") or state
+                up_down = af.get("up_down") or up_down
+                remote_as = remote_as or af.get("as") or af.get("remote_as")
             results.append(
                 {
-                    "protocol": "ldp",
-                    "neighbor_id": peer,
-                    "address": peer.split(":")[0],
+                    "protocol": "bgp",
+                    "neighbor_id": str(nbr),
+                    "address": str(nbr),
                     "interface": None,
-                    "state": "Oper",
-                    "uptime": _clean(row.get("uptime")),
-                    "vrf": None,
-                    "attributes": {
-                        key: row.get(key)
-                        for key in ("gr", "nsr", "labels_ipv4", "addresses_ipv4", "discovery_ipv4")
-                        if row.get(key)
-                    },
+                    "state": _clean(state),
+                    "uptime": _clean(up_down),
+                    "vrf": _vrf_label(vrf_name),
+                    "attributes": {"remote_as": remote_as} if remote_as else {},
                 }
             )
-    elif isinstance(ldp, str) and ldp.strip():
-        results.extend(_parse_xe_ldp(ldp))
 
     return results
 
 
+def _mpls_enabled_set(raw: Dict[str, Any]) -> set[str]:
+    mpls = raw.get("mpls_if") if isinstance(raw.get("mpls_if"), dict) else {}
+    ifaces: Dict[str, Any] = {}
+    if "interfaces" in mpls:  # XR
+        ifaces = mpls["interfaces"]
+    elif "vrf" in mpls:  # XE
+        for vrf_data in mpls["vrf"].values():
+            ifaces.update(vrf_data.get("interfaces") or {})
+    enabled: set[str] = set()
+    for name, data in ifaces.items():
+        flags = {str(data.get(k, "")).lower() for k in ("enabled", "operational", "ldp", "ip")}
+        if "yes" in flags:
+            enabled.add(name)
+    return enabled
+
+
 def _build_snapshot(raw: Dict[str, Any]) -> Dict[str, Any]:
-    version = raw.get("version")
-    vrow: Dict[str, Any] = version[0] if isinstance(version, list) and version else (version if isinstance(version, dict) else {})
-    inventory = raw.get("inventory") if isinstance(raw.get("inventory"), list) else []
-    model, serial = _pick_chassis(inventory)
-    uptime_text = _first(vrow, ["uptime"])
+    version = _version_dict(raw.get("version"))
+    modules = list({(m["name"], m["serial"]): m for m in _iter_modules(raw.get("inventory"))}.values())
+    model, serial = _pick_chassis(modules)
+    uptime_text = version.get("uptime")
 
     facts = {
-        "hostname": raw.get("hostname") or _first(vrow, ["hostname"]),
-        "model": model,
+        "hostname": raw.get("hostname") or _clean(version.get("hostname")),
+        "model": model or _clean(version.get("device_family") or version.get("platform")),
         "serial": serial,
-        "os_version": _first(vrow, ["version"]),
+        "os_version": _clean(version.get("software_version") or version.get("version")),
         "uptime_text": uptime_text,
         "uptime_seconds": _parse_uptime_to_seconds(uptime_text),
-        "raw": {"version": vrow},
+        "raw": {"version": version},
     }
 
-    descr_map: Dict[str, str] = {}
-    for row in raw.get("descriptions") if isinstance(raw.get("descriptions"), list) else []:
-        name = _first(row, ["port", "interface", "intf"])
-        description = _first(row, ["description", "descrip"])
-        if name and description:
-            descr_map[name] = description
-
+    mpls_enabled = _mpls_enabled_set(raw)
     interfaces: List[Dict[str, Any]] = []
-    seen_if: set[str] = set()
-    for row in raw.get("interfaces") if isinstance(raw.get("interfaces"), list) else []:
-        name = _first(row, ["interface", "intf"])
-        if not name or name in seen_if:
-            continue
-        seen_if.add(name)
-        ip_address = _first(row, ["ip_address", "ipaddr"])
+    if_dict = raw.get("interfaces", {}).get("interface", {}) if isinstance(raw.get("interfaces"), dict) else {}
+    for name, row in if_dict.items():
+        ip_address = row.get("ip_address")
         if ip_address and ip_address.lower() == "unassigned":
             ip_address = None
         interfaces.append(
             {
-                "name": name,
-                "description": descr_map.get(name),
-                "admin_state": row.get("status"),
-                "oper_state": _first(row, ["proto", "protocol"]),
+                "name": str(name),
+                "description": None,
+                "admin_state": row.get("interface_status") or row.get("status"),
+                "oper_state": row.get("protocol_status") or row.get("protocol"),
                 "ip_address": ip_address,
                 "prefix_len": None,
-                "vrf": row.get("vrf"),
+                "vrf": _clean(row.get("vrf_name")),
                 "speed": None,
                 "mtu": None,
                 "mac": None,
-                "mpls_enabled": None,
+                "mpls_enabled": name in mpls_enabled,
                 "attributes": {},
-            }
-        )
-
-    modules: List[Dict[str, Any]] = []
-    for row in inventory:
-        modules.append(
-            {
-                "name": row.get("name"),
-                "description": _first(row, ["descr", "description"]),
-                "pid": _first(row, ["pid", "productid"]),
-                "vid": row.get("vid"),
-                "serial": _first(row, ["sn", "serial"]),
             }
         )
 
