@@ -170,9 +170,12 @@ docker compose exec backend python backend/scripts/import_ipmpls_devices.py \
   --role SAR --role AG2 --role AG3 [--collect]        # import (add --collect to SSH-collect now)
 ```
 
-Options: `--role` (repeatable), `--collect` (SSH-collect reachable devices immediately;
-otherwise the background poller picks them up), `--dry-run`, `--username` / `--password` /
-`--enable`, `--nautobot-url` / `--nautobot-token`, `--poll-interval` (seconds, default 900).
+Only **Active** devices are imported by default (Decommissioned/Offline are skipped).
+
+Options: `--role` (repeatable), `--status` (Nautobot status slug, default `active`; pass
+empty `''` for all), `--collect` (SSH-collect reachable devices immediately; otherwise the
+background poller picks them up), `--dry-run`, `--username` / `--password` / `--enable`,
+`--nautobot-url` / `--nautobot-token`, `--poll-interval` (seconds, default 900).
 
 > Tables are created by migrations at container startup, so no migration step is needed.
 > If Docker requires `sudo` on the host, prefix the command; use `docker-compose` (hyphen)
