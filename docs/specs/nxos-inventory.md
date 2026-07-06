@@ -186,6 +186,27 @@ topology tools to the NetVerse AI MCP spec once shipped.
 4. Nautobot: role **`Nexus`**, platform **`cisco_NXOS`** (confirmed). Verify a device with
    this role has a primary IP and is reachable over SSH (`cisco_nxos`).
 
+### 8.5 Phase 0 findings (confirmed 2026-07-06, device BGLRRLABCAS001 / 10.64.97.40)
+
+Netmiko `cisco_nxos` connects; Genie `os="nxos"` parses these commands (chosen set):
+| Purpose | Command | Genie result (top-level) |
+|---|---|---|
+| Device facts | `show version` | `platform` |
+| Chassis/serial | `show inventory` | `name` (per component) |
+| Modules | `show module` | `slot`, `xbar` |
+| Interfaces | `show interface` | per-interface dict (rich: state/ip/speed/mtu/mac/counters) |
+| Interface mode/vlan | `show interface status` | `interfaces` (optional supplement) |
+| VRFs | `show vrf` | `vrfs` |
+| CDP | `show cdp neighbors detail` | `index.<n>` (device_id, local_interface, port_id, platform, mgmt addr) |
+| LLDP | `show lldp neighbors detail` | `interfaces.<localIf>.port_id.<pid>...` |
+| **BGP** | **`show bgp vrf all all summary`** | `vrf.<vrf>.neighbor.<ip>.address_family.<af>` |
+
+**Important:** the generic `show ip bgp summary` and `show bgp all summary` have **no Genie
+nxos parser** (`ParserNotFound`). Use **`show bgp vrf all all summary`** — it parses and
+already covers **all VRFs and all address families** (matches the §11 BGP scope).
+`show interface` output is large (~1 MB on this device) but parses; acceptable since the
+poller processes one device at a time. Parse each command fault-isolated (per IP-MPLS).
+
 ## 9. Edge cases
 
 - Neighbor devices not onboarded → external topology nodes (no detail link).
