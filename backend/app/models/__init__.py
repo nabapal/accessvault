@@ -30,6 +30,16 @@ from .ipmpls import (
     IpMplsPlatform,
     IpMplsVrf,
 )
+from .nxos import (
+    NxosBgpNeighbor,
+    NxosDevice,
+    NxosDeviceStatus,
+    NxosInterface,
+    NxosModule,
+    NxosNeighbor,
+    NxosPlatform,
+    NxosVrf,
+)
 
 __all__ = [
     "User",
@@ -63,4 +73,12 @@ __all__ = [
     "IpMplsNeighbor",
     "IpMplsPlatform",
     "IpMplsVrf",
+    "NxosBgpNeighbor",
+    "NxosDevice",
+    "NxosDeviceStatus",
+    "NxosInterface",
+    "NxosModule",
+    "NxosNeighbor",
+    "NxosPlatform",
+    "NxosVrf",
 ]

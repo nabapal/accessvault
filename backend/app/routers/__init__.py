@@ -1,4 +1,4 @@
-from . import aci, auth, groups, gui, inventory, ipmpls, systems, telco, terminal, users
+from . import aci, auth, groups, gui, inventory, ipmpls, nxos, systems, telco, terminal, users
 
 __all__ = [
     "aci",
@@ -7,6 +7,7 @@ __all__ = [
     "gui",
     "inventory",
     "ipmpls",
+    "nxos",
     "systems",
     "telco",
     "terminal",

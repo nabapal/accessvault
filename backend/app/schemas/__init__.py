@@ -47,6 +47,22 @@ from .ipmpls import (
     IpMplsTopologyNode,
     IpMplsVrfRead,
 )
+from .nxos import (
+    NxosBgpNeighborRead,
+    NxosDeviceCreate,
+    NxosDevicePage,
+    NxosDeviceRead,
+    NxosDeviceUpdate,
+    NxosInterfaceRead,
+    NxosModuleRead,
+    NxosNeighborRead,
+    NxosSummary,
+    NxosSyncResult,
+    NxosTopology,
+    NxosTopologyLink,
+    NxosTopologyNode,
+    NxosVrfRead,
+)
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
 
@@ -83,6 +99,20 @@ __all__ = [
     "IpMplsTopology",
     "IpMplsTopologyNode",
     "IpMplsTopologyLink",
+    "NxosDeviceCreate",
+    "NxosDeviceUpdate",
+    "NxosDeviceRead",
+    "NxosDevicePage",
+    "NxosInterfaceRead",
+    "NxosModuleRead",
+    "NxosNeighborRead",
+    "NxosBgpNeighborRead",
+    "NxosVrfRead",
+    "NxosSyncResult",
+    "NxosSummary",
+    "NxosTopology",
+    "NxosTopologyNode",
+    "NxosTopologyLink",
     "AciFreePortNode",
     "AciFreePortFabric",
     "AciFreePortReport",
