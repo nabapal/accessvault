@@ -237,6 +237,8 @@ export interface AciFabricVlan {
   tenant?: string | null;
   app_profile?: string | null;
   bridge_domain?: string | null;
+  binding_type?: string | null;
+  l3out?: string | null;
   vrf?: string | null;
   pc_tag?: string | null;
   mode?: string | null;

@@ -241,6 +241,8 @@ class AciFabricVlan(Base):
     tenant = Column(String, nullable=True)
     app_profile = Column(String, nullable=True)
     bridge_domain = Column(String, nullable=True)
+    binding_type = Column(String, nullable=True, default="bd")
+    l3out = Column(String, nullable=True)
     vrf = Column(String, nullable=True)
     pc_tag = Column(String, nullable=True)
     mode = Column(String, nullable=True)

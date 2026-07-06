@@ -63,21 +63,41 @@ to an L3Out owner, not a BD/EPG, so they either fall out or show blank associati
 
 ## 5. Proposed design
 
-### 5.1 Data source (APIC)
-L3Out SVI encaps are defined on L3Out logical interface profiles and deployed as
-`vlanCktEp` on leaves, owned by the L3Out (`l3extOut`) rather than a BD/EPG.
+### 5.1 Data source (APIC) — confirmed in Phase 0
 
-- **Primary:** reuse the existing `vlanCktEp` pull. For records whose owner DN
-  resolves under `…/out-<L3OUT>/…` (an `l3extOut`) instead of an EPG under a BD,
-  classify as **L3Out** and capture the L3Out name.
-- **Name/VRF maps:** build an L3Out DN→(name, VRF) map from `l3extOut`
-  (`/api/class/l3extOut.json`) and its VRF relation `l3extRsEctx`
-  (`/api/class/l3extRsEctx.json`); VRF for L3Out comes from the L3Out's context, not
-  a `ctxDn` on the vlanCktEp.
-- **Cross-check / fallback:** `l3extRsPathL3OutAtt` (already fetched elsewhere in the
-  collector) and `l3extLIfP` can corroborate encap→L3Out mapping if `vlanCktEp`
-  owner DNs are ambiguous. Exact class(es) to be confirmed during Phase 0 against the
-  live APIC (see §8).
+Phase 0 against the live APIC (`10.88.17.162`, fabric "Bangalore") showed that on
+this fabric **L3Out SVIs do not appear as `vlanCktEp`** (no `vlanCktEp.epgDn`
+contains `/out-`; `bdDn`/`ctxDn` are null there). L3Out encap VLANs live on
+**`l3extRsPathL3OutAtt`**:
+
+```
+dn    = uni/tn-<TENANT>/out-<L3OUT>/lnodep-<..>/lifp-<..>/rspathL3OutAtt-[<path>]
+encap = vlan-2627
+ifInstT = ext-svi
+tDn   = topology/pod-1/paths-<NODE>/pathep-[<intf>]
+mode  = regular
+```
+
+So the L3Out VLAN source and mapping is:
+- **VLANs:** `l3extRsPathL3OutAtt` where `encap` starts with `vlan-`
+  (`ifInstT == ext-svi`). `vlan_id` from the encap.
+- **L3Out name + tenant:** parse the `out-<L3OUT>` and `tn-<TENANT>` segments of `dn`.
+- **VRF:** `l3extRsEctx` (`/api/class/l3extRsEctx.json`) keyed by the L3Out DN
+  (`uni/tn-…/out-<L3OUT>`) → `tnFvCtxName`.
+- **External EPG (EPG column):** `l3extInstP` (`/api/class/l3extInstP.json`) under the
+  same L3Out DN → `instP-<name>` (first; join if several).
+- **Node / interface:** parse `tDn` → `paths-<NODE>` and `pathep-[<intf>]`; aggregate
+  nodes per encap (same as BD VLANs).
+- `binding_type = "l3out"`, `bridge_domain = null`, `l3out = <name>`.
+
+**State columns:** `l3extRsPathL3OutAtt` carries `mode` (populate it). It does **not**
+expose `adminSt`/`operSt` directly (those are config, not oper); populate `mode` and
+leave admin/oper best-effort (`--` if unavailable) — deployed presence implies active.
+This refines Resolved-decision #1: `mode` is populated the same way; admin/oper are
+best-effort for L3Out rows.
+
+**Merge rule:** L3Out entries are added for `encap`s not already produced by the
+`vlanCktEp` (BD/EPG) pass, preserving the `(fabric_job_id, encap)` uniqueness.
 
 ### 5.2 Data model
 Add two nullable columns to `AciFabricVlan` (`backend/app/models/aci.py`):

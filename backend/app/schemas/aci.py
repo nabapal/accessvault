@@ -211,6 +211,8 @@ class AciFabricVlanRead(BaseModel):
     tenant: str | None = None
     app_profile: str | None = None
     bridge_domain: str | None = None
+    binding_type: str | None = None
+    l3out: str | None = None
     vrf: str | None = None
     pc_tag: str | None = None
     mode: str | None = None

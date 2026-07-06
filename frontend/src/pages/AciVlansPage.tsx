@@ -99,7 +99,7 @@ export function AciVlansPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search VLAN, EPG, tenant, BD, VRF, fabric..."
+              placeholder="Search VLAN, EPG, tenant, BD, L3Out, VRF, fabric..."
               className="w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-96"
             />
           }
@@ -130,7 +130,7 @@ export function AciVlansPage() {
                   <th className="px-4 py-3 text-left">VLAN</th>
                   <th className="px-4 py-3 text-left">EPG</th>
                   <th className="px-4 py-3 text-left">Tenant / App</th>
-                  <th className="px-4 py-3 text-left">Bridge Domain</th>
+                  <th className="px-4 py-3 text-left">Bridge Domain / L3OUT</th>
                   <th className="px-4 py-3 text-left">VRF</th>
                   <th className="px-4 py-3 text-left">VXLAN</th>
                   <th className="px-4 py-3 text-right">Nodes</th>
@@ -166,7 +166,23 @@ export function AciVlansPage() {
                         <div className="text-slate-100">{formatLabel(vlan.tenant)}</div>
                         <div className="text-xs text-slate-500">{formatLabel(vlan.app_profile)}</div>
                       </td>
-                      <td className="px-4 py-3 text-slate-100">{formatLabel(vlan.bridge_domain)}</td>
+                      <td className="px-4 py-3">
+                        {vlan.binding_type === "l3out" ? (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex rounded border border-amber-500/50 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                              L3Out
+                            </span>
+                            <span className="text-slate-100">{formatLabel(vlan.l3out)}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex rounded border border-slate-500/40 bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                              BD
+                            </span>
+                            <span className="text-slate-100">{formatLabel(vlan.bridge_domain)}</span>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-slate-100">{formatLabel(vlan.vrf)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-400">{formatLabel(vlan.fab_encap)}</td>
                       <td className="px-4 py-3 text-right">

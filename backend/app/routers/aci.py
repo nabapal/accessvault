@@ -285,7 +285,7 @@ async def list_fabric_vlans(
     fabric: Optional[str] = Query(default=None, description="Case-insensitive match on fabric name or IP"),
     search: Optional[str] = Query(
         default=None,
-        description="Case-insensitive search across VLAN id, encap, EPG, tenant, app, BD, VRF, or fabric",
+        description="Case-insensitive search across VLAN id, encap, EPG, tenant, app, BD/L3Out, VRF, or fabric",
     ),
     db: AsyncSession = Depends(get_db),
     _: object = Depends(get_current_user),
@@ -321,6 +321,8 @@ async def list_fabric_vlans(
                 func.lower(func.coalesce(AciFabricVlan.tenant, "")).like(pattern),
                 func.lower(func.coalesce(AciFabricVlan.app_profile, "")).like(pattern),
                 func.lower(func.coalesce(AciFabricVlan.bridge_domain, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.l3out, "")).like(pattern),
+                func.lower(func.coalesce(AciFabricVlan.binding_type, "")).like(pattern),
                 func.lower(func.coalesce(AciFabricVlan.vrf, "")).like(pattern),
                 func.lower(func.coalesce(telco_alias.name, "")).like(pattern),
                 func.lower(func.coalesce(telco_alias.target_host, "")).like(pattern),

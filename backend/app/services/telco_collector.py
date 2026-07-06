@@ -1321,6 +1321,114 @@ def _build_seg_name_map(items: Iterable[Dict[str, Any]], cls: str) -> Dict[str, 
     return result
 
 
+def _l3out_dn_key(dn: str | None) -> str | None:
+    """Return the L3Out DN prefix (uni/tn-<T>/out-<O>) from any child DN."""
+    if not dn:
+        return None
+    collected: List[str] = []
+    for segment in dn.split("/"):
+        collected.append(segment)
+        if segment.startswith("out-"):
+            return "/".join(collected)
+    return None
+
+
+def _extract_l3out_path(t_dn: str | None) -> Tuple[str | None, str | None]:
+    """From an l3extRsPathL3OutAtt tDn return (node, interface).
+
+    Physical: topology/pod-1/paths-755/pathep-[eth1/26]     -> ("755", "eth1/26")
+    vPC:      topology/pod-1/protpaths-101-102/pathep-[po1]  -> ("101-102", "po1")
+    """
+    node = intf = None
+    if not t_dn:
+        return node, intf
+    for segment in t_dn.split("/"):
+        if segment.startswith("protpaths-"):
+            node = segment[len("protpaths-"):]
+        elif segment.startswith("paths-"):
+            node = segment[len("paths-"):]
+        elif segment.startswith("pathep-["):
+            intf = segment[len("pathep-["):].rstrip("]")
+    return node, intf
+
+
+def _build_l3out_vrf_map(items: Iterable[Dict[str, Any]]) -> Dict[str, str]:
+    """Map L3Out DN -> VRF name from l3extRsEctx (tnFvCtxName)."""
+    result: Dict[str, str] = {}
+    for item in items:
+        attributes = item.get("l3extRsEctx", {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        out_key = _l3out_dn_key(attributes.get("dn"))
+        vrf = _clean_string(attributes.get("tnFvCtxName"))
+        if out_key and vrf:
+            result[out_key] = vrf
+    return result
+
+
+def _build_l3out_epg_map(items: Iterable[Dict[str, Any]]) -> Dict[str, str]:
+    """Map L3Out DN -> external EPG name(s) from l3extInstP (joined if several)."""
+    grouped: Dict[str, List[str]] = {}
+    for item in items:
+        attributes = item.get("l3extInstP", {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        out_key = _l3out_dn_key(attributes.get("dn"))
+        name = _clean_string(attributes.get("name"))
+        if out_key and name:
+            grouped.setdefault(out_key, []).append(name)
+    return {key: ", ".join(sorted(set(names))) for key, names in grouped.items()}
+
+
+def _build_l3out_vlans(
+    path_items: List[Dict[str, Any]],
+    vrf_by_out: Dict[str, str],
+    epg_by_out: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Aggregate l3extRsPathL3OutAtt (L3Out SVI encaps) into one entry per VLAN encap."""
+    aggregates: Dict[str, Dict[str, Any]] = {}
+    for item in path_items:
+        attributes = item.get("l3extRsPathL3OutAtt", {}).get("attributes") if isinstance(item, dict) else None
+        if not attributes:
+            continue
+        encap = _clean_string(attributes.get("encap"))
+        if not encap or not encap.startswith("vlan-"):
+            continue  # skip non-access encaps
+        dn = attributes.get("dn")
+        out_key = _l3out_dn_key(dn)
+        node, _intf = _extract_l3out_path(attributes.get("tDn"))
+        entry = aggregates.get(encap)
+        if entry is None:
+            entry = {
+                "encap": encap,
+                "vlan_id": _vlan_id_from_encap(encap),
+                "fab_encap": None,
+                "epg": epg_by_out.get(out_key or ""),
+                "tenant": _parse_named_segment(dn, "tn-"),
+                "app_profile": None,
+                "bridge_domain": None,
+                "binding_type": "l3out",
+                "l3out": _parse_named_segment(dn, "out-"),
+                "vrf": vrf_by_out.get(out_key or ""),
+                "pc_tag": None,
+                "mode": _clean_string(attributes.get("mode")),
+                "admin_state": None,
+                "oper_state": None,
+                "_nodes": set(),
+            }
+            aggregates[encap] = entry
+        if node:
+            entry["_nodes"].add(node)
+
+    results: List[Dict[str, Any]] = []
+    for entry in aggregates.values():
+        node_list = sorted(entry.pop("_nodes"), key=lambda n: (int(n) if str(n).isdigit() else 0, str(n)))
+        entry["nodes"] = node_list
+        entry["node_count"] = len(node_list)
+        results.append(entry)
+    return results
+
+
 def _build_fabric_vlans(
     vlan_items: List[Dict[str, Any]],
     bd_name_by_seg: Dict[str, str],
@@ -1347,6 +1455,8 @@ def _build_fabric_vlans(
                 "tenant": tenant,
                 "app_profile": app_profile,
                 "bridge_domain": bd_name_by_seg.get(bd_seg or ""),
+                "binding_type": "bd",
+                "l3out": None,
                 "vrf": vrf_name_by_seg.get(ctx_seg or ""),
                 "pc_tag": _clean_string(attributes.get("pcTag")),
                 "mode": _clean_string(attributes.get("mode")),
@@ -1394,6 +1504,31 @@ async def _collect_and_upsert_aci_vlans(
     vrf_map = _build_seg_name_map(ctx_resp.json().get("imdata", []), "fvCtx")
     vlan_items = vlan_resp.json().get("imdata", [])
     vlans = _build_fabric_vlans(vlan_items if isinstance(vlan_items, list) else [], bd_map, vrf_map)
+
+    # L3Out SVI encap VLANs come from l3extRsPathL3OutAtt (not vlanCktEp). Best-effort:
+    # a failure here must not drop the BD/EPG VLANs already collected.
+    try:
+        path_resp, ectx_resp, instp_resp = await asyncio.gather(
+            client.get("/api/class/l3extRsPathL3OutAtt.json"),
+            client.get("/api/class/l3extRsEctx.json"),
+            client.get("/api/class/l3extInstP.json"),
+        )
+        path_resp.raise_for_status()
+        ectx_resp.raise_for_status()
+        instp_resp.raise_for_status()
+        vrf_by_out = _build_l3out_vrf_map(ectx_resp.json().get("imdata", []))
+        epg_by_out = _build_l3out_epg_map(instp_resp.json().get("imdata", []))
+        path_items = path_resp.json().get("imdata", [])
+        l3out_vlans = _build_l3out_vlans(path_items if isinstance(path_items, list) else [], vrf_by_out, epg_by_out)
+        seen_encaps = {entry.get("encap") for entry in vlans}
+        for entry in l3out_vlans:
+            if entry.get("encap") not in seen_encaps:
+                vlans.append(entry)
+                seen_encaps.add(entry.get("encap"))
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to fetch ACI L3Out VLANs for job %s: %s", job.id, exc)
+
+    vlans.sort(key=lambda e: (e.get("vlan_id") or 0, e.get("encap") or ""))
     return await _replace_fabric_vlans(session, job, vlans)
 
 
@@ -1418,6 +1553,8 @@ async def _replace_fabric_vlans(
                 tenant=entry.get("tenant"),
                 app_profile=entry.get("app_profile"),
                 bridge_domain=entry.get("bridge_domain"),
+                binding_type=entry.get("binding_type") or "bd",
+                l3out=entry.get("l3out"),
                 vrf=entry.get("vrf"),
                 pc_tag=entry.get("pc_tag"),
                 mode=entry.get("mode"),
