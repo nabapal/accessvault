@@ -1,6 +1,6 @@
 # SDD: Cisco NX-OS (Nexus) Device Inventory Module
 
-- **Status:** Draft / proposed
+- **Status:** Approved — decisions resolved (§11); ready for Phase 0 + implementation
 - **Owner:** naba
 - **Date:** 2026-07-06
 - **Module:** NetVerse AI → new "NX-OS Inventory" section (`/nxos/...`)
@@ -130,8 +130,9 @@ from Nautobot (`app/services/nautobot.py`).
 
 ### 5.7 Onboarding script
 `backend/scripts/import_nxos_devices.py` — clone of the IP-MPLS importer: `--role`
-(repeatable), `--status active` default, `--collect`, `--dry-run`, credential/Nautobot
-flags; upsert by mgmt IP; skip devices with no primary IP.
+(repeatable, **default `Nexus`**), `--status active` default, `--collect`, `--dry-run`,
+credential/Nautobot flags; upsert by mgmt IP; skip devices with no primary IP. Nautobot
+platform `cisco_NXOS` → `NxosPlatform.NXOS`.
 
 ### 5.8 Frontend
 - Types in `frontend/src/types/index.ts`; service `frontend/src/services/nxos.ts`.
@@ -179,8 +180,11 @@ topology tools to the NetVerse AI MCP spec once shipped.
    `show module`, `show interface`, `show vrf`, `show cdp neighbors detail`, `show lldp
    neighbors detail`, `show ip bgp summary`/`show bgp all summary`. Capture sample parsed
    JSON to `data/samples/nxos/` (git-ignored). Record exact commands chosen here.
-3. Decide BGP command per platform/config (default VRF vs `vrf all`, IPv4/IPv6 AF).
-4. Confirm Nautobot role name(s) used for NX-OS devices.
+3. Decide BGP command(s) to cover **all VRFs + IPv4/IPv6 unicast** (e.g.
+   `show bgp all summary` / `show bgp vrf all all summary`, or per-VRF/AF as the parser
+   requires).
+4. Nautobot: role **`Nexus`**, platform **`cisco_NXOS`** (confirmed). Verify a device with
+   this role has a primary IP and is reachable over SSH (`cisco_nxos`).
 
 ## 9. Edge cases
 
@@ -201,12 +205,13 @@ topology tools to the NetVerse AI MCP spec once shipped.
 - Poller enabled by default via `nxos_poller_enabled`; onboard by role, then the poller
   collects (or `--collect` for immediate).
 
-## 11. Open questions
+## 11. Resolved decisions
 
-- **Neighbor table shape:** dedicated `NxosBgpNeighbor` + `NxosNeighbor(cdp|lldp)`
-  (proposed) vs one table with `protocol in cdp|lldp|bgp`. Proposed: two tables.
+- **Neighbor table shape:** **two tables** — `NxosNeighbor` (`protocol` in `cdp|lldp`, for
+  topology) + dedicated `NxosBgpNeighbor` (BGP detail). Confirmed.
 - **Topology dedup preference:** when CDP and LLDP disagree on remote-interface naming,
-  which wins for display? Proposed: prefer LLDP, list both under `discovered_by`.
-- **BGP scope:** default VRF only, or all VRFs + IPv4/IPv6 AFs? Proposed: all VRFs, IPv4
-  + IPv6 unicast.
-- **Nautobot roles:** which role names denote NX-OS devices (to seed the importer)?
+  **prefer LLDP** for display; list both protocols under `discovered_by`. Confirmed.
+- **BGP scope:** collect **all VRFs, IPv4 + IPv6 unicast** address families. Confirmed.
+- **Nautobot mapping:** NX-OS devices carry Nautobot **role = `Nexus`** and **platform =
+  `cisco_NXOS`**. The importer seeds `--role Nexus` by default; `NxosPlatform.from_raw`
+  maps `cisco_nxos` / `cisco_NXOS` / `nxos` → `NXOS` (Netmiko `cisco_nxos`). Confirmed.
