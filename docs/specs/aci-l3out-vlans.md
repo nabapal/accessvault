@@ -1,6 +1,6 @@
 # SDD: Include L3Out VLANs in the ACI VLAN Inventory
 
-- **Status:** Draft / proposed
+- **Status:** Implemented (commit `78623a6`, 2026-07-06) — verified live on all fabrics
 - **Owner:** naba
 - **Date:** 2026-07-06
 - **Module:** NetVerse AI → Data Center Inventory → Cisco ACI VLANs (`/telco/aci/vlans`)
