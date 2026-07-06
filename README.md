@@ -142,6 +142,42 @@ new inventory domains are added.
 | GET | `/api/v1/inventory/hosts` | Fetch aggregated host telemetry with optional `endpoint_id` filter |
 | GET | `/api/v1/inventory/virtual-machines` | Fetch VM inventory with optional `endpoint_id`/`host_id` filters |
 
+## Onboarding IP-MPLS Devices
+
+IP-MPLS devices (Cisco IOS-XE/XR) are bulk-imported from Nautobot **by role** using
+`backend/scripts/import_ipmpls_devices.py`. For every Nautobot device whose role matches
+and that has a primary management IP, it upserts an `ip_mpls_devices` row (keyed by mgmt IP),
+pre-populating role / site / rack from Nautobot. Devices without a primary IP are skipped.
+
+Credentials and Nautobot access default from the environment (`NET_USERNAME` /
+`NET_PASSWORD` / `NET_ENABLE`, `NAUTOBOT_BASE_URL` / `NAUTOBOT_TOKEN`); override with flags.
+
+**Local / dev** (from `backend/`, venv active):
+```bash
+python scripts/import_ipmpls_devices.py --role SAR --role AG2 --role AG3 --dry-run   # preview
+python scripts/import_ipmpls_devices.py --role SAR --role AG2 --role AG3             # import
+python scripts/import_ipmpls_devices.py --role SAR --collect                        # import + SSH-collect now
+```
+
+**Prepod / Prod (Docker)** — run inside the backend container from the repo root
+(`/opt/accessvault`) so it writes to the same DB (`/app/data/accessvault.db`, the mounted
+`./data` volume):
+```bash
+cd /opt/accessvault
+docker compose exec backend python backend/scripts/import_ipmpls_devices.py \
+  --role SAR --role AG2 --role AG3 --dry-run          # preview
+docker compose exec backend python backend/scripts/import_ipmpls_devices.py \
+  --role SAR --role AG2 --role AG3 [--collect]        # import (add --collect to SSH-collect now)
+```
+
+Options: `--role` (repeatable), `--collect` (SSH-collect reachable devices immediately;
+otherwise the background poller picks them up), `--dry-run`, `--username` / `--password` /
+`--enable`, `--nautobot-url` / `--nautobot-token`, `--poll-interval` (seconds, default 900).
+
+> Tables are created by migrations at container startup, so no migration step is needed.
+> If Docker requires `sudo` on the host, prefix the command; use `docker-compose` (hyphen)
+> on older hosts.
+
 ## Testing
 ```bash
 cd backend
