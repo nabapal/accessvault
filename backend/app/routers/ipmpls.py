@@ -50,7 +50,7 @@ async def list_devices(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
     platform: Optional[IpMplsPlatform] = Query(default=None),
-    search: Optional[str] = Query(default=None, description="Search name/hostname/mgmt IP/model/serial/role/site/rack/platform/OS"),
+    search: Optional[str] = Query(default=None, description="Search name/hostname/mgmt IP/model/serial/role/site/rack/platform/status/OS"),
     db: AsyncSession = Depends(get_db),
     _: object = Depends(get_current_user),
 ) -> IpMplsDevicePage:
@@ -70,6 +70,7 @@ async def list_devices(
                 func.lower(func.coalesce(IpMplsDevice.site_name, "")).like(pattern),
                 func.lower(func.coalesce(IpMplsDevice.rack_location, "")).like(pattern),
                 func.lower(func.cast(IpMplsDevice.platform, String)).like(pattern),
+                func.lower(func.cast(IpMplsDevice.status, String)).like(pattern),
                 func.lower(func.coalesce(IpMplsDevice.os_version, "")).like(pattern),
             )
         )
