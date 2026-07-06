@@ -167,9 +167,11 @@ Against the live APIC, confirm the exact object model before coding:
 - Follows the `docs/DEVELOPMENT.md` order: model → migration → collector → schema →
   router → frontend → verify → commit per step.
 
-## 11. Open questions
+## 11. Resolved decisions
 
-- L3Out VLAN `mode`/`admin_state`/`oper_state`: are these present on the L3Out
-  `vlanCktEp` the same way as EPG ones? (Phase 0.)
-- Should the `EPG` column show the external EPG (`l3extInstP`) name for L3Out rows,
-  or `--`? Proposed: show external EPG name if available, else `--`.
+- **L3Out VLAN `mode`/`admin_state`/`oper_state`:** present on the L3Out `vlanCktEp`
+  the same way as EPG ones → **Yes.** Populate these columns for L3Out rows using the
+  same `vlanCktEp` attributes as BD VLANs.
+- **`EPG` column for L3Out rows:** **show the external EPG (`l3extInstP`) name.**
+  Resolve it from the L3Out's external EPG; fall back to `--` only if none is
+  associated with the deployed encap.
