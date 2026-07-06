@@ -18,6 +18,30 @@ mkdir -p "${LOG_DIR}"
 : > "${LOG_DIR}/backend.log"
 : > "${LOG_DIR}/frontend.log"
 
+# Free the dev ports up front. A previous run that didn't shut down cleanly can
+# leave an orphaned uvicorn holding 8200 (-> "[Errno 98] Address already in use"),
+# which silently breaks the backend and leaves the UI stuck on sign-in.
+free_port() {
+  local port="$1"
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -ti tcp:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+  elif command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser "${port}"/tcp 2>/dev/null || true)"
+  fi
+  if [[ -n "${pids}" ]]; then
+    echo "[dev] Freeing port ${port} (stopping: ${pids})"
+    kill ${pids} >/dev/null 2>&1 || true
+    sleep 1
+    for pid in ${pids}; do
+      ps -p "${pid}" >/dev/null 2>&1 && kill -9 "${pid}" >/dev/null 2>&1 || true
+    done
+  fi
+}
+
+free_port 8200
+free_port 5173
+
 if [[ "${DEV_DEBUG_BACKEND}" == "1" ]]; then
   echo "[dev][debug] Backend debug mode enabled"
   command -v python >/dev/null 2>&1 && python --version 2>&1 | sed 's/^/[dev][debug] /'
