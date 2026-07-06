@@ -669,3 +669,182 @@ export interface IpMplsTopology {
   total_links: number;
   protocol: string;
 }
+
+// ---------------------------------------------------------------------------
+// NX-OS (Nexus) inventory
+// ---------------------------------------------------------------------------
+export type NxosPlatform = "nxos" | "unknown";
+export type NxosDeviceStatus = "pending" | "ok" | "error";
+
+export interface NxosDevice {
+  id: string;
+  name: string;
+  hostname?: string | null;
+  mgmt_ip: string;
+  port: number;
+  platform: NxosPlatform;
+  role?: string | null;
+  model?: string | null;
+  serial?: string | null;
+  os_version?: string | null;
+  uptime_seconds?: number | null;
+  uptime_text?: string | null;
+  description?: string | null;
+  site_name?: string | null;
+  rack_location?: string | null;
+  poll_interval_seconds: number;
+  status: NxosDeviceStatus;
+  last_polled_at?: string | null;
+  last_error?: string | null;
+  username?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NxosDevicePage {
+  items: NxosDevice[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface NxosInterface {
+  id: string;
+  device_id: string;
+  name: string;
+  description?: string | null;
+  admin_state?: string | null;
+  oper_state?: string | null;
+  ip_address?: string | null;
+  prefix_len?: number | null;
+  vrf?: string | null;
+  speed?: string | null;
+  mtu?: number | null;
+  mac?: string | null;
+  mode?: string | null;
+  access_vlan?: string | null;
+  trunk_vlans?: string | null;
+  port_channel?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NxosModule {
+  id: string;
+  device_id: string;
+  name?: string | null;
+  description?: string | null;
+  pid?: string | null;
+  vid?: string | null;
+  serial?: string | null;
+  slot?: string | null;
+}
+
+export interface NxosVrf {
+  id: string;
+  device_id: string;
+  name: string;
+  rd?: string | null;
+  state?: string | null;
+  interfaces: string[];
+  attributes: Record<string, unknown>;
+}
+
+export interface NxosNeighbor {
+  id: string;
+  device_id: string;
+  protocol: string;
+  local_interface?: string | null;
+  remote_device?: string | null;
+  remote_interface?: string | null;
+  remote_platform?: string | null;
+  remote_mgmt_ip?: string | null;
+  attributes: Record<string, unknown>;
+}
+
+export interface NxosBgpNeighbor {
+  id: string;
+  device_id: string;
+  vrf?: string | null;
+  address_family?: string | null;
+  neighbor_ip: string;
+  remote_as?: string | null;
+  local_as?: string | null;
+  state?: string | null;
+  prefixes_received?: number | null;
+  prefixes_sent?: number | null;
+  uptime?: string | null;
+  description?: string | null;
+  attributes: Record<string, unknown>;
+}
+
+export interface NxosDeviceCreate {
+  name: string;
+  mgmt_ip: string;
+  port?: number;
+  platform?: NxosPlatform;
+  role?: string;
+  description?: string;
+  poll_interval_seconds?: number;
+  username: string;
+  password: string;
+  enable?: string;
+}
+
+export interface NxosSyncResult {
+  success: boolean;
+  message?: string | null;
+  interfaces: number;
+  modules: number;
+  vrfs: number;
+  neighbors: number;
+  bgp_neighbors: number;
+  device: NxosDevice;
+}
+
+export interface NxosTopologyNode {
+  id: string;
+  name: string;
+  kind: string;
+  role?: string | null;
+  platform?: string | null;
+  site?: string | null;
+  device_id?: string | null;
+}
+
+export interface NxosTopologyLink {
+  source: string;
+  target: string;
+  interfaces: string[];
+  count: number;
+  discovered_by: string[];
+  endpoint_interfaces?: Record<string, string[]>;
+}
+
+export interface NxosTopology {
+  nodes: NxosTopologyNode[];
+  links: NxosTopologyLink[];
+  total_nodes: number;
+  total_links: number;
+}
+
+export interface NxosSummary {
+  total: number;
+  total_interfaces: number;
+  interfaces_up: number;
+  total_vrfs: number;
+  unique_vrfs: number;
+  total_neighbors: number;
+  total_bgp_neighbors: number;
+  error_devices: number;
+  stale_devices: number;
+  by_platform: Record<string, number>;
+  by_status: Record<string, number>;
+  by_role: Record<string, number>;
+  by_location: Record<string, number>;
+  by_model: Record<string, number>;
+  by_os: Record<string, number>;
+  by_neighbor_protocol: Record<string, number>;
+}

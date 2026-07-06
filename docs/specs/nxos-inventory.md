@@ -1,6 +1,6 @@
 # SDD: Cisco NX-OS (Nexus) Device Inventory Module
 
-- **Status:** Approved — decisions resolved (§11); ready for Phase 0 + implementation
+- **Status:** Implemented — verified live on BGLRRLABCAS001/002 (backend + frontend shipped)
 - **Owner:** naba
 - **Date:** 2026-07-06
 - **Module:** NetVerse AI → new "NX-OS Inventory" section (`/nxos/...`)

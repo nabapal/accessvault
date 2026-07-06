@@ -1,0 +1,213 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircleIcon,
+  CircleStackIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  ServerIcon,
+  ShareIcon,
+  SignalIcon
+} from "@heroicons/react/24/outline";
+
+import { AppShell } from "@/components/layout/AppShell";
+import { CHART_PALETTE, Donut, DonutLegend, RadialGauge } from "@/components/ui/charts";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton, StatTileSkeleton } from "@/components/ui/Skeleton";
+import { StatTile } from "@/components/ui/StatTile";
+import { toast } from "@/components/ui/toast";
+import { fetchNxosSummary } from "@/services/nxos";
+import { locationLabelFromCode } from "@/utils/location";
+import { NxosSummary } from "@/types";
+
+function BreakdownRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span className="w-40 shrink-0 truncate text-sm text-slate-200" title={label}>
+        {label}
+      </span>
+      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-brand-800/70">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(pct, count > 0 ? 4 : 0)}%` }} />
+      </div>
+      <span className="w-16 shrink-0 text-right text-sm tabular-nums text-slate-300">
+        {count}
+        <span className="ml-1 text-xs text-slate-500">{pct}%</span>
+      </span>
+    </div>
+  );
+}
+
+function BreakdownCard({
+  title,
+  data,
+  total,
+  color = "bg-primary-500",
+  labelFn
+}: {
+  title: string;
+  data: Record<string, number>;
+  total: number;
+  color?: string;
+  labelFn?: (key: string) => string;
+}) {
+  const rows = useMemo(
+    () =>
+      Object.entries(data)
+        .map(([key, count]) => ({ key, label: labelFn ? labelFn(key) : key, count }))
+        .sort((a, b) => b.count - a.count),
+    [data, labelFn]
+  );
+  return (
+    <section className="rounded-lg border border-brand-700 bg-brand-900/60">
+      <div className="flex items-center justify-between border-b border-brand-800/70 px-4 py-3">
+        <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
+        <span className="text-xs text-slate-500">{rows.length} groups</span>
+      </div>
+      <div className="px-4 py-3">
+        {rows.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">No data.</p>
+        ) : (
+          rows.map((r) => <BreakdownRow key={r.key} label={r.label} count={r.count} total={total} color={color} />)
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function NxosSummaryPage() {
+  const [summary, setSummary] = useState<NxosSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const data = await fetchNxosSummary();
+        if (!cancelled) {
+          setSummary(data);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load NX-OS summary", err);
+          setError("Unable to load NX-OS summary. Please retry.");
+          toast.error("Failed to load summary", "Could not reach the NX-OS summary endpoint.");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const healthy = summary ? Math.max(0, summary.total - summary.error_devices - summary.stale_devices) : 0;
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <PageHeader
+          title="NX-OS Summary"
+          description="Fleet-wide rollup of Cisco Nexus devices across location, role, model, OS, and routing footprint."
+        />
+
+        {isLoading ? (
+          <>
+            <StatTileSkeleton count={8} />
+            <section className="grid gap-4 lg:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="mt-3 h-3 w-full" />
+                  <Skeleton className="mt-2 h-3 w-full" />
+                </div>
+              ))}
+            </section>
+          </>
+        ) : error ? (
+          <EmptyState icon={ExclamationTriangleIcon} title="Couldn't load the summary" description={error} />
+        ) : !summary || summary.total === 0 ? (
+          <EmptyState
+            icon={ServerIcon}
+            title="No NX-OS devices yet"
+            description="Onboard devices from Admin → NX-OS Devices to populate the fleet summary."
+          />
+        ) : (
+          <>
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatTile label="Devices" value={summary.total} hint="Onboarded Nexus devices" icon={ServerIcon} />
+              <StatTile
+                label="Interfaces"
+                value={summary.total_interfaces}
+                hint={`${summary.interfaces_up} up`}
+                icon={SignalIcon}
+              />
+              <StatTile
+                label="VRFs (unique)"
+                value={summary.unique_vrfs}
+                hint={`${summary.total_vrfs} instances`}
+                icon={CircleStackIcon}
+              />
+              <StatTile label="CDP/LLDP Neighbors" value={summary.total_neighbors} hint="L2 adjacencies" icon={ShareIcon} />
+              <StatTile label="BGP Neighbors" value={summary.total_bgp_neighbors} hint="All VRFs / AFs" tone="good" icon={ShareIcon} />
+              <StatTile label="Interfaces Up" value={summary.interfaces_up} hint="Operational" tone="good" icon={CheckCircleIcon} />
+              <StatTile
+                label="Devices in Error"
+                value={summary.error_devices}
+                hint="Last poll failed"
+                tone={summary.error_devices > 0 ? "bad" : "good"}
+                icon={ExclamationTriangleIcon}
+              />
+              <StatTile
+                label="Stale Devices"
+                value={summary.stale_devices}
+                hint="Not polled within 2x interval"
+                tone={summary.stale_devices > 0 ? "warn" : "good"}
+                icon={ClockIcon}
+              />
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-3">
+              <div className="flex items-center justify-center rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                <RadialGauge value={summary.interfaces_up} max={summary.total_interfaces} label="Interfaces Up" tone="good" />
+              </div>
+              <div className="flex items-center justify-center rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                <RadialGauge value={healthy} max={summary.total} label="Device Health" tone={healthy === summary.total ? "good" : "warn"} />
+              </div>
+              <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
+                <h2 className="mb-3 text-sm font-semibold text-slate-100">Neighbors by Protocol</h2>
+                {(() => {
+                  const slices = Object.entries(summary.by_neighbor_protocol)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([label, value], i) => ({ label: label.toUpperCase(), value, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+                  return (
+                    <div className="flex items-center gap-4">
+                      <Donut data={slices} size={150} centerValue={summary.total_neighbors} centerLabel="adj" />
+                      <div className="min-w-0 flex-1">
+                        <DonutLegend data={slices} />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-2">
+              <BreakdownCard title="By Location" data={summary.by_location} total={summary.total} color="bg-primary-500" labelFn={locationLabelFromCode} />
+              <BreakdownCard title="By Role" data={summary.by_role} total={summary.total} color="bg-violet-500" />
+              <BreakdownCard title="By Model" data={summary.by_model} total={summary.total} color="bg-cyan-500" />
+              <BreakdownCard title="By OS Version" data={summary.by_os} total={summary.total} color="bg-teal-500" />
+              <BreakdownCard title="By Status" data={summary.by_status} total={summary.total} color="bg-amber-500" />
+              <BreakdownCard title="By Platform" data={summary.by_platform} total={summary.total} color="bg-blue-500" />
+            </section>
+          </>
+        )}
+      </div>
+    </AppShell>
+  );
+}

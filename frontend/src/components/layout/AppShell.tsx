@@ -52,11 +52,20 @@ const SIDEBAR_SECTIONS = [
     ]
   },
   {
+    title: "NX-OS Inventory",
+    items: [
+      { label: "Summary", to: "/nxos/summary", icon: ChartPieIcon },
+      { label: "Devices", to: "/nxos/devices", icon: ServerIcon },
+      { label: "Topology", to: "/nxos/topology", icon: ShareIcon }
+    ]
+  },
+  {
     title: "Admin",
     items: [
       { label: "Fabric Onboarding", to: "/telco/onboarding", icon: PlusCircleIcon },
       { label: "VM Collectors", to: "/inventory/admin", icon: CloudArrowDownIcon },
-      { label: "IP-MPLS Devices", to: "/ipmpls/admin", icon: WrenchScrewdriverIcon }
+      { label: "IP-MPLS Devices", to: "/ipmpls/admin", icon: WrenchScrewdriverIcon },
+      { label: "NX-OS Devices", to: "/nxos/admin", icon: WrenchScrewdriverIcon }
     ]
   },
   {

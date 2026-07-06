@@ -12,6 +12,11 @@ import { IpMplsSummaryPage } from "@/pages/IpMplsSummaryPage";
 import { IpMplsDeviceDetailPage } from "@/pages/IpMplsDeviceDetailPage";
 import { IpMplsDevicesAdminPage } from "@/pages/IpMplsDevicesAdminPage";
 import { IpMplsTopologyPage } from "@/pages/IpMplsTopologyPage";
+import { NxosDevicesPage } from "@/pages/NxosDevicesPage";
+import { NxosSummaryPage } from "@/pages/NxosSummaryPage";
+import { NxosDeviceDetailPage } from "@/pages/NxosDeviceDetailPage";
+import { NxosDevicesAdminPage } from "@/pages/NxosDevicesAdminPage";
+import { NxosTopologyPage } from "@/pages/NxosTopologyPage";
 import { AciFabricSummaryPage } from "@/pages/AciFabricSummaryPage";
 import { AciNodeDetailPage } from "@/pages/AciNodeDetailPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -48,6 +53,11 @@ export default function App() {
     <Route path="/ipmpls/devices/:deviceId" element={<IpMplsDeviceDetailPage />} />
     <Route path="/ipmpls/topology" element={<IpMplsTopologyPage />} />
     <Route path="/ipmpls/admin" element={<IpMplsDevicesAdminPage />} />
+    <Route path="/nxos/summary" element={<NxosSummaryPage />} />
+    <Route path="/nxos/devices" element={<NxosDevicesPage />} />
+    <Route path="/nxos/devices/:deviceId" element={<NxosDeviceDetailPage />} />
+    <Route path="/nxos/topology" element={<NxosTopologyPage />} />
+    <Route path="/nxos/admin" element={<NxosDevicesAdminPage />} />
     <Route path="/telco/onboarding" element={<TelcoOnboardingPage />} />
     <Route path="/accessvault" element={<AccessVaultPage />} />
       </Route>
