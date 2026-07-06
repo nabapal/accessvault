@@ -487,8 +487,7 @@ async def _collect_aci_fabric(
             raise TelcoCollectionError("Unexpected login response from APIC.") from exc
 
         client.cookies.set("APIC-cookie", token)
-        fabric_response = await client.get("/api/class/fabricNode.json")
-        fabric_response.raise_for_status()
+        fabric_response = await _apic_get_with_retry(client, "/api/class/fabricNode.json")
         payload = fabric_response.json()
 
         items = payload.get("imdata", [])
@@ -707,27 +706,55 @@ async def _collect_and_upsert_aci_node_details(
     return {"node_detail_count": detail_count, "interface_count": interface_count}
 
 
-async def _fetch_aci_detail_datasets(client: httpx.AsyncClient) -> Dict[str, List[Dict[str, Any]]]:
-    tasks = [client.get(path) for path in _ACI_DETAIL_ENDPOINTS.values()]
-    responses = await asyncio.gather(*tasks, return_exceptions=True)
-    datasets: Dict[str, List[Dict[str, Any]]] = {}
+# Large fabrics (100+ nodes) return 503 if too many big class queries hit the APIC
+# at once, so bound concurrency and retry transient 503/429/timeouts with backoff.
+_ACI_FETCH_CONCURRENCY = 2
+_ACI_FETCH_RETRIES = 5
 
-    for (key, response) in zip(_ACI_DETAIL_ENDPOINTS.keys(), responses):
-        if isinstance(response, Exception):
-            logger.warning("Failed to fetch APIC endpoint %s: %s", key, response)
-            datasets[key] = []
-            continue
+
+async def _apic_get_with_retry(
+    client: httpx.AsyncClient,
+    path: str,
+    *,
+    retries: int = _ACI_FETCH_RETRIES,
+    backoff: float = 2.0,
+) -> httpx.Response:
+    """GET a class endpoint, retrying transient APIC overload (503/429) and timeouts."""
+    last_exc: Exception | None = None
+    for attempt in range(retries):
         try:
+            response = await client.get(path)
+            if response.status_code in (503, 429):
+                last_exc = httpx.HTTPStatusError(
+                    f"APIC {response.status_code} (overloaded)", request=response.request, response=response
+                )
+                await asyncio.sleep(backoff * (attempt + 1))
+                continue
             response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            logger.warning("APIC returned an error for endpoint %s: %s", key, exc)
-            datasets[key] = []
-            continue
+            return response
+        except (httpx.TransportError, httpx.TimeoutException) as exc:
+            last_exc = exc
+            await asyncio.sleep(backoff * (attempt + 1))
+    assert last_exc is not None
+    raise last_exc
+
+
+async def _fetch_aci_detail_datasets(client: httpx.AsyncClient) -> Dict[str, List[Dict[str, Any]]]:
+    semaphore = asyncio.Semaphore(_ACI_FETCH_CONCURRENCY)
+
+    async def fetch(key: str, path: str) -> Tuple[str, List[Dict[str, Any]]]:
+        async with semaphore:
+            try:
+                response = await _apic_get_with_retry(client, path)
+            except (httpx.HTTPError, AssertionError) as exc:
+                logger.warning("Failed to fetch APIC endpoint %s after retries: %s", key, exc)
+                return key, []
         payload = response.json()
         items = payload.get("imdata", [])
-        datasets[key] = items if isinstance(items, list) else []
+        return key, items if isinstance(items, list) else []
 
-    return datasets
+    results = await asyncio.gather(*(fetch(key, path) for key, path in _ACI_DETAIL_ENDPOINTS.items()))
+    return dict(results)
 
 
 def _build_node_snapshots(
@@ -1218,13 +1245,10 @@ async def _collect_and_upsert_aci_endpoints(
 ) -> int:
     """Fetch fabric-wide endpoints (fvCEp + fvIp) and replace the stored rows for this job."""
     try:
-        responses = await asyncio.gather(
-            client.get("/api/class/fvCEp.json"),
-            client.get("/api/class/fvIp.json"),
+        cep_response, ip_response = await asyncio.gather(
+            _apic_get_with_retry(client, "/api/class/fvCEp.json"),
+            _apic_get_with_retry(client, "/api/class/fvIp.json"),
         )
-        cep_response, ip_response = responses
-        cep_response.raise_for_status()
-        ip_response.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning("Failed to fetch ACI endpoints for job %s: %s", job.id, exc)
         return 0
@@ -1489,13 +1513,10 @@ async def _collect_and_upsert_aci_vlans(
     """Fetch deployed VLANs (vlanCktEp) plus BD/VRF name maps and replace stored rows."""
     try:
         vlan_resp, bd_resp, ctx_resp = await asyncio.gather(
-            client.get("/api/node/class/vlanCktEp.json"),
-            client.get("/api/class/fvBD.json"),
-            client.get("/api/class/fvCtx.json"),
+            _apic_get_with_retry(client, "/api/node/class/vlanCktEp.json"),
+            _apic_get_with_retry(client, "/api/class/fvBD.json"),
+            _apic_get_with_retry(client, "/api/class/fvCtx.json"),
         )
-        vlan_resp.raise_for_status()
-        bd_resp.raise_for_status()
-        ctx_resp.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning("Failed to fetch ACI VLANs for job %s: %s", job.id, exc)
         return 0
@@ -1509,13 +1530,10 @@ async def _collect_and_upsert_aci_vlans(
     # a failure here must not drop the BD/EPG VLANs already collected.
     try:
         path_resp, ectx_resp, instp_resp = await asyncio.gather(
-            client.get("/api/class/l3extRsPathL3OutAtt.json"),
-            client.get("/api/class/l3extRsEctx.json"),
-            client.get("/api/class/l3extInstP.json"),
+            _apic_get_with_retry(client, "/api/class/l3extRsPathL3OutAtt.json"),
+            _apic_get_with_retry(client, "/api/class/l3extRsEctx.json"),
+            _apic_get_with_retry(client, "/api/class/l3extInstP.json"),
         )
-        path_resp.raise_for_status()
-        ectx_resp.raise_for_status()
-        instp_resp.raise_for_status()
         vrf_by_out = _build_l3out_vrf_map(ectx_resp.json().get("imdata", []))
         epg_by_out = _build_l3out_epg_map(instp_resp.json().get("imdata", []))
         path_items = path_resp.json().get("imdata", [])
