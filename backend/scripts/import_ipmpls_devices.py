@@ -50,6 +50,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
                         help="Nautobot API base URL incl. /api (default: NAUTOBOT_BASE_URL)")
     parser.add_argument("--nautobot-token", default=settings.nautobot_token,
                         help="Nautobot API token (default: NAUTOBOT_TOKEN)")
+    parser.add_argument("--status", default="active",
+                        help="Nautobot device status to import (default: active; pass empty '' for all statuses)")
     parser.add_argument("--username", default=settings.net_username, help="SSH username (default: NET_USERNAME)")
     parser.add_argument("--password", default=settings.net_password, help="SSH password (default: NET_PASSWORD)")
     parser.add_argument("--enable", default=settings.net_enable, help="Enable secret (default: NET_ENABLE)")
@@ -71,7 +73,7 @@ def _node_name(value: Any) -> Any:
     return value.get("name") if isinstance(value, dict) else value
 
 
-def fetch_devices_by_roles(base_url: str, token: str, roles: List[str]) -> List[Dict[str, Any]]:
+def fetch_devices_by_roles(base_url: str, token: str, roles: List[str], status: str = "active") -> List[Dict[str, Any]]:
     headers = {"Accept": "application/json", "Authorization": f"Token {token}", "User-Agent": "NetVerse-Import/1.0"}
     devices: List[Dict[str, Any]] = []
     with httpx.Client(base_url=base_url.rstrip("/"), headers=headers, verify=False, timeout=30.0) as client:
@@ -81,6 +83,9 @@ def fetch_devices_by_roles(base_url: str, token: str, roles: List[str]) -> List[
             for value in (role, role.lower()):
                 next_url: str | None = "/dcim/devices/"
                 params: Dict[str, str] | None = {"role": value, "limit": "200"}
+                # Only import Active devices by default (skip Decommissioned/Offline/etc.).
+                if status:
+                    params["status"] = status
                 page_hits: List[Dict[str, Any]] = []
                 while next_url:
                     resp = client.get(next_url, params=params if next_url == "/dcim/devices/" else None)
@@ -107,7 +112,7 @@ def is_reachable(ip: str, port: int = 22, timeout: float = 3.0) -> bool:
 
 
 async def run(args: argparse.Namespace) -> int:
-    devices = fetch_devices_by_roles(args.nautobot_url, args.nautobot_token, args.role)
+    devices = fetch_devices_by_roles(args.nautobot_url, args.nautobot_token, args.role, args.status)
 
     registered = 0
     skipped_no_ip: List[str] = []
