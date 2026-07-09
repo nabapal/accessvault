@@ -78,6 +78,16 @@ export const createNxosDevice = async (payload: NxosDeviceCreate): Promise<NxosD
   return data;
 };
 
+export type NxosDeviceUpdate = Partial<NxosDeviceCreate>;
+
+export const updateNxosDevice = async (
+  deviceId: string,
+  payload: NxosDeviceUpdate
+): Promise<NxosDevice> => {
+  const { data } = await api.patch<NxosDevice>(`/nxos/devices/${deviceId}`, payload);
+  return data;
+};
+
 export const deleteNxosDevice = async (deviceId: string): Promise<void> => {
   await api.delete(`/nxos/devices/${deviceId}`);
 };
