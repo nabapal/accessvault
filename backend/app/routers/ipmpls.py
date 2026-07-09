@@ -152,6 +152,18 @@ async def update_device(
 ) -> IpMplsDeviceRead:
     device = await _get_device(db, device_id)
     data = payload.model_dump(exclude_unset=True)
+    new_mgmt_ip = data.get("mgmt_ip")
+    if new_mgmt_ip and new_mgmt_ip != device.mgmt_ip:
+        clash = (
+            await db.execute(
+                select(IpMplsDevice).where(
+                    IpMplsDevice.mgmt_ip == new_mgmt_ip,
+                    IpMplsDevice.id != device.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(status_code=409, detail="A device with this management IP already exists")
     if "password" in data:
         password = data.pop("password")
         if password:

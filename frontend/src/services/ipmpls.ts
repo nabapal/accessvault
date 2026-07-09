@@ -77,6 +77,16 @@ export const createIpMplsDevice = async (payload: IpMplsDeviceCreate): Promise<I
   return data;
 };
 
+export type IpMplsDeviceUpdate = Partial<IpMplsDeviceCreate>;
+
+export const updateIpMplsDevice = async (
+  deviceId: string,
+  payload: IpMplsDeviceUpdate
+): Promise<IpMplsDevice> => {
+  const { data } = await api.patch<IpMplsDevice>(`/ipmpls/devices/${deviceId}`, payload);
+  return data;
+};
+
 export const deleteIpMplsDevice = async (deviceId: string): Promise<void> => {
   await api.delete(`/ipmpls/devices/${deviceId}`);
 };

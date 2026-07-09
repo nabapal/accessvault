@@ -1,4 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useState } from "react";
+
+import { Dialog, Transition } from "@headlessui/react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -7,7 +9,9 @@ import {
   createIpMplsDevice,
   deleteIpMplsDevice,
   fetchIpMplsDevices,
-  syncIpMplsDevice
+  syncIpMplsDevice,
+  updateIpMplsDevice,
+  type IpMplsDeviceUpdate
 } from "@/services/ipmpls";
 import { parseApiDate } from "@/utils/datetime";
 import { IpMplsDevice, IpMplsDeviceCreate, IpMplsPlatform } from "@/types";
@@ -41,6 +45,10 @@ export function IpMplsDevicesAdminPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [editingDevice, setEditingDevice] = useState<IpMplsDevice | null>(null);
+  const [editForm, setEditForm] = useState<IpMplsDeviceUpdate>({});
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -122,6 +130,65 @@ export function IpMplsDevicesAdminPage() {
     } catch {
       setError("Delete failed.");
       toast.error("Delete failed", `Could not delete ${name}.`);
+    }
+  };
+
+  const openEdit = (device: IpMplsDevice) => {
+    setEditingDevice(device);
+    setEditForm({
+      name: device.name,
+      mgmt_ip: device.mgmt_ip,
+      port: device.port,
+      platform: device.platform,
+      username: device.username ?? "",
+      poll_interval_seconds: device.poll_interval_seconds,
+      password: "",
+      enable: ""
+    });
+    setUpdateError(null);
+  };
+
+  const closeEdit = () => {
+    if (isUpdating) return;
+    setEditingDevice(null);
+    setEditForm({});
+    setUpdateError(null);
+  };
+
+  const handleUpdate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingDevice) return;
+    setIsUpdating(true);
+    setUpdateError(null);
+    const payload: IpMplsDeviceUpdate = { ...editForm };
+    if (typeof payload.port !== "undefined") {
+      payload.port = Number(payload.port) || 22;
+    }
+    if (typeof payload.poll_interval_seconds !== "undefined") {
+      payload.poll_interval_seconds = Number(payload.poll_interval_seconds) || 900;
+    }
+    if (!payload.password || !payload.password.trim()) {
+      delete payload.password;
+    }
+    if (!payload.enable || !payload.enable.trim()) {
+      delete payload.enable;
+    }
+    try {
+      const updated = await updateIpMplsDevice(editingDevice.id, payload);
+      const label = updated.hostname || updated.name;
+      toast.success("Device updated", label);
+      setMessage(`Updated ${label}.`);
+      setError(null);
+      setEditingDevice(null);
+      setEditForm({});
+      await load();
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const msg = detail || "Failed to update device.";
+      setUpdateError(msg);
+      toast.error("Update failed", msg);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -227,6 +294,13 @@ export function IpMplsDevicesAdminPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
+                          onClick={() => openEdit(d)}
+                          className="mr-2 rounded-md border border-brand-700 bg-brand-800/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-500"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleSync(d.id)}
                           disabled={syncingId === d.id}
                           className="mr-2 rounded-md border border-brand-700 bg-brand-800/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-500 disabled:opacity-60"
@@ -249,6 +323,118 @@ export function IpMplsDevicesAdminPage() {
           </div>
         </section>
       </div>
+
+      <Transition.Root show={Boolean(editingDevice)} as={Fragment} appear>
+        <Dialog as="div" className="relative z-50" onClose={closeEdit}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-150"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/70" />
+          </Transition.Child>
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-lg border border-brand-800 bg-brand-900/95 p-6 shadow-xl transition-all">
+                  <Dialog.Title className="text-lg font-semibold text-slate-100">Edit device</Dialog.Title>
+                  <p className="mt-1 text-sm text-slate-400">Update connection details, credentials, or polling settings.</p>
+                  <form className="mt-4 space-y-4" onSubmit={handleUpdate}>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Name</label>
+                        <input className={field} value={editForm.name ?? ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Management IP</label>
+                        <input className={field} value={editForm.mgmt_ip ?? ""} onChange={(e) => setEditForm({ ...editForm, mgmt_ip: e.target.value })} required />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Platform</label>
+                        <select
+                          className={field}
+                          value={editForm.platform ?? "iosxr"}
+                          onChange={(e) => setEditForm({ ...editForm, platform: e.target.value as IpMplsPlatform })}
+                        >
+                          <option value="iosxr">IOS-XR</option>
+                          <option value="iosxe">IOS-XE</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Username</label>
+                        <input className={field} value={editForm.username ?? ""} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} required />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Password</label>
+                        <input
+                          type="password"
+                          className={field}
+                          value={editForm.password ?? ""}
+                          placeholder="Leave blank to keep current secret"
+                          onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Enable secret</label>
+                        <input
+                          type="password"
+                          className={field}
+                          value={editForm.enable ?? ""}
+                          placeholder="Leave blank to keep current"
+                          onChange={(e) => setEditForm({ ...editForm, enable: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">SSH port</label>
+                        <input type="number" className={field} value={editForm.port ?? 22} onChange={(e) => setEditForm({ ...editForm, port: Number(e.target.value) })} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs uppercase tracking-wide text-slate-400">Poll interval (s)</label>
+                        <input
+                          type="number"
+                          className={field}
+                          value={editForm.poll_interval_seconds ?? 900}
+                          onChange={(e) => setEditForm({ ...editForm, poll_interval_seconds: Number(e.target.value) })}
+                        />
+                      </div>
+                    </div>
+                    {updateError ? <p className="text-sm text-rose-300">{updateError}</p> : null}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={closeEdit}
+                        disabled={isUpdating}
+                        className="rounded-md border border-brand-700 bg-brand-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isUpdating}
+                        className="rounded-md border border-primary-500 bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isUpdating ? "Saving…" : "Save changes"}
+                      </button>
+                    </div>
+                  </form>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
     </AppShell>
   );
 }
