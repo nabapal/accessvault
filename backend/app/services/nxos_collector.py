@@ -408,6 +408,61 @@ async def _enrich_from_nautobot(device: NxosDevice) -> None:
         device.rack_location = facts.rack
 
 
+def _test_connection_blocking(
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    enable: str | None,
+) -> str | None:
+    """Open an SSH session far enough to prove reachability + auth; return the prompt hostname."""
+    params: Dict[str, Any] = {
+        "device_type": "cisco_nxos",
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "conn_timeout": 20,
+        "fast_cli": False,
+    }
+    if enable:
+        params["secret"] = enable
+    conn = ConnectHandler(**params)
+    try:
+        prompt = conn.find_prompt().strip().rstrip("#>").strip()
+        return (prompt.split(":")[-1] if prompt else None) or None
+    finally:
+        conn.disconnect()
+
+
+async def test_connection_for_device(
+    device: NxosDevice,
+    password_override: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Lightweight connectivity/auth check. Does not persist device state or collect inventory."""
+    timestamp = datetime.now(timezone.utc)
+    password = password_override
+    if password is None and device.password_secret is not None:
+        password = decrypt_secret(device.password_secret)
+    if not device.username or not password:
+        return {"reachable": False, "message": "Missing username or password for device.", "hostname": None, "checked_at": timestamp}
+
+    enable = decrypt_secret(device.enable_secret) if device.enable_secret else None
+    try:
+        hostname = await asyncio.to_thread(
+            _test_connection_blocking,
+            device.mgmt_ip,
+            device.port or 22,
+            device.username,
+            password,
+            enable,
+        )
+    except Exception as exc:  # pragma: no cover - network/runtime safety
+        logger.warning("NX-OS connectivity test failed for %s: %s", device.mgmt_ip, exc)
+        return {"reachable": False, "message": str(exc)[:500], "hostname": None, "checked_at": timestamp}
+    return {"reachable": True, "message": "Connection successful.", "hostname": hostname, "checked_at": timestamp}
+
+
 async def run_collection_for_device(
     session: AsyncSession,
     device: NxosDevice,

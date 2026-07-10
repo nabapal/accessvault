@@ -87,6 +87,18 @@ export const updateIpMplsDevice = async (
   return data;
 };
 
+export interface IpMplsConnectivityResult {
+  reachable: boolean;
+  message?: string | null;
+  hostname?: string | null;
+  checked_at: string;
+}
+
+export const testIpMplsDevice = async (deviceId: string): Promise<IpMplsConnectivityResult> => {
+  const { data } = await api.post<IpMplsConnectivityResult>(`/ipmpls/devices/${deviceId}/test`);
+  return data;
+};
+
 export const deleteIpMplsDevice = async (deviceId: string): Promise<void> => {
   await api.delete(`/ipmpls/devices/${deviceId}`);
 };

@@ -40,6 +40,13 @@ class IpMplsDeviceUpdate(BaseModel):
     enable: Optional[str] = None
 
 
+class IpMplsConnectivityResult(BaseModel):
+    reachable: bool
+    message: Optional[str] = None
+    hostname: Optional[str] = None
+    checked_at: datetime
+
+
 class IpMplsDeviceRead(BaseModel):
     id: UUID
     name: str

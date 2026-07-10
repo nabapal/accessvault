@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -150,6 +151,38 @@ async def test_update_requires_admin(async_client: AsyncClient, admin_user: User
     resp = await async_client.patch(
         f"/api/v1/ipmpls/devices/{device['id']}",
         json={"name": "hacked"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.anyio("asyncio")
+async def test_test_connection_endpoint(async_client: AsyncClient, admin_user: User, monkeypatch: pytest.MonkeyPatch) -> None:
+    token = await _login(async_client, admin_user.email, "adminpass")
+    device = await _create_device(async_client, token, name="edge-t", mgmt_ip="10.0.0.9")
+
+    async def _fake(dev, password_override=None):  # noqa: ANN001
+        return {"reachable": True, "message": "Connection successful.", "hostname": "edge-t-host", "checked_at": datetime.now(timezone.utc)}
+
+    monkeypatch.setattr("app.routers.ipmpls.test_connection_for_device", _fake)
+    resp = await async_client.post(
+        f"/api/v1/ipmpls/devices/{device['id']}/test",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["reachable"] is True
+    assert body["hostname"] == "edge-t-host"
+    assert "checked_at" in body
+
+
+@pytest.mark.anyio("asyncio")
+async def test_test_connection_requires_admin(async_client: AsyncClient, admin_user: User, normal_user: User) -> None:
+    admin_token = await _login(async_client, admin_user.email, "adminpass")
+    device = await _create_device(async_client, admin_token, name="edge-t2", mgmt_ip="10.0.0.8")
+    user_token = await _login(async_client, normal_user.email, "userpass")
+    resp = await async_client.post(
+        f"/api/v1/ipmpls/devices/{device['id']}/test",
         headers={"Authorization": f"Bearer {user_token}"},
     )
     assert resp.status_code == 403, resp.text

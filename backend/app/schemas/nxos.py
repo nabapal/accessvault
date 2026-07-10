@@ -40,6 +40,13 @@ class NxosDeviceUpdate(BaseModel):
     enable: Optional[str] = None
 
 
+class NxosConnectivityResult(BaseModel):
+    reachable: bool
+    message: Optional[str] = None
+    hostname: Optional[str] = None
+    checked_at: datetime
+
+
 class NxosDeviceRead(BaseModel):
     id: UUID
     name: str

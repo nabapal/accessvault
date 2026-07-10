@@ -88,6 +88,18 @@ export const updateNxosDevice = async (
   return data;
 };
 
+export interface NxosConnectivityResult {
+  reachable: boolean;
+  message?: string | null;
+  hostname?: string | null;
+  checked_at: string;
+}
+
+export const testNxosDevice = async (deviceId: string): Promise<NxosConnectivityResult> => {
+  const { data } = await api.post<NxosConnectivityResult>(`/nxos/devices/${deviceId}/test`);
+  return data;
+};
+
 export const deleteNxosDevice = async (deviceId: string): Promise<void> => {
   await api.delete(`/nxos/devices/${deviceId}`);
 };

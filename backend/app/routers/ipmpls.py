@@ -18,6 +18,7 @@ from app.models import (
     IpMplsVrf,
 )
 from app.schemas import (
+    IpMplsConnectivityResult,
     IpMplsDeviceCreate,
     IpMplsDevicePage,
     IpMplsDeviceRead,
@@ -33,7 +34,7 @@ from app.schemas import (
     IpMplsVrfRead,
 )
 from app.services.crypto import encrypt_secret
-from app.services.ipmpls_collector import run_collection_for_device
+from app.services.ipmpls_collector import run_collection_for_device, test_connection_for_device
 
 router = APIRouter(prefix="/ipmpls", tags=["ipmpls"])
 
@@ -209,6 +210,17 @@ async def sync_device_now(
         neighbors=snap.get("neighbors", 0),
         device=IpMplsDeviceRead.model_validate(device, from_attributes=True),
     )
+
+
+@router.post("/devices/{device_id}/test", response_model=IpMplsConnectivityResult)
+async def test_device_connection(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(require_admin),
+) -> IpMplsConnectivityResult:
+    device = await _get_device(db, device_id)
+    result = await test_connection_for_device(device)
+    return IpMplsConnectivityResult(**result)
 
 
 @router.get("/devices/{device_id}/interfaces", response_model=List[IpMplsInterfaceRead])

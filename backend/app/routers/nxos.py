@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.schemas import (
     NxosBgpNeighborRead,
+    NxosConnectivityResult,
     NxosDeviceCreate,
     NxosDevicePage,
     NxosDeviceRead,
@@ -35,7 +36,7 @@ from app.schemas import (
     NxosVrfRead,
 )
 from app.services.crypto import encrypt_secret
-from app.services.nxos_collector import run_collection_for_device
+from app.services.nxos_collector import run_collection_for_device, test_connection_for_device
 
 router = APIRouter(prefix="/nxos", tags=["nxos"])
 
@@ -212,6 +213,17 @@ async def sync_device_now(
         bgp_neighbors=snap.get("bgp", 0),
         device=NxosDeviceRead.model_validate(device, from_attributes=True),
     )
+
+
+@router.post("/devices/{device_id}/test", response_model=NxosConnectivityResult)
+async def test_device_connection(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(require_admin),
+) -> NxosConnectivityResult:
+    device = await _get_device(db, device_id)
+    result = await test_connection_for_device(device)
+    return NxosConnectivityResult(**result)
 
 
 @router.get("/devices/{device_id}/interfaces", response_model=List[NxosInterfaceRead])

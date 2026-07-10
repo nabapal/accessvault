@@ -10,7 +10,9 @@ import {
   deleteIpMplsDevice,
   fetchIpMplsDevices,
   syncIpMplsDevice,
+  testIpMplsDevice,
   updateIpMplsDevice,
+  type IpMplsConnectivityResult,
   type IpMplsDeviceUpdate
 } from "@/services/ipmpls";
 import { parseApiDate } from "@/utils/datetime";
@@ -45,6 +47,9 @@ export function IpMplsDevicesAdminPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, IpMplsConnectivityResult>>({});
+  const [testErrors, setTestErrors] = useState<Record<string, string>>({});
   const [editingDevice, setEditingDevice] = useState<IpMplsDevice | null>(null);
   const [editForm, setEditForm] = useState<IpMplsDeviceUpdate>({});
   const [isUpdating, setIsUpdating] = useState(false);
@@ -118,6 +123,27 @@ export function IpMplsDevicesAdminPage() {
       toast.error("Sync request failed", "Could not reach the device sync endpoint.");
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const handleTest = async (id: string) => {
+    setTestingId(id);
+    setTestErrors((prev) => ({ ...prev, [id]: "" }));
+    try {
+      const result = await testIpMplsDevice(id);
+      setTestResults((prev) => ({ ...prev, [id]: result }));
+      if (result.reachable) {
+        toast.success("Connection successful", result.hostname ?? undefined);
+      } else {
+        toast.error("Connection failed", result.message ?? undefined);
+      }
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const msg = detail || "Test request failed.";
+      setTestErrors((prev) => ({ ...prev, [id]: msg }));
+      toast.error("Test failed", msg);
+    } finally {
+      setTestingId(null);
     }
   };
 
@@ -272,7 +298,7 @@ export function IpMplsDevicesAdminPage() {
                   <th className="px-4 py-3 text-left">Platform</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">Last Poll</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
@@ -281,42 +307,71 @@ export function IpMplsDevicesAdminPage() {
                     <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-400">No devices registered yet.</td>
                   </tr>
                 ) : (
-                  devices.map((d) => (
-                    <tr key={d.id} className="hover:bg-brand-800/40">
-                      <td className="px-4 py-3 text-slate-100">{d.hostname || d.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-100">{d.mgmt_ip}</td>
-                      <td className="px-4 py-3 text-slate-100">{d.platform}</td>
-                      <td className="px-4 py-3 text-slate-100">
-                        {d.status}
-                        {d.last_error ? <div className="text-xs text-rose-300">{d.last_error}</div> : null}
-                      </td>
-                      <td className="px-4 py-3 text-slate-100">{formatDateTime(d.last_polled_at)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(d)}
-                          className="mr-2 rounded-md border border-brand-700 bg-brand-800/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-500"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSync(d.id)}
-                          disabled={syncingId === d.id}
-                          className="mr-2 rounded-md border border-brand-700 bg-brand-800/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-500 disabled:opacity-60"
-                        >
-                          {syncingId === d.id ? "Syncing…" : "Sync now"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(d.id, d.hostname || d.name)}
-                          className="rounded-md border border-rose-600/50 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  devices.map((d) => {
+                    const testResult = testResults[d.id];
+                    const testError = testErrors[d.id];
+                    return (
+                      <tr key={d.id} className="align-top hover:bg-brand-800/40">
+                        <td className="px-4 py-3 text-slate-100">{d.hostname || d.name}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-100">{d.mgmt_ip}</td>
+                        <td className="px-4 py-3 text-slate-100">{d.platform}</td>
+                        <td className="px-4 py-3 text-slate-100">
+                          {d.status}
+                          {d.last_error ? <div className="text-xs text-rose-300">{d.last_error}</div> : null}
+                        </td>
+                        <td className="px-4 py-3 text-slate-100">{formatDateTime(d.last_polled_at)}</td>
+                        <td className="px-4 py-3 text-xs text-slate-300">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(d)}
+                              className="rounded-md border border-brand-700 bg-brand-900 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-primary-500 hover:text-white"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(d.id, d.hostname || d.name)}
+                              className="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-200 transition hover:bg-rose-500/20"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleTest(d.id)}
+                              disabled={testingId === d.id}
+                              className="rounded-md border border-brand-700 bg-brand-800 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-primary-500 hover:bg-brand-700 hover:text-white disabled:opacity-50"
+                            >
+                              {testingId === d.id ? "Testing…" : "Test connection"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSync(d.id)}
+                              disabled={syncingId === d.id}
+                              className="rounded-md border border-primary-500/40 bg-primary-500/20 px-3 py-1 text-xs font-medium text-primary-100 transition hover:bg-primary-500/30 disabled:opacity-50"
+                            >
+                              {syncingId === d.id ? "Syncing…" : "Sync now"}
+                            </button>
+                          </div>
+                          {testResult ? (
+                            <div className="mt-3 space-y-1 text-[11px] text-slate-400">
+                              <div className={`font-medium ${testResult.reachable ? "text-emerald-300" : "text-rose-300"}`}>
+                                {testResult.reachable ? "Reachable" : "Failed"}
+                              </div>
+                              {testResult.hostname ? <div>Hostname: {testResult.hostname}</div> : null}
+                              {testResult.message ? (
+                                <div className={testResult.reachable ? "" : "text-rose-300"}>{testResult.message}</div>
+                              ) : null}
+                              {testResult.checked_at ? (
+                                <div className="text-slate-500">Checked: {formatDateTime(testResult.checked_at)}</div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {testError ? <div className="mt-3 text-[11px] text-rose-300">{testError}</div> : null}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
