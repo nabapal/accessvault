@@ -199,6 +199,54 @@ pytest
 
 ## Release Notes
 
+### 2026-07-06 — NetVerse AI
+
+**Rebrand**
+- Product rebranded **InfraPulse → NetVerse AI** — "Unified Infrastructure Intelligence for AI",
+  new connected-node logo mark. AccessVault remains the credential-vault module; internal
+  package/DB identifiers are unchanged.
+
+**New module: Cisco NX-OS (Nexus) Inventory** (`/nxos/*`)
+- Per-device onboarding by Nautobot role (`Nexus`, `ToR`) over SSH with pyATS/Genie parsing;
+  resilient background poller; collects interfaces, VRFs, hardware/modules, and BGP neighbors
+  (all VRFs, IPv4/IPv6) via `show bgp vrf all all summary`.
+- **Topology from CDP + LLDP** (merged and de-duplicated per device pair, showing which
+  protocol(s) discovered each link) rendered with Cytoscape.
+- Pages: Summary, Devices, Device detail (Overview/Interfaces/VRFs/Neighbors/BGP/Hardware),
+  Topology, and Admin.
+
+**Cisco ACI — L3Out VLANs**
+- The VLAN inventory now includes **L3Out SVI encap VLANs** alongside Bridge-Domain VLANs in the
+  same table (`Bridge Domain` column → **Bridge Domain / L3OUT**, with a BD/L3Out badge and the
+  external EPG for L3Out rows).
+
+**IP-MPLS**
+- New **fleet Summary dashboard**: scale/health KPIs (interfaces, VRFs unique vs instances,
+  neighbors, MPLS-enabled, error/stale devices) plus breakdowns by location/role/platform/
+  model/OS and gauges/donuts.
+- Device search now also matches platform, status, and OS version; onboarding imports **Active
+  devices only** by default (`--status` flag to override).
+
+**Device admin (IP-MPLS & NX-OS)**
+- Admin pages gained **Edit** and **Test-connectivity** actions per device (matching the VM
+  collector admin), alongside register / sync / delete.
+
+**UI/UX polish**
+- Sidebar nav icons; reusable loading **skeletons**, designed **empty states**, and action
+  **toasts**; upgraded KPI **stat tiles**; dependency-free **donut/gauge charts** on summaries;
+  a consistent **PageHeader**; keyboard focus rings.
+
+**Reliability & fixes**
+- ACI collector now **bounds APIC query concurrency + retries** — large fabrics (e.g. Jamnagar,
+  130+ nodes) previously returned 503s that silently dropped interface oper-state, breaking the
+  free-ports report and L3Out VLANs.
+- `dev.sh` frees ports 8200/5173 on startup (fixes "stuck on sign-in" from an orphaned backend);
+  reliable topology link-click; ACI endpoint search matches IP addresses.
+
+**Docs & process**
+- Adopted spec-driven development — feature specs under `docs/specs/`; IP-MPLS onboarding
+  documented in the README.
+
 ### 2026-07
 - **IP-MPLS Inventory:** Cisco IOS-XR/XE onboarding by Nautobot role; interface/VRF/ISIS-LDP-BGP neighbor/hardware collection via Netmiko + pyATS/Genie; interactive ISIS topology (Cytoscape) with role/location grouping, filters, fullscreen (Esc), and link detail.
 - **Cisco ACI:** Cross-fabric endpoint directory (locally-attached MAC/IP, tunnel-learned excluded) with search across MAC/IP/tenant/EPG/BD/VRF; per-fabric VLAN inventory and free-ports report.
