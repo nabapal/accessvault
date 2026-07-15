@@ -47,6 +47,18 @@ with the same data available through a documented API.
 - Interactive **ISIS topology** (region/role layout, filters, fullscreen, link detail).
 - **Fleet summary** dashboard with health and breakdowns.
 
+### 🟣 NX‑OS Inventory (Cisco Nexus)
+- Onboard switches **by Nautobot role** (`Nexus`, `ToR`) over SSH (pyATS/Genie).
+- Interfaces, VRFs, hardware, and **BGP** neighbors (all VRFs, IPv4/IPv6).
+- **Topology from CDP + LLDP** (merged, shows which protocol saw each link).
+- Device detail with Overview / Interfaces / VRFs / Neighbors / BGP / Hardware tabs.
+
+### 🟠 CGNAT Inventory (A10 Thunder + F5 BIG‑IP)
+- Multi‑vendor CGNAT gateways collected over **REST** (A10 aXAPI, F5 iControl); manual onboarding.
+- **NAT/LSN pools** (public‑IP ranges, port‑block settings), **IP interfaces**, and **static routes**.
+- Health metrics: active sessions/subscribers, translations, port utilization, pool exhaustion.
+- Device detail with Overview / NAT Pools / Interfaces / Static Routes tabs.
+
 ### 🟣 NX‑OS Inventory (Cisco Nexus) — *new*
 - Onboard Nexus switches **by Nautobot role** (`Nexus`, `ToR`) over SSH.
 - Interfaces, VRFs, hardware, and **BGP** neighbors (all VRFs, IPv4/IPv6).

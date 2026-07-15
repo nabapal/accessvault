@@ -9,6 +9,8 @@ NetVerse AI is a secure infrastructure operations portal for multinational teams
 - **VM Inventory (VMware)** — live ESXi/vCenter host, VM, datastore, and network telemetry via pyVmomi; overview dashboard + VM Center workspace.
 - **Cisco ACI** — fabric node inventory (leaf/spine/controller), interface EPG/L3Out bindings, cross-fabric endpoint directory (MAC/IP), VLAN inventory, and free-ports report.
 - **IP-MPLS Inventory** — Cisco IOS-XR/XE device onboarding (by Nautobot role), interface/VRF/neighbor/hardware collection via Netmiko + pyATS/Genie, and an interactive ISIS topology (Cytoscape) with role/location filters and fullscreen.
+- **NX-OS Inventory** — Cisco Nexus onboarding by Nautobot role (`Nexus`/`ToR`), interface/VRF/BGP/hardware collection via Netmiko + pyATS/Genie, and a CDP+LLDP topology.
+- **CGNAT Inventory** — A10 Thunder (aXAPI) and F5 BIG-IP (iControl REST) CGNAT gateways: NAT/LSN pools, IP interfaces, static routes, and health metrics (sessions, translations, port utilization, exhaustion). Manual onboarding.
 
 ## Features
 - JWT authentication with role-based access control (admin, user)
@@ -198,6 +200,16 @@ pytest
 - Add end-to-end tests for the React frontend.
 
 ## Release Notes
+
+### 2026-07-15 — CGNAT module
+
+- **New module: CGNAT Inventory** (`/cgnat/*`) — A10 Thunder (aXAPI v3) and F5 BIG-IP
+  (iControl REST) gateways onboarded manually. Collects device facts, **IP interfaces**
+  (A10 `ve` SVIs, F5 self-IPs), **NAT/LSN pools**, **static routes** (A10 ip/ipv6 route rib,
+  F5 net/route), and health metrics (active sessions/subscribers, translations, port
+  utilization, pool exhaustion; F5 virtual-server count). Pages: Summary, Devices, Device
+  detail (Overview / NAT Pools / Interfaces / Static Routes), Admin (register/sync/test/delete).
+- **NX-OS & IP-MPLS admin:** per-device **Edit** and **Test-connectivity** actions.
 
 ### 2026-07-06 — NetVerse AI
 

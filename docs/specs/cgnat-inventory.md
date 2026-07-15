@@ -1,6 +1,10 @@
 # SDD: CGNAT Inventory Module (A10 + F5)
 
 - **Status:** Implemented — verified live on A10 10.88.19.37 + F5 10.64.41.9 (backend + frontend shipped)
+- **Post-spec additions:** L3 **IP interfaces** (A10 `interface/ve`, F5 `net/self`) populated on
+  `CgnatInterface`; **static routes** (`CgnatStaticRoute`) from A10 `ip/ipv6 route rib` and F5
+  `net/route`, exposed at `GET /cgnat/devices/{id}/routes` with a "Static Routes" detail tab. BGP
+  remains out of scope (A10 `router/bgp` available; test F5 has none).
 - **Owner:** naba
 - **Date:** 2026-07-15
 - **Module:** NetVerse AI → new "CGNAT Inventory" section (`/cgnat/*`)
