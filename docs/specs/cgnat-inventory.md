@@ -1,6 +1,6 @@
 # SDD: CGNAT Inventory Module (A10 + F5)
 
-- **Status:** Approved — decisions resolved (§11); Phase 0 done; ready to implement
+- **Status:** Implemented — verified live on A10 10.88.19.37 + F5 10.64.41.9 (backend + frontend shipped)
 - **Owner:** naba
 - **Date:** 2026-07-15
 - **Module:** NetVerse AI → new "CGNAT Inventory" section (`/cgnat/*`)

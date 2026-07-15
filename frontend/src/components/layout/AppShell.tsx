@@ -60,12 +60,20 @@ const SIDEBAR_SECTIONS = [
     ]
   },
   {
+    title: "CGNAT Inventory",
+    items: [
+      { label: "Summary", to: "/cgnat/summary", icon: ChartPieIcon },
+      { label: "Devices", to: "/cgnat/devices", icon: ServerIcon }
+    ]
+  },
+  {
     title: "Admin",
     items: [
       { label: "Fabric Onboarding", to: "/telco/onboarding", icon: PlusCircleIcon },
       { label: "VM Collectors", to: "/inventory/admin", icon: CloudArrowDownIcon },
       { label: "IP-MPLS Devices", to: "/ipmpls/admin", icon: WrenchScrewdriverIcon },
-      { label: "NX-OS Devices", to: "/nxos/admin", icon: WrenchScrewdriverIcon }
+      { label: "NX-OS Devices", to: "/nxos/admin", icon: WrenchScrewdriverIcon },
+      { label: "CGNAT Devices", to: "/cgnat/admin", icon: WrenchScrewdriverIcon }
     ]
   },
   {

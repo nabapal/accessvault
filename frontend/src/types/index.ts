@@ -848,3 +848,126 @@ export interface NxosSummary {
   by_os: Record<string, number>;
   by_neighbor_protocol: Record<string, number>;
 }
+
+// ---------------------------------------------------------------------------
+// CGNAT inventory (A10 + F5)
+// ---------------------------------------------------------------------------
+export type CgnatVendor = "a10" | "f5" | "unknown";
+export type CgnatDeviceStatus = "pending" | "ok" | "error";
+
+export interface CgnatDevice {
+  id: string;
+  name: string;
+  hostname?: string | null;
+  mgmt_ip: string;
+  port: number;
+  vendor: CgnatVendor;
+  verify_ssl: boolean;
+  role?: string | null;
+  model?: string | null;
+  serial?: string | null;
+  os_version?: string | null;
+  uptime_seconds?: number | null;
+  uptime_text?: string | null;
+  description?: string | null;
+  site_name?: string | null;
+  rack_location?: string | null;
+  poll_interval_seconds: number;
+  status: CgnatDeviceStatus;
+  last_polled_at?: string | null;
+  last_error?: string | null;
+  username?: string | null;
+  active_sessions?: number | null;
+  active_subscribers?: number | null;
+  total_translations?: number | null;
+  port_util_pct?: number | null;
+  exhaustion_events?: number | null;
+  virtual_server_count?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CgnatDevicePage {
+  items: CgnatDevice[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface CgnatInterface {
+  id: string;
+  device_id: string;
+  name: string;
+  description?: string | null;
+  admin_state?: string | null;
+  oper_state?: string | null;
+  ip_address?: string | null;
+  vlan?: string | null;
+  mtu?: number | null;
+  mac?: string | null;
+}
+
+export interface CgnatNatPool {
+  id: string;
+  device_id: string;
+  pool_name: string;
+  kind?: string | null;
+  mode?: string | null;
+  partition?: string | null;
+  route_domain?: string | null;
+  start_address?: string | null;
+  end_address?: string | null;
+  prefix?: string | null;
+  port_block_size?: number | null;
+  log_profile?: string | null;
+  pool_group?: string | null;
+  active_translations?: number | null;
+  translation_requests?: number | null;
+  translation_failures?: number | null;
+  port_util_pct?: number | null;
+}
+
+export interface CgnatDeviceCreate {
+  name: string;
+  mgmt_ip: string;
+  port?: number;
+  vendor: CgnatVendor;
+  verify_ssl?: boolean;
+  role?: string;
+  description?: string;
+  poll_interval_seconds?: number;
+  username: string;
+  password: string;
+}
+
+export interface CgnatSyncResult {
+  success: boolean;
+  message?: string | null;
+  interfaces: number;
+  pools: number;
+  device: CgnatDevice;
+}
+
+export interface CgnatConnectivityResult {
+  reachable: boolean;
+  message?: string | null;
+  hostname?: string | null;
+  checked_at: string;
+}
+
+export interface CgnatSummary {
+  total: number;
+  total_pools: number;
+  total_public_ips: number;
+  active_sessions: number;
+  total_translations: number;
+  exhaustion_events: number;
+  error_devices: number;
+  stale_devices: number;
+  by_vendor: Record<string, number>;
+  by_status: Record<string, number>;
+  by_role: Record<string, number>;
+  by_location: Record<string, number>;
+}

@@ -17,6 +17,10 @@ import { NxosSummaryPage } from "@/pages/NxosSummaryPage";
 import { NxosDeviceDetailPage } from "@/pages/NxosDeviceDetailPage";
 import { NxosDevicesAdminPage } from "@/pages/NxosDevicesAdminPage";
 import { NxosTopologyPage } from "@/pages/NxosTopologyPage";
+import { CgnatSummaryPage } from "@/pages/CgnatSummaryPage";
+import { CgnatDevicesPage } from "@/pages/CgnatDevicesPage";
+import { CgnatDeviceDetailPage } from "@/pages/CgnatDeviceDetailPage";
+import { CgnatDevicesAdminPage } from "@/pages/CgnatDevicesAdminPage";
 import { AciFabricSummaryPage } from "@/pages/AciFabricSummaryPage";
 import { AciNodeDetailPage } from "@/pages/AciNodeDetailPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -58,6 +62,10 @@ export default function App() {
     <Route path="/nxos/devices/:deviceId" element={<NxosDeviceDetailPage />} />
     <Route path="/nxos/topology" element={<NxosTopologyPage />} />
     <Route path="/nxos/admin" element={<NxosDevicesAdminPage />} />
+    <Route path="/cgnat/summary" element={<CgnatSummaryPage />} />
+    <Route path="/cgnat/devices" element={<CgnatDevicesPage />} />
+    <Route path="/cgnat/devices/:deviceId" element={<CgnatDeviceDetailPage />} />
+    <Route path="/cgnat/admin" element={<CgnatDevicesAdminPage />} />
     <Route path="/telco/onboarding" element={<TelcoOnboardingPage />} />
     <Route path="/accessvault" element={<AccessVaultPage />} />
       </Route>
