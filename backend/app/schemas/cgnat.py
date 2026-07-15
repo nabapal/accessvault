@@ -114,6 +114,21 @@ class CgnatNatPoolRead(BaseModel):
         from_attributes = True
 
 
+class CgnatStaticRouteRead(BaseModel):
+    id: UUID
+    device_id: UUID
+    name: Optional[str] = None
+    destination: Optional[str] = None
+    next_hop: Optional[str] = None
+    distance: Optional[int] = None
+    route_domain: Optional[str] = None
+    family: Optional[str] = None
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class CgnatDevicePage(BaseModel):
     items: List[CgnatDeviceRead]
     total: int
@@ -128,6 +143,7 @@ class CgnatSyncResult(BaseModel):
     message: Optional[str] = None
     interfaces: int = 0
     pools: int = 0
+    routes: int = 0
     device: CgnatDeviceRead
 
 

@@ -16,6 +16,7 @@ from app.models import (
     CgnatDeviceStatus,
     CgnatInterface,
     CgnatNatPool,
+    CgnatStaticRoute,
     CgnatVendor,
 )
 from app.services.crypto import decrypt_secret
@@ -87,6 +88,8 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         pools = (await get("/axapi/v3/cgnv6/nat/pool")).get("pool-list", [])
         groups = (await get("/axapi/v3/cgnv6/nat/pool-group")).get("pool-group-list", [])
         stats = (await get("/axapi/v3/cgnv6/lsn/global/stats")).get("global", {}).get("stats", {})
+        routes_v4 = (await get("/axapi/v3/ip/route/rib")).get("rib-list", [])
+        routes_v6 = (await get("/axapi/v3/ipv6/route/rib")).get("rib-list", [])
     finally:
         try:
             await client.post("/axapi/v3/logoff")
@@ -187,7 +190,39 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         "virtual_server_count": None,
     }
 
-    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "metrics": metrics, "raw_stats": stats}
+    routes: List[Dict[str, Any]] = []
+    for r in routes_v4:
+        dest = f"{r.get('ip-dest-addr')}{r.get('ip-mask') or ''}"
+        for nh in (r.get("ip-nexthop-ipv4") or [{}]):
+            routes.append(
+                {
+                    "name": None,
+                    "destination": dest,
+                    "next_hop": _clean(nh.get("ip-next-hop")),
+                    "distance": _int(nh.get("distance-nexthop-ip")),
+                    "route_domain": None,
+                    "family": "ipv4",
+                    "description": _clean(nh.get("description-nexthop-ip")),
+                    "attributes": {},
+                }
+            )
+    for r in routes_v6:
+        dest = _clean(r.get("ipv6-address"))
+        for nh in (r.get("ipv6-nexthop-ipv6") or [{}]):
+            routes.append(
+                {
+                    "name": None,
+                    "destination": dest,
+                    "next_hop": _clean(nh.get("ipv6-nexthop")),
+                    "distance": _int(nh.get("distance")),
+                    "route_domain": None,
+                    "family": "ipv6",
+                    "description": _clean(nh.get("description")),
+                    "attributes": {},
+                }
+            )
+
+    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": stats}
 
 
 # --------------------------------------------------------------------------- F5
@@ -220,6 +255,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
     pools = (await get("/mgmt/tm/ltm/lsn-pool")).get("items", [])
     pool_stats = (await get("/mgmt/tm/ltm/lsn-pool/stats")).get("entries", {})
     virtuals = (await get("/mgmt/tm/ltm/virtual")).get("items", [])
+    net_routes = (await get("/mgmt/tm/net/route")).get("items", [])
 
     facts = {
         "hostname": _clean(device.get("name")),
@@ -329,7 +365,26 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
         "virtual_server_count": len(virtuals),
     }
 
-    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "metrics": metrics, "raw_stats": {}}
+    routes: List[Dict[str, Any]] = []
+    for r in net_routes:
+        net = r.get("network")
+        rd = None
+        if isinstance(net, str) and "%" in net:
+            rd = net.split("%", 1)[1].split("/")[0]
+        routes.append(
+            {
+                "name": _clean(r.get("name")),
+                "destination": _clean(net),
+                "next_hop": _clean(r.get("gw") or r.get("tmInterface")),
+                "distance": None,
+                "route_domain": rd,
+                "family": "ipv6" if (net and ":" in net) else "ipv4",
+                "description": _clean(r.get("description")),
+                "attributes": {"tmInterface": r.get("tmInterface"), "partition": r.get("partition")},
+            }
+        )
+
+    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": {}}
 
 
 # --------------------------------------------------------------------------- shared
@@ -379,6 +434,10 @@ async def _apply(session: AsyncSession, device: CgnatDevice, snap: Dict[str, Any
     for entry in snap["pools"]:
         if entry.get("pool_name"):
             session.add(CgnatNatPool(device_id=device.id, **entry))
+
+    await session.execute(delete(CgnatStaticRoute).where(CgnatStaticRoute.device_id == device.id))
+    for entry in snap.get("routes", []):
+        session.add(CgnatStaticRoute(device_id=device.id, **entry))
 
 
 async def _enrich_from_nautobot(device: CgnatDevice) -> None:
@@ -441,7 +500,7 @@ async def run_collection_for_device(
     return CgnatCollectionResult(
         success=True,
         timestamp=ts,
-        snapshot={"interfaces": len(snap["interfaces"]), "pools": len(snap["pools"])},
+        snapshot={"interfaces": len(snap["interfaces"]), "pools": len(snap["pools"]), "routes": len(snap.get("routes", []))},
     )
 
 

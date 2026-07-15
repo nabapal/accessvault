@@ -7,6 +7,7 @@ import {
   CgnatDevicePage,
   CgnatInterface,
   CgnatNatPool,
+  CgnatStaticRoute,
   CgnatSummary,
   CgnatSyncResult
 } from "@/types";
@@ -45,6 +46,11 @@ export const fetchCgnatDeviceInterfaces = async (id: string): Promise<CgnatInter
 
 export const fetchCgnatDevicePools = async (id: string): Promise<CgnatNatPool[]> => {
   const { data } = await api.get<CgnatNatPool[]>(`/cgnat/devices/${id}/pools`);
+  return data;
+};
+
+export const fetchCgnatDeviceRoutes = async (id: string): Promise<CgnatStaticRoute[]> => {
+  const { data } = await api.get<CgnatStaticRoute[]>(`/cgnat/devices/${id}/routes`);
   return data;
 };
 

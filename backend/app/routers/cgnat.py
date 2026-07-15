@@ -9,7 +9,7 @@ from sqlalchemy import String, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db, require_admin
-from app.models import CgnatDevice, CgnatInterface, CgnatNatPool
+from app.models import CgnatDevice, CgnatInterface, CgnatNatPool, CgnatStaticRoute
 from app.schemas import (
     CgnatConnectivityResult,
     CgnatDeviceCreate,
@@ -18,6 +18,7 @@ from app.schemas import (
     CgnatDeviceUpdate,
     CgnatInterfaceRead,
     CgnatNatPoolRead,
+    CgnatStaticRouteRead,
     CgnatSummary,
     CgnatSyncResult,
 )
@@ -180,6 +181,7 @@ async def sync_device_now(
         message=result.message,
         interfaces=snap.get("interfaces", 0),
         pools=snap.get("pools", 0),
+        routes=snap.get("routes", 0),
         device=CgnatDeviceRead.model_validate(device, from_attributes=True),
     )
 
@@ -221,6 +223,19 @@ async def list_device_pools(
         select(CgnatNatPool).where(CgnatNatPool.device_id == device.id).order_by(CgnatNatPool.pool_name)
     )
     return [CgnatNatPoolRead.model_validate(p, from_attributes=True) for p in result.scalars()]
+
+
+@router.get("/devices/{device_id}/routes", response_model=List[CgnatStaticRouteRead])
+async def list_device_routes(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> list[CgnatStaticRouteRead]:
+    device = await _get_device(db, device_id)
+    result = await db.execute(
+        select(CgnatStaticRoute).where(CgnatStaticRoute.device_id == device.id).order_by(CgnatStaticRoute.destination)
+    )
+    return [CgnatStaticRouteRead.model_validate(r, from_attributes=True) for r in result.scalars()]
 
 
 @router.get("/summary", response_model=CgnatSummary)

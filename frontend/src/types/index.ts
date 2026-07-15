@@ -971,3 +971,15 @@ export interface CgnatSummary {
   by_role: Record<string, number>;
   by_location: Record<string, number>;
 }
+
+export interface CgnatStaticRoute {
+  id: string;
+  device_id: string;
+  name?: string | null;
+  destination?: string | null;
+  next_hop?: string | null;
+  distance?: number | null;
+  route_domain?: string | null;
+  family?: string | null;
+  description?: string | null;
+}

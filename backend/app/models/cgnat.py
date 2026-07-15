@@ -85,6 +85,7 @@ class CgnatDevice(Base):
 
     interfaces = relationship("CgnatInterface", back_populates="device", cascade="all, delete-orphan")
     pools = relationship("CgnatNatPool", back_populates="device", cascade="all, delete-orphan")
+    routes = relationship("CgnatStaticRoute", back_populates="device", cascade="all, delete-orphan")
 
 
 class CgnatInterface(Base):
@@ -137,3 +138,24 @@ class CgnatNatPool(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     device = relationship("CgnatDevice", back_populates="pools")
+
+
+class CgnatStaticRoute(Base):
+    """Static route from A10 (ip/ipv6 route rib) or F5 (net/route)."""
+
+    __tablename__ = "cgnat_static_routes"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    device_id = Column(GUID(), ForeignKey("cgnat_devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=True)
+    destination = Column(String, nullable=True)  # dest + prefix (may carry %route-domain on F5)
+    next_hop = Column(String, nullable=True)
+    distance = Column(Integer, nullable=True)
+    route_domain = Column(String, nullable=True)
+    family = Column(String, nullable=True)  # ipv4 | ipv6
+    description = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    device = relationship("CgnatDevice", back_populates="routes")

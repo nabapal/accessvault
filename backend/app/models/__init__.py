@@ -5,6 +5,7 @@ from .cgnat import (
     CgnatDeviceStatus,
     CgnatInterface,
     CgnatNatPool,
+    CgnatStaticRoute,
     CgnatVendor,
 )
 from .system import System, SystemCredential, AccessType
@@ -92,5 +93,6 @@ __all__ = [
     "CgnatDeviceStatus",
     "CgnatInterface",
     "CgnatNatPool",
+    "CgnatStaticRoute",
     "CgnatVendor",
 ]

@@ -7,12 +7,13 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import {
   fetchCgnatDevice,
   fetchCgnatDeviceInterfaces,
-  fetchCgnatDevicePools
+  fetchCgnatDevicePools,
+  fetchCgnatDeviceRoutes
 } from "@/services/cgnat";
 import { locationFromName } from "@/utils/location";
-import { CgnatDevice, CgnatInterface, CgnatNatPool } from "@/types";
+import { CgnatDevice, CgnatInterface, CgnatNatPool, CgnatStaticRoute } from "@/types";
 
-type Tab = "overview" | "pools" | "interfaces";
+type Tab = "overview" | "pools" | "interfaces" | "routes";
 const cell = "px-3 py-2 text-slate-100";
 const th = "px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-400";
 
@@ -21,6 +22,7 @@ export function CgnatDeviceDetailPage() {
   const [device, setDevice] = useState<CgnatDevice | null>(null);
   const [pools, setPools] = useState<CgnatNatPool[]>([]);
   const [interfaces, setInterfaces] = useState<CgnatInterface[]>([]);
+  const [routes, setRoutes] = useState<CgnatStaticRoute[]>([]);
   const [tab, setTab] = useState<Tab>("overview");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -30,13 +32,14 @@ export function CgnatDeviceDetailPage() {
     (async () => {
       setIsLoading(true);
       try {
-        const [d, p, i] = await Promise.all([
+        const [d, p, i, r] = await Promise.all([
           fetchCgnatDevice(deviceId),
           fetchCgnatDevicePools(deviceId),
-          fetchCgnatDeviceInterfaces(deviceId)
+          fetchCgnatDeviceInterfaces(deviceId),
+          fetchCgnatDeviceRoutes(deviceId)
         ]);
         if (cancelled) return;
-        setDevice(d); setPools(p); setInterfaces(i);
+        setDevice(d); setPools(p); setInterfaces(i); setRoutes(r);
       } catch (err) {
         console.error(err);
       } finally {
@@ -80,7 +83,7 @@ export function CgnatDeviceDetailPage() {
         </section>
 
         <div className="flex flex-wrap gap-1 border-b border-brand-800/70">
-          {([["overview", "Overview"], ["pools", `NAT Pools (${pools.length})`], ["interfaces", `Interfaces (${interfaces.length})`]] as [Tab, string][]).map(([id, label]) => (
+          {([["overview", "Overview"], ["pools", `NAT Pools (${pools.length})`], ["interfaces", `Interfaces (${interfaces.length})`], ["routes", `Static Routes (${routes.length})`]] as [Tab, string][]).map(([id, label]) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-t-md px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${tab === id ? "border-b-2 border-primary-500 text-white" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>
           ))}
         </div>
@@ -156,6 +159,35 @@ export function CgnatDeviceDetailPage() {
                       <td className={cell}>{i.admin_state ?? "--"}/{i.oper_state ?? "--"}</td>
                       <td className={cell}>{i.description ?? "--"}</td>
                       <td className={cell}>{i.mtu ?? "--"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {tab === "routes" && (
+            <div className="max-h-[560px] overflow-auto">
+              <table className="min-w-full divide-y divide-brand-800/70 text-sm">
+                <thead className="sticky top-0 bg-brand-900/90">
+                  <tr>
+                    <th className={th}>Destination</th>
+                    <th className={th}>Next Hop</th>
+                    <th className={th}>Family</th>
+                    <th className={th}>RD</th>
+                    <th className={th}>Distance</th>
+                    <th className={th}>Name / Description</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-800/60">
+                  {routes.map((r) => (
+                    <tr key={r.id} className="hover:bg-brand-800/40">
+                      <td className={`${cell} font-mono text-xs`}>{r.destination ?? "--"}</td>
+                      <td className={`${cell} font-mono text-xs`}>{r.next_hop ?? "--"}</td>
+                      <td className={cell}>{r.family ?? "--"}</td>
+                      <td className={cell}>{r.route_domain ?? "--"}</td>
+                      <td className={cell}>{r.distance ?? "--"}</td>
+                      <td className={cell}>{r.name || r.description || "--"}</td>
                     </tr>
                   ))}
                 </tbody>

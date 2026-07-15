@@ -73,6 +73,7 @@ from .cgnat import (
     CgnatDeviceUpdate,
     CgnatInterfaceRead,
     CgnatNatPoolRead,
+    CgnatStaticRouteRead,
     CgnatSummary,
     CgnatSyncResult,
 )
@@ -129,6 +130,7 @@ __all__ = [
     "CgnatDeviceUpdate",
     "CgnatInterfaceRead",
     "CgnatNatPoolRead",
+    "CgnatStaticRouteRead",
     "CgnatSummary",
     "CgnatSyncResult",
     "NxosConnectivityResult",
