@@ -1,6 +1,6 @@
 # SDD: CGNAT Inventory Module (A10 + F5)
 
-- **Status:** Draft / proposed (Phase 0 done; open questions in §11 need answers before build)
+- **Status:** Approved — decisions resolved (§11); Phase 0 done; ready to implement
 - **Owner:** naba
 - **Date:** 2026-07-15
 - **Module:** NetVerse AI → new "CGNAT Inventory" section (`/cgnat/*`)
@@ -150,14 +150,24 @@ See §3 (both vendors probed live; auth, device, interface, and CGNAT-pool objec
 Additive module; follows model→migration→collector→poller→schema→router→frontend→verify order,
 committing per step and verifying against the two live devices.
 
-## 11. Open questions (need answers before build)
-1. **Onboarding source:** Are A10/F5 in **Nautobot**? If yes, what **role**(s) and **platform**
-   names map to A10 vs F5 (so the importer can seed by role like the other modules)? If not,
-   onboarding is manual-only via Admin.
-2. **Stats scope:** which CGNAT metrics matter most for the Summary/health — e.g. **port/pool
-   utilization %, active sessions/subscribers, translation counts, pool exhaustion**? (Drives which
-   of A10's 121 LSN stats and F5's lsn-pool stats we surface as first-class vs raw JSON.)
-3. **F5 virtual servers:** include them (context) or keep the module strictly CGNAT (lsn-pool)?
-   Proposed: CGNAT-focused; virtual-server count only.
-4. **Credentials:** shared service account per vendor, or per-device (as onboarded)? Proposed:
-   per-device (encrypted), same as IP-MPLS/NX-OS.
+## 11. Resolved decisions
+1. **Onboarding:** **manual via Admin** (register device with vendor + mgmt IP + creds). No
+   Nautobot importer for CGNAT. (Nautobot enrichment of role/site/rack still applies opportunistically
+   if the hostname matches.)
+2. **Stats scope (first-class metrics):** **port/pool utilization %**, **active sessions/subscribers**,
+   **translation counts**, and **pool exhaustion** (port-allocation failures / no-free-port events).
+   Surface these per device and per pool where the vendor exposes them; keep the full stat blob in
+   `attributes`/`raw_facts`. Exact field names to be pinned in a short **Phase 0.5** stat-endpoint
+   probe during implementation (A10 `cgnv6/lsn/global/stats` + per-pool; F5 `ltm/lsn-pool/stats`).
+3. **F5 virtual servers:** **CGNAT-focused** — only the **virtual-server count** is captured as
+   context (no per-VS inventory).
+4. **Credentials:** **per-device** (encrypted), same as IP-MPLS/NX-OS.
+
+## 12. Summary metrics (from §11.2)
+Device- and pool-level where available:
+- **Port utilization %** — allocated NAT ports ÷ total available (pool exhaustion risk).
+- **Active sessions / subscribers** — current translated flows and distinct inside users.
+- **Translation counts** — cumulative NAT translations created.
+- **Pool exhaustion** — port-allocation-failure / no-free-port counters (alerting signal).
+The Summary page shows fleet rollups (by vendor/role/location/status, pool + public-IP counts,
+devices in error/stale) plus these health metrics; the device detail shows per-pool utilization.
