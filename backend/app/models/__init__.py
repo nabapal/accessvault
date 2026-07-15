@@ -1,5 +1,12 @@
 from .user import User, UserRoleEnum
 from .group import Group
+from .cgnat import (
+    CgnatDevice,
+    CgnatDeviceStatus,
+    CgnatInterface,
+    CgnatNatPool,
+    CgnatVendor,
+)
 from .system import System, SystemCredential, AccessType
 from .inventory import (
     InventoryEndpoint,
@@ -81,4 +88,9 @@ __all__ = [
     "NxosNeighbor",
     "NxosPlatform",
     "NxosVrf",
+    "CgnatDevice",
+    "CgnatDeviceStatus",
+    "CgnatInterface",
+    "CgnatNatPool",
+    "CgnatVendor",
 ]

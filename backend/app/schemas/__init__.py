@@ -65,6 +65,17 @@ from .nxos import (
     NxosTopologyNode,
     NxosVrfRead,
 )
+from .cgnat import (
+    CgnatConnectivityResult,
+    CgnatDeviceCreate,
+    CgnatDevicePage,
+    CgnatDeviceRead,
+    CgnatDeviceUpdate,
+    CgnatInterfaceRead,
+    CgnatNatPoolRead,
+    CgnatSummary,
+    CgnatSyncResult,
+)
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
 
@@ -111,6 +122,15 @@ __all__ = [
     "NxosNeighborRead",
     "NxosBgpNeighborRead",
     "NxosVrfRead",
+    "CgnatConnectivityResult",
+    "CgnatDeviceCreate",
+    "CgnatDevicePage",
+    "CgnatDeviceRead",
+    "CgnatDeviceUpdate",
+    "CgnatInterfaceRead",
+    "CgnatNatPoolRead",
+    "CgnatSummary",
+    "CgnatSyncResult",
     "NxosConnectivityResult",
     "NxosSyncResult",
     "NxosSummary",

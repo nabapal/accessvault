@@ -11,6 +11,7 @@ from app.core.migrator import run_migrations
 from app.services.inventory_poller import build_inventory_poller
 from app.services.ipmpls_poller import build_ipmpls_poller
 from app.services.nxos_poller import build_nxos_poller
+from app.services.cgnat_poller import build_cgnat_poller
 from app.services.telco_collector import build_telco_poller
 
 settings = get_settings()
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
     telco_poller = None
     ipmpls_poller = None
     nxos_poller = None
+    cgnat_poller = None
 
     if settings.inventory_poller_enabled:
         inventory_poller = build_inventory_poller(
@@ -63,9 +65,20 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
     else:
         logger.info("NX-OS poller disabled via configuration")
 
+    if settings.cgnat_poller_enabled:
+        cgnat_poller = build_cgnat_poller(
+            session_factory=AsyncSessionLocal,
+            tick_seconds=settings.cgnat_poll_tick_seconds,
+        )
+        await cgnat_poller.start()
+    else:
+        logger.info("CGNAT poller disabled via configuration")
+
     try:
         yield
     finally:
+        if cgnat_poller:
+            await cgnat_poller.stop()
         if nxos_poller:
             await nxos_poller.stop()
         if ipmpls_poller:
