@@ -82,6 +82,7 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         version = (await get("/axapi/v3/version/oper")).get("version", {}).get("oper", {})
         hostname = (await get("/axapi/v3/hostname")).get("hostname", {}).get("value")
         interfaces_raw = (await get("/axapi/v3/interface")).get("interface", {})
+        ve_list = (await get("/axapi/v3/interface/ve")).get("ve-list", [])
         vlans_raw = (await get("/axapi/v3/network/vlan")).get("vlan-list", [])
         pools = (await get("/axapi/v3/cgnv6/nat/pool")).get("pool-list", [])
         groups = (await get("/axapi/v3/cgnv6/nat/pool-group")).get("pool-group-list", [])
@@ -121,7 +122,26 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
                 "vlan": None,
                 "mtu": _int(eth.get("mtu")),
                 "mac": None,
-                "attributes": {},
+                "attributes": {"kind": "ethernet"},
+            }
+        )
+    # L3 IP addresses live on 've' (SVI) interfaces.
+    for ve in ve_list:
+        addrs = (ve.get("ip") or {}).get("address-list") or []
+        first = addrs[0] if addrs else {}
+        ip = _clean(first.get("ipv4-address"))
+        mask = _clean(first.get("ipv4-netmask"))
+        ifaces.append(
+            {
+                "name": f"ve{ve.get('ifnum')}",
+                "description": _clean(ve.get("name")),
+                "admin_state": _clean(ve.get("action")),
+                "oper_state": None,
+                "ip_address": ip,
+                "vlan": None,
+                "mtu": _int(ve.get("mtu")),
+                "mac": None,
+                "attributes": {"kind": "ve", "netmask": mask, "addresses": addrs},
             }
         )
 
@@ -196,6 +216,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
     device_items = (await get("/mgmt/tm/cm/device")).get("items", [])
     device = device_items[0] if device_items else {}
     interfaces = (await get("/mgmt/tm/net/interface")).get("items", [])
+    self_ips = (await get("/mgmt/tm/net/self")).get("items", [])
     pools = (await get("/mgmt/tm/ltm/lsn-pool")).get("items", [])
     pool_stats = (await get("/mgmt/tm/ltm/lsn-pool/stats")).get("entries", {})
     virtuals = (await get("/mgmt/tm/ltm/virtual")).get("items", [])
@@ -221,7 +242,25 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
                 "vlan": None,
                 "mtu": _int(i.get("mtu")),
                 "mac": _clean(i.get("macAddress")),
-                "attributes": {},
+                "attributes": {"kind": "physical"},
+            }
+        )
+    # L3 IP addresses live on self-IPs (address carries %<route-domain>/<prefix>).
+    for sf in self_ips:
+        vlan = sf.get("vlan")
+        if isinstance(vlan, str) and "/" in vlan:
+            vlan = vlan.rstrip("/").split("/")[-1]
+        ifaces.append(
+            {
+                "name": sf.get("name"),
+                "description": None,
+                "admin_state": _clean(sf.get("floating")),
+                "oper_state": None,
+                "ip_address": _clean(sf.get("address")),
+                "vlan": _clean(vlan),
+                "mtu": None,
+                "mac": None,
+                "attributes": {"kind": "self-ip", "trafficGroup": sf.get("trafficGroup")},
             }
         )
 

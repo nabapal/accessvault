@@ -140,20 +140,22 @@ export function CgnatDeviceDetailPage() {
                 <thead className="sticky top-0 bg-brand-900/90">
                   <tr>
                     <th className={th}>Interface</th>
+                    <th className={th}>IP Address</th>
+                    <th className={th}>VLAN</th>
                     <th className={th}>Admin/Oper</th>
                     <th className={th}>Description</th>
                     <th className={th}>MTU</th>
-                    <th className={th}>MAC</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-800/60">
                   {interfaces.map((i) => (
                     <tr key={i.id} className="hover:bg-brand-800/40">
                       <td className={cell}>{i.name}</td>
+                      <td className={`${cell} font-mono text-xs ${i.ip_address ? "text-primary-200" : "text-slate-500"}`}>{i.ip_address ?? "--"}</td>
+                      <td className={cell}>{i.vlan ?? "--"}</td>
                       <td className={cell}>{i.admin_state ?? "--"}/{i.oper_state ?? "--"}</td>
                       <td className={cell}>{i.description ?? "--"}</td>
                       <td className={cell}>{i.mtu ?? "--"}</td>
-                      <td className={`${cell} font-mono text-xs`}>{i.mac ?? "--"}</td>
                     </tr>
                   ))}
                 </tbody>
