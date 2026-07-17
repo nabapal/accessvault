@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -94,8 +95,8 @@ class InventoryHostRead(BaseModel):
 
 
 class InventoryHostNicRead(BaseModel):
-    id: str
-    host_id: str
+    id: UUID
+    host_id: UUID
     device: str
     mac: Optional[str] = None
     speed_mb: Optional[int] = None
