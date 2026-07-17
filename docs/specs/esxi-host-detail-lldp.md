@@ -1,6 +1,6 @@
 # SDD: ESXi Host Detail + LLDP/CDP uplink neighbors
 
-- **Status:** Draft / proposed (Phase 0 done; open questions in §11)
+- **Status:** Approved — decisions resolved (§11); Phase 0 done; ready to implement
 - **Owner:** naba
 - **Date:** 2026-07-15
 - **Module:** NetVerse AI → VM Inventory (Host Utilization → Host detail)
@@ -81,11 +81,19 @@ Probed with `backend/scripts/probe_esxi_lldp.py --endpoint 10.64.46.21` (ESXi 6.
 - (VMs already filterable by `host_id`; reuse for the detail page's VM list.)
 
 ### 5.5 Frontend
-- **Host Utilization** (`VirtualMachinesPage`/host view): make the host **IP/name a link** to
+- **Host Utilization** (host view): make the host **IP/name cell a link** to
   `/inventory/hosts/{id}`.
-- **New `HostDetailPage`**: KPI header (model, CPU, memory, ESXi, uptime, mgmt IP) + tabs:
-  **Uplinks & Neighbors** (LLDP/CDP table with a protocol badge), **Virtual Machines** (on this
-  host), **Datastores/Networks**. Reuse shared UI components.
+- **New `HostDetailPage`** — CGNAT-style **multi-tab** detail (KPI header: model, CPU, memory,
+  ESXi, uptime, mgmt IP):
+  - **Overview** — facts + counts (uplinks, VMs, datastores, networks).
+  - **Uplinks & Neighbors** — **per-host topology (default) with a table toggle**: a Cytoscape
+    graph with this host as the center node and each discovered remote switch as a node; **one
+    edge per protocol per uplink** (LLDP / CDP), edge labelled `vmnic → remote port` with a
+    protocol badge. A toggle switches to the detailed table (vmnic, MAC, speed, protocol, remote
+    switch/port/platform/mgmt). Uplinks with no neighbor appear as unconnected host ports.
+  - **Virtual Machines** — VMs on this host (reuse `/inventory/virtual-machines?host_id=`).
+  - **Datastores** and **Networks** — this host's datastores/networks.
+  Reuse shared UI (PageHeader, StatTile, tabs, Cytoscape as in NX-OS/IP-MPLS topology).
 
 ## 6. Acceptance criteria
 1. Clicking a host in Host Utilization opens its detail page.
@@ -116,13 +124,15 @@ Probed with `backend/scripts/probe_esxi_lldp.py --endpoint 10.64.46.21` (ESXi 6.
 Additive: new table/columns + endpoints + page; follows model→migration→collector→poller→
 schema→router→frontend→verify order, verified against the live ESXi host.
 
-## 11. Open questions
-1. **LLDP+CDP on the same uplink:** one merged row (preferred protocol) or one row per
-   protocol? *Proposed: one row per protocol present (usually only one is).*
-2. **Which IP is clickable / primary:** host `name` (now the IP after the direct-ESXi fix) vs a
-   dedicated `management_ip`. *Proposed: link the host name/IP cell; store `management_ip`
-   explicitly too.*
-3. **Correlate to switch inventory?** Link the remote switch to an ACI/NX-OS device we already
-   inventory (deep-link). *Proposed: out of scope for v1; revisit.*
-4. **Detail-page tabs scope:** Uplinks + VMs only, or also Datastores/Networks? *Proposed:
-   Uplinks + VMs in v1; Datastores/Networks if quick.*
+## 11. Resolved decisions
+1. **LLDP + CDP on the same uplink:** **one row/edge per protocol** (LLDP and CDP kept separate).
+2. **Neighbor view:** render as a **per-host topology (default) with a table toggle** — not
+   table-only. Host node in the center, remote switches as nodes, one edge per protocol per
+   uplink (labelled `vmnic → remote port`, protocol badge). Table toggle for the full detail.
+3. **Topology scope:** **per-host on the detail page** this phase (small focused graph). A
+   fleet-wide ESXi↔switch map is deferred to the switch-correlation phase.
+4. **Clickable / primary IP:** link the host **name/IP cell**; also store an explicit
+   **`management_ip`** on the host.
+5. **Switch correlation (deep-link remote switch → our ACI/NX-OS device):** **next phase.**
+6. **Detail tabs:** include **all** — Overview / Uplinks & Neighbors / Virtual Machines /
+   Datastores / Networks — CGNAT-style multi-tab.
