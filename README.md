@@ -209,7 +209,9 @@ pytest
   F5 net/route), and health metrics (active sessions/subscribers, translations, port
   utilization, pool exhaustion; F5 virtual-server count). Pages: Summary, Devices, Device
   detail (Overview / NAT Pools / Interfaces / Static Routes), Admin (register/sync/test/delete).
-- **NX-OS & IP-MPLS admin:** per-device **Edit** and **Test-connectivity** actions.
+- **NX-OS, IP-MPLS & CGNAT admin:** per-device **Edit** (and Test-connectivity) actions.
+- **VM Inventory fix:** direct-ESXi hosts now show the host **IP** instead of
+  `localhost.localdomain` (matches vCenter-sourced hosts).
 
 ### 2026-07-06 — NetVerse AI
 

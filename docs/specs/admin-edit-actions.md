@@ -1,10 +1,16 @@
-# SDD: Edit action for Fabric Onboarding, IP-MPLS & NX-OS admin surfaces
+# SDD: Edit action for Fabric Onboarding, IP-MPLS, NX-OS & CGNAT admin surfaces
 
-- **Status:** Proposed
+- **Status:** Implemented — IP-MPLS, NX-OS, and CGNAT Edit shipped; Fabric onboarding per its commit
 - **Owner:** naba
-- **Date:** 2026-07-09
-- **Module:** NetVerse AI → Admin (Inventory Admin, IP-MPLS Admin, NX-OS Admin, Telco Fabric Onboarding)
+- **Date:** 2026-07-09 (updated 2026-07-15 to add CGNAT)
+- **Module:** NetVerse AI → Admin (Inventory Admin, IP-MPLS Admin, NX-OS Admin, CGNAT Admin, Telco Fabric Onboarding)
 - **Type:** Feature parity — add "Edit" where only VM collectors have it today
+
+> **2026-07-15 addendum:** the CGNAT devices admin (`CgnatDevicesAdminPage`) was added after the
+> original spec and initially shipped without Edit. It now has the same modal-based Edit (name,
+> mgmt IP, vendor, role, username, password [blank=keep], HTTPS port, poll interval, verify-TLS)
+> via `updateCgnatDevice` → `PATCH /cgnat/devices/{id}`, matching this spec. Same
+> blank-password-keeps-secret and duplicate-mgmt_ip 409 guard semantics apply.
 
 ---
 
