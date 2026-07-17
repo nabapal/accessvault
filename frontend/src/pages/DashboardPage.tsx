@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { GroupList } from "@/components/groups/GroupList";
@@ -20,6 +20,8 @@ import {
 } from "@/services/systems";
 import { AccessType, GroupSummary, System, SystemCredentialSecret } from "@/types";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
+
 export function AccessVaultPage() {
   const token = useAuthStore((state: AuthState) => state.token) ?? "";
 
@@ -28,6 +30,8 @@ export function AccessVaultPage() {
   const [systems, setSystems] = useState<System[]>([]);
   const [search, setSearch] = useState("");
   const [accessFilter, setAccessFilter] = useState<AccessType | "all">("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
   const [isLoading, setIsLoading] = useState(false);
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [systemModalMode, setSystemModalMode] = useState<"create" | "edit">("create");
@@ -74,6 +78,31 @@ export function AccessVaultPage() {
   useEffect(() => {
   loadSystems().catch((error: unknown) => console.error("Failed to fetch systems", error));
   }, [loadSystems]);
+
+  // Reset to first page whenever the result set changes shape.
+  useEffect(() => {
+    setPage(1);
+  }, [activeGroupId, search, accessFilter, pageSize]);
+
+  const totalSystems = systems.length;
+  const totalPages = totalSystems > 0 ? Math.ceil(totalSystems / pageSize) : 1;
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedSystems = useMemo(() => {
+    if (!totalSystems) return [];
+    const start = (page - 1) * pageSize;
+    return systems.slice(start, start + pageSize);
+  }, [systems, page, pageSize, totalSystems]);
+
+  const pageStart = totalSystems === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageEnd = totalSystems === 0 ? 0 : Math.min(page * pageSize, totalSystems);
+  const canGoPrev = page > 1;
+  const canGoNext = totalSystems > 0 && page < totalPages;
 
   const handleCreateGroup = async () => {
     const name = window.prompt("Group name");
@@ -219,14 +248,60 @@ export function AccessVaultPage() {
           {isLoading ? (
             <div className="flex h-48 items-center justify-center text-slate-400">Loading systems...</div>
           ) : (
-            <SystemTable
-              systems={systems}
-              onEdit={handleOpenEditSystem}
-              onDelete={handleDeleteSystem}
-              onLaunchGui={handleLaunchGui}
-              onOpenTerminal={handleOpenTerminal}
-              onViewCredentials={handleViewCredentials}
-            />
+            <>
+              <SystemTable
+                systems={paginatedSystems}
+                onEdit={handleOpenEditSystem}
+                onDelete={handleDeleteSystem}
+                onLaunchGui={handleLaunchGui}
+                onOpenTerminal={handleOpenTerminal}
+                onViewCredentials={handleViewCredentials}
+              />
+              {totalSystems > 0 && (
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-400">
+                    Showing {pageStart}-{pageEnd} of {totalSystems} systems
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Rows</span>
+                      <select
+                        value={pageSize}
+                        onChange={(event) => setPageSize(Number(event.currentTarget.value))}
+                        className="rounded border border-brand-700 bg-brand-900/80 px-2 py-1 text-xs text-slate-200 focus:border-primary-500 focus:outline-none"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                        disabled={!canGoPrev}
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        Page {page} of {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded border border-brand-700 bg-brand-900/80 px-3 py-1 font-medium text-slate-200 transition hover:border-primary-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                        disabled={!canGoNext}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
