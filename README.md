@@ -6,7 +6,7 @@ NetVerse AI is a secure infrastructure operations portal for multinational teams
 
 ## Modules
 - **AccessVault** — credential vault, group/system management, browser SSH terminal, GUI quick-launch.
-- **VM Inventory (VMware)** — live ESXi/vCenter host, VM, datastore, and network telemetry via pyVmomi; overview dashboard + VM Center workspace.
+- **VM Inventory (VMware)** — live ESXi/vCenter host, VM, datastore, and network telemetry via pyVmomi; overview dashboard + VM Center workspace. Clickable **host detail** (uplink LLDP/CDP neighbor topology) and **VM detail** (VM → port group → uplink → switch connectivity topology).
 - **Cisco ACI** — fabric node inventory (leaf/spine/controller), interface EPG/L3Out bindings, cross-fabric endpoint directory (MAC/IP), VLAN inventory, and free-ports report.
 - **IP-MPLS Inventory** — Cisco IOS-XR/XE device onboarding (by Nautobot role), interface/VRF/neighbor/hardware collection via Netmiko + pyATS/Genie, and an interactive ISIS topology (Cytoscape) with role/location filters and fullscreen.
 - **NX-OS Inventory** — Cisco Nexus onboarding by Nautobot role (`Nexus`/`ToR`), interface/VRF/BGP/hardware collection via Netmiko + pyATS/Genie, and a CDP+LLDP topology.
@@ -100,7 +100,9 @@ new inventory domains are added.
 ### Inventory UI Overview
 - `/inventory`: live dashboard with KPI tiles, collector health list, and events & alerts feed.
 - `/inventory/admin`: step-by-step onboarding wizard with validation history, draft save/clear, and filterable collector registry.
-- `/inventory/virtual-machines`: VM Center view with summary metrics, advanced filters, and detail side panel for selected workloads.
+- `/inventory/virtual-machines`: VM Center view with summary metrics and advanced filters; rows open the full VM detail page.
+- `/inventory/virtual-machines/:vmId`: VM detail — Overview / Connectivity (VM → port group → uplink → switch topology) / Networks / Storage.
+- `/inventory/hosts/:hostId`: ESXi host detail — Overview / Uplinks & Neighbors (LLDP/CDP topology) / VMs / Datastores / Networks.
 
 ## Production Deployment (Docker)
 1. Copy the Docker environment template and fill in secure values:
@@ -142,7 +144,11 @@ new inventory domains are added.
 | PATCH | `/api/v1/inventory/endpoints/{id}` | Update collector settings and credentials (admin only) |
 | DELETE | `/api/v1/inventory/endpoints/{id}` | Remove a collector (admin only) |
 | GET | `/api/v1/inventory/hosts` | Fetch aggregated host telemetry with optional `endpoint_id` filter |
+| GET | `/api/v1/inventory/hosts/{id}` | Retrieve a single host's detail |
+| GET | `/api/v1/inventory/hosts/{id}/nics` | Host physical NICs with LLDP/CDP switch neighbors |
 | GET | `/api/v1/inventory/virtual-machines` | Fetch VM inventory with optional `endpoint_id`/`host_id` filters |
+| GET | `/api/v1/inventory/virtual-machines/{id}` | Retrieve a single VM's detail |
+| GET | `/api/v1/inventory/virtual-machines/{id}/topology` | VM connectivity graph (VM → port group → uplink → switch) |
 
 ## Onboarding IP-MPLS Devices
 

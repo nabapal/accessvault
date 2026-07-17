@@ -31,7 +31,11 @@ with the same data available through a documented API.
 
 ### 🖥️ VM Inventory (VMware)
 - Live **ESXi / vCenter** collection: hosts, virtual machines, datastores, networks.
-- Dashboard with capacity/health KPIs; VM Center workspace with filters and detail.
+- Dashboard with capacity/health KPIs; VM Center workspace with filters.
+- **Host detail** (clickable) — facts, VMs, datastores, and an **Uplinks & Neighbors**
+  topology built from each host's physical NIC **LLDP / CDP** switch neighbors.
+- **VM detail** (clickable) — Overview / Networks / Storage plus a **connectivity
+  topology** tracing VM → port group → host uplink → **switch** (LLDP/CDP).
 - Onboard collectors with a guided admin flow (validate → test → enroll).
 
 ### 🔵 Cisco ACI
