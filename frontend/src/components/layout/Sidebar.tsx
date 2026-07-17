@@ -100,9 +100,6 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
             {isCollapsed ? ">" : "<"}
           </button>
         </div>
-        {extraContent && !isCollapsed ? (
-          <div className="mt-6 border-b border-brand-800/60 pb-4 text-sm text-slate-200">{extraContent}</div>
-        ) : null}
   <nav className="mt-6 flex-1 space-y-6 overflow-y-auto">
           {sections.map((section) => {
             const open = openSections.has(section.title);
@@ -159,6 +156,7 @@ export function Sidebar({ sections, activePath, isCollapsed, onToggle, extraCont
             );
           })}
         </nav>
+        {extraContent && !isCollapsed ? <div className="mt-6 border-t border-brand-800/60 pt-4 text-sm text-slate-200">{extraContent}</div> : null}
       </div>
     </aside>
   );

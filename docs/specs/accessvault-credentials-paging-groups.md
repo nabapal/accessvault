@@ -9,8 +9,9 @@
 Two UI fixes on the AccessVault page (`AccessVaultPage` in
 [frontend/src/pages/DashboardPage.tsx](../../frontend/src/pages/DashboardPage.tsx)):
 1. Add client-side pagination to the systems/credentials table.
-2. Move the Groups panel from the **bottom** of the left navigation rail to the
-   **top**, above the module navigation, so it is no longer buried.
+2. Groups panel stays at the **bottom** of the left navigation rail (below the
+   module navigation) — pagination keeps the systems table short so the groups
+   are no longer pushed far down the page.
 
 ## 2. Motivation
 - The credentials table ([SystemTable.tsx](../../frontend/src/components/systems/SystemTable.tsx))
@@ -49,13 +50,11 @@ Two UI fixes on the AccessVault page (`AccessVaultPage` in
   Prefer slicing in the page to keep `SystemTable` unchanged.
 
 ### 4b. Groups placement
-- Render the sidebar `extraContent` **above** the `<nav>` module sections in
-  `Sidebar.tsx` (move the existing `extraContent` block before `<nav>`;
-  keep the divider, hidden when collapsed).
-- No change to `GroupList` behaviour: selecting a group still filters the
-  systems table; "+ Add System" button stays with the group panel.
-- Left rail order becomes: brand/toggle → **Groups + Add System** → divider →
-  module navigation.
+- Groups panel stays at the **bottom** of the left rail (existing
+  `extraContent` position in `Sidebar.tsx`, below `<nav>`). No layout change —
+  pagination alone resolves the "groups pushed too far down" symptom by
+  bounding the systems table height.
+- No change to `GroupList` behaviour.
 
 ## 5. Acceptance criteria
 - Credentials table shows at most `pageSize` rows; selector switches 10/25/50.
@@ -73,8 +72,8 @@ Two UI fixes on the AccessVault page (`AccessVaultPage` in
   spot-check another module page's sidebar is unchanged.
 
 ## 7. Resolved decisions
-- **Groups placement:** Left rail, **above** the module navigation (not moved
-  into the main content area).
+- **Groups placement:** Left rail, **bottom** (unchanged) — pagination bounds
+  the table so groups are no longer pushed down.
 - **Page size:** 10 / 25 / 50 selector, default 10, Prev/Next + Page X of Y
   (matches VM Center).
 
