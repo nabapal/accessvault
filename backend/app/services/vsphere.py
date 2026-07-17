@@ -83,6 +83,17 @@ def collect_inventory(
     si = SmartConnect(host=address, user=username, pwd=password, port=port, sslContext=ssl_context)
     try:
         content = si.RetrieveContent()
+        # apiType is "HostAgent" for a direct ESXi connection, "VirtualCenter" for vCenter.
+        # A direct ESXi host often reports config.name as "localhost.localdomain"; fall back to
+        # the address we connected to (the host's IP) so the UI shows a meaningful identifier.
+        api_type = getattr(getattr(content, "about", None), "apiType", None)
+        is_direct_esxi = api_type == "HostAgent"
+
+        def _resolve_host_name(config_name: Optional[str]) -> str:
+            if is_direct_esxi and (not config_name or str(config_name).strip().lower() in ("localhost.localdomain", "localhost")):
+                return address
+            return config_name or address
+
         hosts: List[VsphereHost] = []
         virtual_machines: List[VsphereVirtualMachine] = []
         datastore_map: dict[str, VsphereDatastore] = {}
@@ -121,7 +132,7 @@ def collect_inventory(
 
                     hosts.append(
                         VsphereHost(
-                            name=summary.config.name,
+                            name=_resolve_host_name(getattr(summary.config, "name", None)),
                             cluster=cluster_name,
                             hardware_model=getattr(hardware, "model", None),
                             serial=serial_val,
@@ -159,7 +170,7 @@ def collect_inventory(
                 virtual_machines.append(
                     VsphereVirtualMachine(
                         name=summary.config.name,
-                        host_name=host_ref.name if host_ref else None,
+                        host_name=_resolve_host_name(host_ref.name) if host_ref else None,
                         guest_os=summary.config.guestFullName if summary.config else None,
                         power_state=str(runtime.powerState) if runtime else "unknown",
                         ip_address=guest.ipAddress if guest else None,
