@@ -1,6 +1,6 @@
 # SDD: VM connectivity topology (VM → Network → Uplink → Switch)
 
-- **Status:** Approved — decisions resolved (§11); Phase 0 done; ready to implement
+- **Status:** Implemented — verified live (VM Arbor_collector → VM Network 2/3 → vmnic1/vmnic0 → Leaf108 CDP)
 - **Owner:** naba
 - **Date:** 2026-07-15
 - **Module:** NetVerse AI → VM Inventory (VM Center → VM detail)

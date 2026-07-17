@@ -26,6 +26,7 @@ import { AciNodeDetailPage } from "@/pages/AciNodeDetailPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { InventoryPage } from "@/pages/InventoryPage";
 import { HostDetailPage } from "@/pages/HostDetailPage";
+import { VmDetailPage } from "@/pages/VmDetailPage";
 import { InventoryAdminPage } from "@/pages/InventoryAdminPage";
 import { TelcoOnboardingPage } from "@/pages/TelcoOnboardingPage";
 import { VirtualMachinesPage } from "@/pages/VirtualMachinesPage";
@@ -47,6 +48,7 @@ export default function App() {
     <Route path="/inventory/aci" element={<Navigate to="/telco/aci" replace />} />
     <Route path="/inventory/admin" element={<InventoryAdminPage />} />
     <Route path="/inventory/virtual-machines" element={<VirtualMachinesPage />} />
+    <Route path="/inventory/virtual-machines/:vmId" element={<VmDetailPage />} />
     <Route path="/inventory/hosts/:hostId" element={<HostDetailPage />} />
     <Route path="/telco/aci" element={<AciInventoryPage />} />
     <Route path="/telco/aci/endpoints" element={<AciEndpointsPage />} />

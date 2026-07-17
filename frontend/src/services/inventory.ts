@@ -9,7 +9,8 @@ import {
   InventoryHostNic,
   InventoryNetwork,
   InventorySourceType,
-  InventoryVirtualMachine
+  InventoryVirtualMachine,
+  InventoryVmTopology
 } from "@/types";
 
 export interface CreateInventoryEndpointPayload {
@@ -67,6 +68,16 @@ export const fetchInventoryHost = async (hostId: string): Promise<InventoryHost>
 
 export const fetchInventoryHostNics = async (hostId: string): Promise<InventoryHostNic[]> => {
   const { data } = await api.get<InventoryHostNic[]>(`/inventory/hosts/${hostId}/nics`);
+  return data;
+};
+
+export const fetchInventoryVm = async (vmId: string): Promise<InventoryVirtualMachine> => {
+  const { data } = await api.get<InventoryVirtualMachine>(`/inventory/virtual-machines/${vmId}`);
+  return data;
+};
+
+export const fetchInventoryVmTopology = async (vmId: string): Promise<InventoryVmTopology> => {
+  const { data } = await api.get<InventoryVmTopology>(`/inventory/virtual-machines/${vmId}/topology`);
   return data;
 };
 

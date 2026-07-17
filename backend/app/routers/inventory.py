@@ -14,6 +14,7 @@ from app.models import (
     InventoryEndpointStatus,
     InventoryHost,
     InventoryHostNic,
+    InventoryHostPortgroup,
     InventoryNetwork,
     InventoryVirtualMachine,
 )
@@ -26,6 +27,7 @@ from app.schemas import (
     InventoryEndpointValidationResult,
     InventoryHostRead,
     InventoryHostNicRead,
+    InventoryVmTopology,
     InventoryNetworkRead,
     InventoryVMRead,
 )
@@ -411,6 +413,91 @@ async def list_virtual_machines(
     result = await db.execute(stmt)
     vms = result.scalars().all()
     return [_serialize_vm(vm) for vm in vms]
+
+
+@router.get("/virtual-machines/{vm_id}", response_model=InventoryVMRead)
+async def get_virtual_machine(
+    vm_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    stmt = (
+        select(InventoryVirtualMachine)
+        .options(selectinload(InventoryVirtualMachine.endpoint), selectinload(InventoryVirtualMachine.host))
+        .where(InventoryVirtualMachine.id == vm_id)
+    )
+    vm = (await db.execute(stmt)).scalars().first()
+    if vm is None:
+        raise HTTPException(status_code=404, detail="Virtual machine not found")
+    return _serialize_vm(vm)
+
+
+@router.get("/virtual-machines/{vm_id}/topology", response_model=InventoryVmTopology)
+async def get_virtual_machine_topology(
+    vm_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    """Physical connectivity path: VM -> network(portgroup) -> host uplink -> switch (LLDP/CDP)."""
+    vm = (
+        await db.execute(
+            select(InventoryVirtualMachine)
+            .options(selectinload(InventoryVirtualMachine.host))
+            .where(InventoryVirtualMachine.id == vm_id)
+        )
+    ).scalars().first()
+    if vm is None:
+        raise HTTPException(status_code=404, detail="Virtual machine not found")
+
+    nodes: dict[str, dict] = {}
+    links: list[dict] = []
+
+    def node(node_id: str, label: str, kind: str) -> str:
+        if node_id not in nodes:
+            nodes[node_id] = {"id": node_id, "label": label, "kind": kind}
+        return node_id
+
+    vm_node = node("vm", vm.name, "vm")
+
+    host = vm.host
+    pg_uplinks: dict[str, list[str]] = {}
+    dvs_uplinks: list[str] = []
+    nic_neighbor: dict[str, dict] = {}
+    if host is not None:
+        pgs = (await db.execute(select(InventoryHostPortgroup).where(InventoryHostPortgroup.host_id == host.id))).scalars().all()
+        for pg in pgs:
+            if pg.switch_kind == "dvs":
+                dvs_uplinks.extend(pg.uplinks or [])
+            else:
+                pg_uplinks[pg.name] = list(pg.uplinks or [])
+        nics = (await db.execute(select(InventoryHostNic).where(InventoryHostNic.host_id == host.id))).scalars().all()
+        for nic in nics:
+            if nic.remote_device:
+                nic_neighbor[nic.device] = {
+                    "remote_device": nic.remote_device,
+                    "remote_port": nic.remote_port,
+                    "protocol": nic.neighbor_protocol,
+                }
+
+    for net in (vm.networks or []):
+        net_node = node(f"net:{net}", net, "network")
+        links.append({"source": vm_node, "target": net_node, "label": None})
+        uplinks = pg_uplinks.get(net)
+        if not uplinks:
+            uplinks = dvs_uplinks  # best-effort for distributed portgroups
+        for up in uplinks or []:
+            up_node = node(f"up:{up}", up, "uplink")
+            links.append({"source": net_node, "target": up_node, "label": up})
+            nb = nic_neighbor.get(up)
+            if nb:
+                sw_node = node(f"sw:{nb['remote_device']}", nb["remote_device"], "switch")
+                links.append({
+                    "source": up_node,
+                    "target": sw_node,
+                    "label": f"{nb.get('remote_port') or ''} ({(nb.get('protocol') or '').upper()})".strip(),
+                })
+
+    return InventoryVmTopology(nodes=list(nodes.values()), links=links)
 
 
 @router.get("/datastores", response_model=List[InventoryDatastoreRead])

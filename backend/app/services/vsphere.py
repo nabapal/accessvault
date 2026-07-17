@@ -7,6 +7,15 @@ from pyVim.connect import Disconnect, SmartConnect
 
 
 @dataclass
+class VsphereHostPortgroup:
+    name: str
+    switch_name: Optional[str]
+    switch_kind: Optional[str]
+    uplinks: List[str]
+    vlan_id: Optional[str]
+
+
+@dataclass
 class VsphereHostNic:
     device: str
     mac: Optional[str]
@@ -40,6 +49,7 @@ class VsphereHost:
     esxi_version: Optional[str] = None
     management_ip: Optional[str] = None
     nics: List["VsphereHostNic"] = field(default_factory=list)
+    portgroups: List["VsphereHostPortgroup"] = field(default_factory=list)
 
 
 @dataclass
@@ -169,6 +179,48 @@ def _host_nics_and_mgmt(esxi_host, host_net):
     return nics, mgmt_ip
 
 
+def _host_portgroups(host_net) -> List[VsphereHostPortgroup]:
+    """Map each portgroup to its vSwitch/vDS uplink vmnics (VM connectivity path)."""
+    result: List[VsphereHostPortgroup] = []
+    if host_net is None:
+        return result
+    pnic_by_key = {p.key: p.device for p in (getattr(host_net, "pnic", []) or [])}
+    # standard vSwitch name -> uplink devices
+    vsw_uplinks = {
+        vs.name: [pnic_by_key.get(k, k) for k in (getattr(vs, "pnic", []) or [])]
+        for vs in (getattr(host_net, "vswitch", []) or [])
+    }
+    # vDS (proxySwitch) name -> uplink devices
+    dvs_uplinks = {
+        ps.dvsName: [pnic_by_key.get(k, k) for k in (getattr(ps, "pnic", []) or [])]
+        for ps in (getattr(host_net, "proxySwitch", []) or [])
+    }
+    # standard portgroups
+    for pg in getattr(host_net, "portgroup", []) or []:
+        spec = getattr(pg, "spec", None)
+        name = getattr(spec, "name", None)
+        vsw = getattr(spec, "vswitchName", None)
+        if not name:
+            continue
+        vlan = getattr(spec, "vlanId", None)
+        result.append(
+            VsphereHostPortgroup(
+                name=name, switch_name=vsw, switch_kind="standard",
+                uplinks=vsw_uplinks.get(vsw, []), vlan_id=str(vlan) if vlan not in (None, 0) else None,
+            )
+        )
+    # vDS portgroups run through the proxySwitch uplinks; expose per-DVS entry so VMs on a
+    # distributed portgroup still resolve to uplinks (portgroup name match handled at join time).
+    for dvs_name, uplinks in dvs_uplinks.items():
+        result.append(
+            VsphereHostPortgroup(
+                name=f"[dvs] {dvs_name}", switch_name=dvs_name, switch_kind="dvs",
+                uplinks=uplinks, vlan_id=None,
+            )
+        )
+    return result
+
+
 def collect_inventory(
     address: str,
     port: int,
@@ -233,6 +285,7 @@ def collect_inventory(
                     host_config = getattr(esxi_host, "config", None)
                     host_net = getattr(host_config, "network", None) if host_config else None
                     nics, mgmt_ip = _host_nics_and_mgmt(esxi_host, host_net)
+                    portgroups = _host_portgroups(host_net)
 
                     hosts.append(
                         VsphereHost(
@@ -257,6 +310,7 @@ def collect_inventory(
                             esxi_version=getattr(getattr(host_config, "product", None), "fullName", None) if host_config else None,
                             management_ip=mgmt_ip,
                             nics=nics,
+                            portgroups=portgroups,
                         )
                     )
 

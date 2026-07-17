@@ -1001,3 +1001,7 @@ export interface CgnatStaticRoute {
   family?: string | null;
   description?: string | null;
 }
+
+export interface InventoryTopologyNode { id: string; label: string; kind: string; }
+export interface InventoryTopologyLink { source: string; target: string; label?: string | null; }
+export interface InventoryVmTopology { nodes: InventoryTopologyNode[]; links: InventoryTopologyLink[]; }

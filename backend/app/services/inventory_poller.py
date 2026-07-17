@@ -15,6 +15,7 @@ from app.models import (
 	InventoryEndpointStatus,
 	InventoryHost,
 	InventoryHostNic,
+	InventoryHostPortgroup,
 	InventoryHostConnectionState,
 	InventoryNetwork,
 	InventoryPowerState,
@@ -180,6 +181,18 @@ async def _upsert_hosts(
 					remote_platform=nic.remote_platform,
 					remote_mgmt=nic.remote_mgmt,
 					attributes=nic.attributes or {},
+				)
+			)
+		await session.execute(delete(InventoryHostPortgroup).where(InventoryHostPortgroup.host_id == host.id))
+		for pg in getattr(host_data, "portgroups", []) or []:
+			session.add(
+				InventoryHostPortgroup(
+					host_id=host.id,
+					name=pg.name,
+					switch_name=pg.switch_name,
+					switch_kind=pg.switch_kind,
+					uplinks=pg.uplinks or [],
+					vlan_id=pg.vlan_id,
 				)
 			)
 	await session.flush()

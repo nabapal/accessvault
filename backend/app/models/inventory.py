@@ -101,6 +101,27 @@ class InventoryHost(Base):
         "InventoryVirtualMachine", back_populates="host", cascade="all, delete-orphan"
     )
     nics = relationship("InventoryHostNic", back_populates="host", cascade="all, delete-orphan")
+    portgroups = relationship("InventoryHostPortgroup", back_populates="host", cascade="all, delete-orphan")
+
+
+class InventoryHostPortgroup(Base):
+    """Portgroup on an ESXi host mapped to its vSwitch/vDS uplink pnics (VM connectivity path)."""
+
+    __tablename__ = "inventory_host_portgroups"
+    __table_args__ = (UniqueConstraint("host_id", "name", name="uq_inventory_host_portgroup"),)
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    host_id = Column(GUID(), ForeignKey("inventory_hosts.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    switch_name = Column(String, nullable=True)
+    switch_kind = Column(String, nullable=True)  # standard | dvs
+    uplinks = Column(JSON, nullable=False, default=list)  # list of vmnic devices
+    vlan_id = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    host = relationship("InventoryHost", back_populates="portgroups")
 
 
 class InventoryHostNic(Base):

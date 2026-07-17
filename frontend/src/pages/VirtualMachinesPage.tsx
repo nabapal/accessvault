@@ -1,7 +1,5 @@
-import { parseApiDate } from "@/utils/datetime";
-import { Fragment, useEffect, useMemo, useState } from "react";
-
-import { Dialog, Transition } from "@headlessui/react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { ServerStackIcon } from "@heroicons/react/24/outline";
 
@@ -62,21 +60,8 @@ const formatPercent = (value: number | null | undefined): string => {
   return `${Math.min(100, Math.max(0, Math.round(value)))}%`;
 };
 
-const formatDateTime = (value?: string | null): string => {
-  if (!value) {
-    return "Unknown";
-  }
-  try {
-    return new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Kolkata",
-      dateStyle: "medium",
-      timeStyle: "short"
-    }).format(parseApiDate(value));
-  } catch {
-    return value;
-  }
-};
-
 export function VirtualMachinesPage() {
+  const navigate = useNavigate();
   const [virtualMachines, setVirtualMachines] = useState<InventoryVirtualMachine[]>([]);
   const [hosts, setHosts] = useState<InventoryHost[]>([]);
   const [endpoints, setEndpoints] = useState<InventoryEndpoint[]>([]);
@@ -87,8 +72,6 @@ export function VirtualMachinesPage() {
   const [hostFilter, setHostFilter] = useState<string>("all");
   const [powerFilter, setPowerFilter] = useState<PowerFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedVmId, setSelectedVmId] = useState<string | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
 
@@ -127,17 +110,6 @@ export function VirtualMachinesPage() {
       isMounted = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!selectedVmId) {
-      return;
-    }
-    const refreshed = virtualMachines.find((vm) => vm.id === selectedVmId);
-    if (!refreshed) {
-      setSelectedVmId(null);
-      setIsDetailsOpen(false);
-    }
-  }, [selectedVmId, virtualMachines]);
 
   useEffect(() => {
     setPage(1);
@@ -196,10 +168,6 @@ export function VirtualMachinesPage() {
   const pageEnd = totalVmCount === 0 ? 0 : Math.min(page * pageSize, totalVmCount);
   const canGoPrev = page > 1;
   const canGoNext = totalVmCount > 0 && page < totalPages;
-
-  const selectedVm = useMemo(() => {
-    return filteredVirtualMachines.find((vm) => vm.id === selectedVmId) ?? null;
-  }, [filteredVirtualMachines, selectedVmId]);
 
   const summary = useMemo(() => {
     const total = filteredVirtualMachines.length;
@@ -264,12 +232,7 @@ export function VirtualMachinesPage() {
   }, [filteredVirtualMachines, hosts]);
 
   const openDetails = (vmId: string) => {
-    setSelectedVmId(vmId);
-    setIsDetailsOpen(true);
-  };
-
-  const closeDetails = () => {
-    setIsDetailsOpen(false);
+    navigate(`/inventory/virtual-machines/${vmId}`);
   };
 
   return (
@@ -389,7 +352,6 @@ export function VirtualMachinesPage() {
                 setHostFilter("all");
                 setPowerFilter("all");
                 setSearchTerm("");
-                setSelectedVmId(null);
               }}
             >
               Reset filters
@@ -552,148 +514,6 @@ export function VirtualMachinesPage() {
             </div>
           )}
         </section>
-
-        <Transition appear show={isDetailsOpen && !!selectedVm} as={Fragment}>
-          <Dialog as="div" className="relative z-50" onClose={closeDetails}>
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-200"
-              enterFrom="opacity-0"
-              enterTo="opacity-100"
-              leave="ease-in duration-150"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <div className="fixed inset-0 bg-black/60" />
-            </Transition.Child>
-
-            <div className="fixed inset-0 overflow-y-auto">
-              <div className="flex min-h-full items-center justify-center p-6">
-                <Transition.Child
-                  as={Fragment}
-                  enter="ease-out duration-200"
-                  enterFrom="opacity-0 scale-95"
-                  enterTo="opacity-100 scale-100"
-                  leave="ease-in duration-150"
-                  leaveFrom="opacity-100 scale-100"
-                  leaveTo="opacity-0 scale-95"
-                >
-                  <Dialog.Panel className="w-full max-w-3xl transform overflow-hidden rounded-xl border border-brand-700 bg-brand-900/95 p-6 text-slate-100 shadow-xl">
-                    {selectedVm && (
-                      <div className="space-y-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <Dialog.Title className="text-lg font-semibold">{selectedVm.name}</Dialog.Title>
-                            <p className="text-sm text-slate-400">{selectedVm.guest_os ?? "Unknown guest OS"}</p>
-                          </div>
-                          <button
-                            type="button"
-                            className="rounded-md border border-brand-700 bg-brand-800 px-3 py-1 text-xs font-medium text-slate-200 hover:border-primary-500 hover:bg-brand-700"
-                            onClick={closeDetails}
-                          >
-                            Close
-                          </button>
-                        </div>
-
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4 text-xs text-slate-300">
-                            <h4 className="text-sm font-semibold text-slate-200">Placement</h4>
-                            <p className="mt-2">Host: {selectedVm.host_name ?? "Unassigned"}</p>
-                            <p>Collector: {selectedVm.endpoint_name}</p>
-                            {selectedVm.ip_address && <p>IP: {selectedVm.ip_address}</p>}
-                            <p>Power: {powerStateLabels[selectedVm.power_state]}</p>
-                          </div>
-                          <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4 text-xs text-slate-300">
-                            <h4 className="text-sm font-semibold text-slate-200">Resources</h4>
-                            <p className="mt-2">vCPU: {formatNumber(selectedVm.cpu_count)}</p>
-                            <p>Memory: {formatNumber(selectedVm.memory_mb)} MB</p>
-                            <p>Provisioned storage: {formatGigabytes(selectedVm.provisioned_storage_gb)}</p>
-                            <p>Used storage: {formatGigabytes(selectedVm.used_storage_gb)}</p>
-                          </div>
-                        </div>
-
-                        <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4 text-xs text-slate-300">
-                          <h4 className="text-sm font-semibold text-slate-200">Utilization</h4>
-                          <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-slate-500">CPU usage</p>
-                              <p className="text-sm text-primary-100">
-                                {formatPercent(
-                                  selectedVm.cpu_count && selectedVm.cpu_usage_mhz
-                                    ? (selectedVm.cpu_usage_mhz / (selectedVm.cpu_count * 2500)) * 100
-                                    : null
-                                )}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-slate-500">Memory usage</p>
-                              <p className="text-sm text-primary-100">
-                                {formatPercent(
-                                  selectedVm.memory_mb && selectedVm.memory_usage_mb
-                                    ? (selectedVm.memory_usage_mb / selectedVm.memory_mb) * 100
-                                    : null
-                                )}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-slate-500">Storage usage</p>
-                              <p className="text-sm text-primary-100">
-                                {formatPercent(
-                                  selectedVm.provisioned_storage_gb && selectedVm.used_storage_gb
-                                    ? (selectedVm.used_storage_gb / selectedVm.provisioned_storage_gb) * 100
-                                    : null
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4 text-xs text-slate-300">
-                          <h4 className="text-sm font-semibold text-slate-200">Connectivity</h4>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {selectedVm.networks.length ? (
-                              selectedVm.networks.map((network) => (
-                                <span
-                                  key={network}
-                                  className="rounded border border-brand-700/60 bg-brand-800/60 px-2 py-0.5 text-[11px] text-slate-200"
-                                >
-                                  {network}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-slate-500">No networks assigned</span>
-                            )}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {selectedVm.datastores.length ? (
-                              selectedVm.datastores.map((datastore) => (
-                                <span
-                                  key={datastore}
-                                  className="rounded border border-primary-500/40 bg-primary-500/10 px-2 py-0.5 text-[11px] text-primary-100"
-                                >
-                                  {datastore}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-slate-500">No datastores attached</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4 text-xs text-slate-300">
-                          <h4 className="text-sm font-semibold text-slate-200">Lifecycle</h4>
-                          <p className="mt-2">Last updated: {formatDateTime(selectedVm.updated_at)}</p>
-                          <p>Last seen: {formatDateTime(selectedVm.last_seen_at)}</p>
-                          <p>Tools status: {selectedVm.tools_status ?? "Unknown"}</p>
-                        </div>
-                      </div>
-                    )}
-                  </Dialog.Panel>
-                </Transition.Child>
-              </div>
-            </div>
-          </Dialog>
-        </Transition>
       </div>
     </AppShell>
   );

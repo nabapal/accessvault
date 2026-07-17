@@ -94,6 +94,23 @@ class InventoryHostRead(BaseModel):
         from_attributes = True
 
 
+class InventoryTopologyNode(BaseModel):
+    id: str
+    label: str
+    kind: str  # vm | network | uplink | switch
+
+
+class InventoryTopologyLink(BaseModel):
+    source: str
+    target: str
+    label: Optional[str] = None
+
+
+class InventoryVmTopology(BaseModel):
+    nodes: List[InventoryTopologyNode] = Field(default_factory=list)
+    links: List[InventoryTopologyLink] = Field(default_factory=list)
+
+
 class InventoryHostNicRead(BaseModel):
     id: UUID
     host_id: UUID
