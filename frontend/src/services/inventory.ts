@@ -6,6 +6,7 @@ import {
   InventoryEndpointSyncResponse,
   InventoryEndpointValidationResult,
   InventoryHost,
+  InventoryHostNic,
   InventoryNetwork,
   InventorySourceType,
   InventoryVirtualMachine
@@ -56,6 +57,16 @@ export const fetchInventoryHosts = async (endpointId?: string): Promise<Inventor
   const { data } = await api.get<InventoryHost[]>("/inventory/hosts", {
     params: endpointId ? { endpoint_id: endpointId } : undefined
   });
+  return data;
+};
+
+export const fetchInventoryHost = async (hostId: string): Promise<InventoryHost> => {
+  const { data } = await api.get<InventoryHost>(`/inventory/hosts/${hostId}`);
+  return data;
+};
+
+export const fetchInventoryHostNics = async (hostId: string): Promise<InventoryHostNic[]> => {
+  const { data } = await api.get<InventoryHostNic[]>(`/inventory/hosts/${hostId}/nics`);
   return data;
 };
 

@@ -691,7 +691,9 @@ export function InventoryPage() {
                       return (
                         <tr key={host.id} className="rounded-lg border border-brand-800/70 bg-brand-900/80">
                           <td className="px-2 py-2 align-top">
-                            <div className="font-semibold text-slate-100">{host.name}</div>
+                            <Link to={`/inventory/hosts/${host.id}`} className="font-semibold text-primary-300 hover:text-primary-200">
+                              {host.name}
+                            </Link>
                             <div className="text-xs text-slate-400">{host.cluster ?? host.endpoint_name}</div>
                           </td>
                           <td className="px-2 py-2 align-top text-xs text-slate-300">{host.serial ?? "MISSING"}</td>

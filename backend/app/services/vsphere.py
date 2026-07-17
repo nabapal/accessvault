@@ -1,9 +1,22 @@
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional, Set
 
 from pyVim.connect import Disconnect, SmartConnect
+
+
+@dataclass
+class VsphereHostNic:
+    device: str
+    mac: Optional[str]
+    speed_mb: Optional[int]
+    neighbor_protocol: Optional[str]
+    remote_device: Optional[str]
+    remote_port: Optional[str]
+    remote_platform: Optional[str]
+    remote_mgmt: Optional[str]
+    attributes: dict
 
 
 @dataclass
@@ -21,6 +34,12 @@ class VsphereHost:
     uptime_seconds: Optional[int]
     datastore_total_gb: Optional[float]
     datastore_free_gb: Optional[float]
+    vendor: Optional[str] = None
+    cpu_model: Optional[str] = None
+    bios_version: Optional[str] = None
+    esxi_version: Optional[str] = None
+    management_ip: Optional[str] = None
+    nics: List["VsphereHostNic"] = field(default_factory=list)
 
 
 @dataclass
@@ -67,6 +86,87 @@ def _bytes_to_gb(value: Optional[int]) -> Optional[float]:
     if not value:
         return None
     return round(value / (1024 ** 3), 2)
+
+
+def _lldp_params(lldp) -> dict:
+    out = {}
+    for kv in getattr(lldp, "parameter", []) or []:
+        key = getattr(kv, "key", None)
+        if key is not None:
+            out[str(key)] = str(getattr(kv, "value", None))
+    return out
+
+
+def _host_nics_and_mgmt(esxi_host, host_net):
+    """Build per-uplink NIC + LLDP/CDP neighbor rows (one per protocol) and the mgmt vmk IP."""
+    nics: List[VsphereHostNic] = []
+    mgmt_ip = None
+    if host_net is None:
+        return nics, mgmt_ip
+
+    # management vmk IP: prefer a vmk on a "Management" portgroup, else the first vmk.
+    for vnic in getattr(host_net, "vnic", []) or []:
+        ip = getattr(getattr(vnic, "spec", None), "ip", None)
+        addr = getattr(ip, "ipAddress", None)
+        if not addr:
+            continue
+        if mgmt_ip is None:
+            mgmt_ip = addr
+        if "management" in str(getattr(vnic, "portgroup", "")).lower():
+            mgmt_ip = addr
+            break
+
+    pnics = {p.device: p for p in (getattr(host_net, "pnic", []) or [])}
+    hints = []
+    try:
+        hints = esxi_host.configManager.networkSystem.QueryNetworkHint() or []
+    except Exception:  # pragma: no cover - hint may be unavailable
+        hints = []
+
+    for hint in hints:
+        dev = getattr(hint, "device", None)
+        if not dev:
+            continue
+        pnic = pnics.get(dev)
+        mac = getattr(pnic, "mac", None) if pnic else None
+        speed = getattr(getattr(pnic, "linkSpeed", None), "speedMb", None) if pnic else None
+        added = False
+        lldp = getattr(hint, "lldpInfo", None)
+        if lldp is not None:
+            params = _lldp_params(lldp)
+            nics.append(
+                VsphereHostNic(
+                    device=dev, mac=mac, speed_mb=speed, neighbor_protocol="lldp",
+                    remote_device=params.get("System Name") or getattr(lldp, "chassisId", None),
+                    remote_port=getattr(lldp, "portId", None) or params.get("Port Description"),
+                    remote_platform=params.get("System Description"),
+                    remote_mgmt=params.get("Management Address"),
+                    attributes={"chassis_id": getattr(lldp, "chassisId", None), "params": params},
+                )
+            )
+            added = True
+        cdp = getattr(hint, "connectedSwitchPort", None)
+        if cdp is not None:
+            nics.append(
+                VsphereHostNic(
+                    device=dev, mac=mac, speed_mb=speed, neighbor_protocol="cdp",
+                    remote_device=getattr(cdp, "devId", None),
+                    remote_port=getattr(cdp, "portId", None),
+                    remote_platform=getattr(cdp, "hardwarePlatform", None),
+                    remote_mgmt=getattr(cdp, "address", None),
+                    attributes={"vlan": getattr(cdp, "vlan", None)},
+                )
+            )
+            added = True
+        if not added:
+            nics.append(
+                VsphereHostNic(
+                    device=dev, mac=mac, speed_mb=speed, neighbor_protocol=None,
+                    remote_device=None, remote_port=None, remote_platform=None, remote_mgmt=None,
+                    attributes={},
+                )
+            )
+    return nics, mgmt_ip
 
 
 def collect_inventory(
@@ -130,6 +230,10 @@ def collect_inventory(
                                     serial_val = getattr(info, "identifierValue", None)
                                     break
 
+                    host_config = getattr(esxi_host, "config", None)
+                    host_net = getattr(host_config, "network", None) if host_config else None
+                    nics, mgmt_ip = _host_nics_and_mgmt(esxi_host, host_net)
+
                     hosts.append(
                         VsphereHost(
                             name=_resolve_host_name(getattr(summary.config, "name", None)),
@@ -147,6 +251,12 @@ def collect_inventory(
                             uptime_seconds=getattr(quickstats, "uptime", None),
                             datastore_total_gb=_bytes_to_gb(total_bytes),
                             datastore_free_gb=_bytes_to_gb(free_bytes),
+                            vendor=getattr(hardware, "vendor", None),
+                            cpu_model=getattr(hardware, "cpuModel", None),
+                            bios_version=getattr(getattr(hardware, "biosInfo", None), "biosVersion", None),
+                            esxi_version=getattr(getattr(host_config, "product", None), "fullName", None) if host_config else None,
+                            management_ip=mgmt_ip,
+                            nics=nics,
                         )
                     )
 

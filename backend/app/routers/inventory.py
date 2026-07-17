@@ -13,6 +13,7 @@ from app.models import (
     InventoryEndpoint,
     InventoryEndpointStatus,
     InventoryHost,
+    InventoryHostNic,
     InventoryNetwork,
     InventoryVirtualMachine,
 )
@@ -24,6 +25,7 @@ from app.schemas import (
     InventoryEndpointUpdate,
     InventoryEndpointValidationResult,
     InventoryHostRead,
+    InventoryHostNicRead,
     InventoryNetworkRead,
     InventoryVMRead,
 )
@@ -65,6 +67,11 @@ def _serialize_host(host: InventoryHost) -> InventoryHostRead:
         serial=host.serial,
         cluster=host.cluster,
         hardware_model=host.hardware_model,
+        vendor=host.vendor,
+        cpu_model=host.cpu_model,
+        bios_version=host.bios_version,
+        esxi_version=host.esxi_version,
+        management_ip=host.management_ip,
         site_name=host.site_name,
         rack_location=host.rack_location,
         connection_state=host.connection_state,
@@ -356,6 +363,33 @@ async def list_hosts(
     result = await db.execute(stmt)
     hosts = result.scalars().all()
     return [_serialize_host(host) for host in hosts]
+
+
+@router.get("/hosts/{host_id}", response_model=InventoryHostRead)
+async def get_host(
+    host_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    stmt = select(InventoryHost).options(selectinload(InventoryHost.endpoint)).where(InventoryHost.id == host_id)
+    host = (await db.execute(stmt)).scalars().first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+    return _serialize_host(host)
+
+
+@router.get("/hosts/{host_id}/nics", response_model=List[InventoryHostNicRead])
+async def list_host_nics(
+    host_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    host = await db.get(InventoryHost, host_id)
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+    stmt = select(InventoryHostNic).where(InventoryHostNic.host_id == host_id).order_by(InventoryHostNic.device)
+    nics = (await db.execute(stmt)).scalars().all()
+    return [InventoryHostNicRead.model_validate(n, from_attributes=True) for n in nics]
 
 
 @router.get("/virtual-machines", response_model=List[InventoryVMRead])

@@ -78,6 +78,11 @@ export interface InventoryHost {
   serial?: string | null;
   cluster?: string | null;
   hardware_model?: string | null;
+  vendor?: string | null;
+  cpu_model?: string | null;
+  bios_version?: string | null;
+  esxi_version?: string | null;
+  management_ip?: string | null;
   site_name?: string | null;
   rack_location?: string | null;
   connection_state: InventoryHostConnectionState;
@@ -91,6 +96,19 @@ export interface InventoryHost {
   uptime_seconds?: number | null;
   last_seen_at?: string | null;
   updated_at: string;
+}
+
+export interface InventoryHostNic {
+  id: string;
+  host_id: string;
+  device: string;
+  mac?: string | null;
+  speed_mb?: number | null;
+  neighbor_protocol?: string | null;
+  remote_device?: string | null;
+  remote_port?: string | null;
+  remote_platform?: string | null;
+  remote_mgmt?: string | null;
 }
 
 export interface InventoryVirtualMachine {

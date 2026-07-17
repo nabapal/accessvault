@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict, Optional, Set
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -14,6 +14,7 @@ from app.models import (
 	InventoryEndpoint,
 	InventoryEndpointStatus,
 	InventoryHost,
+	InventoryHostNic,
 	InventoryHostConnectionState,
 	InventoryNetwork,
 	InventoryPowerState,
@@ -140,6 +141,11 @@ async def _upsert_hosts(
 		host.uptime_seconds = host_data.uptime_seconds
 		host.datastore_total_gb = host_data.datastore_total_gb
 		host.datastore_free_gb = host_data.datastore_free_gb
+		host.vendor = host_data.vendor
+		host.cpu_model = host_data.cpu_model
+		host.bios_version = host_data.bios_version
+		host.esxi_version = host_data.esxi_version
+		host.management_ip = host_data.management_ip
 		host.last_seen_at = snapshot.collected_at
 		host.updated_at = snapshot.collected_at
 		seen.add(host.name)
@@ -153,7 +159,31 @@ async def _upsert_hosts(
 	result = await session.execute(
 		select(InventoryHost).where(InventoryHost.endpoint_id == endpoint.id)
 	)
-	return {host.name: host for host in result.scalars()}
+	host_map = {host.name: host for host in result.scalars()}
+
+	# Replace per-host physical NIC / LLDP-CDP neighbor rows.
+	for host_data in snapshot.hosts:
+		host = host_map.get(host_data.name)
+		if host is None:
+			continue
+		await session.execute(delete(InventoryHostNic).where(InventoryHostNic.host_id == host.id))
+		for nic in getattr(host_data, "nics", []) or []:
+			session.add(
+				InventoryHostNic(
+					host_id=host.id,
+					device=nic.device,
+					mac=nic.mac,
+					speed_mb=nic.speed_mb,
+					neighbor_protocol=nic.neighbor_protocol,
+					remote_device=nic.remote_device,
+					remote_port=nic.remote_port,
+					remote_platform=nic.remote_platform,
+					remote_mgmt=nic.remote_mgmt,
+					attributes=nic.attributes or {},
+				)
+			)
+	await session.flush()
+	return host_map
 
 
 async def _upsert_virtual_machines(

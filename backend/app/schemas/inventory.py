@@ -70,6 +70,11 @@ class InventoryHostRead(BaseModel):
     serial: Optional[str]
     cluster: Optional[str]
     hardware_model: Optional[str]
+    vendor: Optional[str] = None
+    cpu_model: Optional[str] = None
+    bios_version: Optional[str] = None
+    esxi_version: Optional[str] = None
+    management_ip: Optional[str] = None
     site_name: Optional[str]
     rack_location: Optional[str]
     connection_state: InventoryHostConnectionState
@@ -83,6 +88,22 @@ class InventoryHostRead(BaseModel):
     uptime_seconds: Optional[int]
     last_seen_at: Optional[datetime]
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InventoryHostNicRead(BaseModel):
+    id: str
+    host_id: str
+    device: str
+    mac: Optional[str] = None
+    speed_mb: Optional[int] = None
+    neighbor_protocol: Optional[str] = None
+    remote_device: Optional[str] = None
+    remote_port: Optional[str] = None
+    remote_platform: Optional[str] = None
+    remote_mgmt: Optional[str] = None
 
     class Config:
         from_attributes = True

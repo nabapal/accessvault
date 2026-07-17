@@ -76,6 +76,11 @@ class InventoryHost(Base):
     serial = Column(String, nullable=True)
     cluster = Column(String, nullable=True)
     hardware_model = Column(String, nullable=True)
+    vendor = Column(String, nullable=True)
+    cpu_model = Column(String, nullable=True)
+    bios_version = Column(String, nullable=True)
+    esxi_version = Column(String, nullable=True)
+    management_ip = Column(String, nullable=True)
     connection_state = Column(Enum(InventoryHostConnectionState), nullable=False, default=InventoryHostConnectionState.CONNECTED)
     power_state = Column(Enum(InventoryPowerState), nullable=False, default=InventoryPowerState.POWERED_ON)
     site_name = Column(String, nullable=True)
@@ -95,6 +100,29 @@ class InventoryHost(Base):
     virtual_machines = relationship(
         "InventoryVirtualMachine", back_populates="host", cascade="all, delete-orphan"
     )
+    nics = relationship("InventoryHostNic", back_populates="host", cascade="all, delete-orphan")
+
+
+class InventoryHostNic(Base):
+    """Physical uplink (pnic) on an ESXi host + its LLDP/CDP switch neighbor (one row per protocol)."""
+
+    __tablename__ = "inventory_host_nics"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    host_id = Column(GUID(), ForeignKey("inventory_hosts.id", ondelete="CASCADE"), nullable=False, index=True)
+    device = Column(String, nullable=False)  # vmnicN
+    mac = Column(String, nullable=True)
+    speed_mb = Column(Integer, nullable=True)
+    neighbor_protocol = Column(String, nullable=True)  # lldp | cdp | null (no neighbor)
+    remote_device = Column(String, nullable=True)
+    remote_port = Column(String, nullable=True)
+    remote_platform = Column(String, nullable=True)
+    remote_mgmt = Column(String, nullable=True)
+    attributes = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    host = relationship("InventoryHost", back_populates="nics")
 
 
 class InventoryVirtualMachine(Base):

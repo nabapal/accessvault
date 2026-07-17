@@ -1,6 +1,6 @@
 # SDD: ESXi Host Detail + LLDP/CDP uplink neighbors
 
-- **Status:** Approved — decisions resolved (§11); Phase 0 done; ready to implement
+- **Status:** Implemented — verified live on ESXi 10.64.46.21 (host facts + CDP neighbors, clickable detail)
 - **Owner:** naba
 - **Date:** 2026-07-15
 - **Module:** NetVerse AI → VM Inventory (Host Utilization → Host detail)
