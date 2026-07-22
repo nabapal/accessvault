@@ -189,6 +189,14 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   (BIG-IP 11.5.3, service-check 2025/04/01). tsc+build clean; DB apply clean.
 - **R2** resolved as a decision (§10-D2); no dedicated code phase beyond relabel.
 
+## 7b. Addendum — devices list page (post-Phase 5)
+The `/cgnat/devices` table gained two columns: **Software** (`os_version`, which
+now includes build) and **License** (product + bandwidth + expiry). Expiry is
+colour-coded best-effort (parses A10 `01-July-2026` + F5 `2025/04/01`): red if
+past, amber within 30 days; F5's service-check date is labelled "chk" and left
+plain (not a true expiry), A10's bandwidth expiry is labelled "exp" + coloured.
+Frontend-only (data already in `CgnatDeviceRead`).
+
 ## 8. Rollout
 - Phases 2–5 add nullable columns + a migration (additive, non-destructive).
 - Each phase: own commit(s), tsc+build, live re-verify, deploy with the batch.

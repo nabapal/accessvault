@@ -23,6 +23,34 @@ const statusBadge: Record<string, string> = {
 };
 
 const fmt = (v?: number | null) => (v == null ? "--" : v.toLocaleString());
+
+// Best-effort parse of licence expiry strings: A10 "01-July-2026", F5 "2025/04/01".
+const MONTHS: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+};
+const parseExpiry = (s?: string | null): Date | null => {
+  if (!s) return null;
+  let m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})/);
+  if (m) {
+    const mo = MONTHS[m[2].slice(0, 3).toLowerCase()];
+    if (mo === undefined) return null;
+    return new Date(Number(m[3]), mo, Number(m[1]));
+  }
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : new Date(t);
+};
+// Colour a true expiry: red if past, amber within 30 days, else normal.
+const expiryTone = (s?: string | null): string => {
+  const d = parseExpiry(s);
+  if (!d) return "text-slate-300";
+  const now = Date.now();
+  if (d.getTime() < now) return "text-rose-300";
+  if (d.getTime() < now + 30 * 864e5) return "text-amber-300";
+  return "text-slate-300";
+};
+
 const fmtDate = (v?: string | null) => {
   if (!v) return "--";
   try {
@@ -92,6 +120,8 @@ export function CgnatDevicesPage() {
                   <th className="px-4 py-3 text-left">Location</th>
                   <th className="px-4 py-3 text-left">Mgmt IP</th>
                   <th className="px-4 py-3 text-left">Model</th>
+                  <th className="px-4 py-3 text-left">Software</th>
+                  <th className="px-4 py-3 text-left">License</th>
                   <th className="px-4 py-3 text-right">Sessions</th>
                   <th className="px-4 py-3 text-right">Translations</th>
                   <th className="px-4 py-3 text-right">Exhaustion</th>
@@ -101,10 +131,10 @@ export function CgnatDevicesPage() {
               </thead>
               <tbody className="divide-y divide-brand-800/60 text-slate-200">
                 {isLoading ? (
-                  <TableRowsSkeleton rows={6} cols={10} />
+                  <TableRowsSkeleton rows={6} cols={12} />
                 ) : devices.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-6">
+                    <td colSpan={12} className="px-4 py-6">
                       <EmptyState icon={ServerIcon} title="No CGNAT devices found" description="Register devices under Admin → CGNAT Devices." />
                     </td>
                   </tr>
@@ -120,6 +150,24 @@ export function CgnatDevicesPage() {
                       <td className="px-4 py-3 text-slate-100">{locationFromName(d.hostname || d.name)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-100">{d.mgmt_ip}</td>
                       <td className="px-4 py-3 text-slate-100">{d.model ?? "--"}</td>
+                      <td className="px-4 py-3 text-xs text-slate-100">{d.os_version ?? "--"}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {d.license_product || d.license_expiry || d.license_bandwidth_mbps != null ? (
+                          <div className="space-y-0.5">
+                            <div className="text-slate-100">{d.license_product ?? "--"}</div>
+                            {d.license_bandwidth_mbps != null && (
+                              <div className="text-slate-400">{d.license_bandwidth_mbps} Mbps</div>
+                            )}
+                            {d.license_expiry && (
+                              <div className={d.vendor === "f5" ? "text-slate-400" : expiryTone(d.license_expiry)}>
+                                {d.vendor === "f5" ? "chk " : "exp "}{d.license_expiry}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500">--</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-100">{fmt(d.active_sessions)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-100">{fmt(d.total_translations)}</td>
                       <td className={`px-4 py-3 text-right tabular-nums ${(d.exhaustion_events ?? 0) > 0 ? "text-amber-300" : "text-slate-400"}`}>{fmt(d.exhaustion_events)}</td>
