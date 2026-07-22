@@ -303,11 +303,14 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
     virtuals = (await get("/mgmt/tm/ltm/virtual")).get("items", [])
     net_routes = (await get("/mgmt/tm/net/route")).get("items", [])
 
+    _f5_ver = _clean(device.get("version"))
+    _f5_build = _clean(device.get("build"))
     facts = {
         "hostname": _clean(device.get("name")),
         "model": _clean(device.get("marketingName") or device.get("platformId")),
         "serial": _clean(device.get("chassisId")),
-        "os_version": _clean(device.get("version")),
+        # include build to match A10's "version, build N" format.
+        "os_version": f"{_f5_ver}, build {_f5_build}" if _f5_ver and _f5_build else _f5_ver,
         "uptime_text": None,
         "uptime_seconds": None,
     }
