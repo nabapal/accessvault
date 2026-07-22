@@ -21,7 +21,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 | 1 | License info | ✅ full — `/mgmt/tm/sys/license`: registrationKey, licensedOnDate, serviceCheckDate, licensedVersion, platformId, appliance/chassis serial, active-modules | ⚠️ partial — `/axapi/v3/glm`: token, enterprise host, uuid, allocate-bandwidth; `/version/oper`: serial, platform, sw-version. **No expiry/feature-entitlement object via aXAPI on vThunder** | Asymmetric — model a flexible license blob + normalized fields where present |
 | 2 | Translations & Exhaustion — needed? | ✅ meaningful — `lsn-pool/stats`: activeTranslations, translationRequests, pba.portBlockAllocationFailures, pba.percentFreePortBlocks, clientsReachedLimit | ✅ meaningful — `cgnv6/lsn/global/stats`: total_tcp/udp/icmp_allocated, data_session_created, nat_port_unavailable_*, *_user_quota_exceeded, nat_pool_unusable | **Core CGNAT health signal — recommend KEEP + sharpen definitions (§10-D2)** |
 | 3 | IPv6 interface addresses | ✅ self-IPs already return IPv6 (`2405:…%rd/prefix`) | ✅ `interface/ve` has separate `ipv6.address-list[]` alongside `ip.address-list[]` | Model currently stores a single `ip_address`; must hold v4 + v6 |
-| 4a | Per-interface NAT inside/outside | ✅ derivable — **inside** = VLAN in a virtual-server's `vlans` list; **outside** = VLAN in an LSN pool's `egressInterfaces` list (verified live: `lsnpool_ibr_pub.egressInterfaces = [vl_ibr40g_cross_out, vl_ibr40g_out]`); else mgmt/logging | ✅ native — `ve.ip.inside/outside` and `ve.ipv6.inside/outside` (0/1) | §10-D3 resolved |
+| 4a | Per-interface NAT inside/outside | ✅ derivable — **inside** = VLAN in a virtual-server's `vlans` list; **outside** = VLAN in an LSN pool's `egressInterfaces` list (verified live: `lsnpool_ibr_pub.egressInterfaces = [vl_ibr40g_cross_out, vl_ibr40g_out]`); else other | ✅ native — `ve.ip.inside/outside` and `ve.ipv6.inside/outside` (0/1) | §10-D3 resolved |
 | 4b | Per-interface VLAN | ✅ self-IP already carries `vlan` | ✅ derive via `network/vlan.ve == interface ifnum` (VLAN endpoint currently fetched but unused) | |
 | 5 | Enable/Disable + colour | ✅ interface `enabled/disabled` | ✅ `action: enable/disable` | Mostly frontend; collector must set a real admin_state (F5 self-IP currently mis-maps `floating`) |
 | 6 | Sortable static-route columns | ✅ frontend-only | ✅ frontend-only | No device/backend dependency |
@@ -98,7 +98,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   - F5 — derive per interface's VLAN (verified §10-D3):
     - **outside** if the VLAN is in any LSN pool's `egressInterfaces`;
     - else **inside** if the VLAN is in any virtual-server's `vlans` list;
-    - else **mgmt/logging**.
+    - else **other**.
     Precedence = outside > inside (a VLAN in both an `egressInterfaces` list and
     a VS `vlans` list is treated as outside; observed for `vl_ibr40g_cross_out`).
     Collector must fetch `ltm/virtual` (name, vlans) + `ltm/lsn-pool`
@@ -156,7 +156,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   — ✅ IMPLEMENTED. `cgnat_interfaces` gains `addresses` (JSON, v4+v6 CIDRs) +
   `nat_role`; A10 ve collects v4+v6 address-lists, native inside/outside, and
   `vlan.ve` join; F5 self-IPs get NAT role via VS `vlans` (inside) / LSN
-  `egressInterfaces` (outside), else mgmt/logging. UI: interface table shows all
+  `egressInterfaces` (outside), else other. UI: interface table shows all
   addresses (IPv6 highlighted) + NAT-role badge. Verified live on F5 + 2× A10
   (incl. dual-stack ve686/ve2421, inside ve650, outside ve2422). tsc+build clean.
 - **Phase 3 (tenancy):** R8 all partitions/RDs, R9 selector.
@@ -186,7 +186,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   (verified live on `10.64.41.9`): **outside** = VLAN in an LSN pool's
   `egressInterfaces` (e.g. `lsnpool_ibr_pub → [vl_ibr40g_cross_out,
   vl_ibr40g_out]`); **inside** = VLAN in a virtual-server's `vlans` list (e.g.
-  `vs_cgnat_rd_ibr_* → [vl_ibr40g_in, vl_ibr40g_cross_in]`); else mgmt/logging.
+  `vs_cgnat_rd_ibr_* → [vl_ibr40g_in, vl_ibr40g_cross_in]`); else other.
   Precedence outside > inside on the rare overlap. No naming heuristic needed.
   Matches the user-supplied rule exactly (initial miss: first probe didn't read
   the `egressInterfaces` field).

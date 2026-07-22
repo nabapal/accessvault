@@ -35,7 +35,7 @@ function StateBadge({ value }: { value?: string | null }) {
   return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>{value}</span>;
 }
 
-// NAT role badge (R4): inside = teal, outside = amber, mgmt/logging = slate.
+// NAT role badge (R4): inside = teal, outside = amber, other = indigo.
 function NatRoleBadge({ role }: { role?: string | null }) {
   if (!role) return <span className="text-slate-500">--</span>;
   const r = role.toLowerCase();
@@ -43,7 +43,7 @@ function NatRoleBadge({ role }: { role?: string | null }) {
     ? "border-teal-500/50 bg-teal-500/15 text-teal-200"
     : r === "outside"
       ? "border-amber-500/50 bg-amber-500/15 text-amber-200"
-      : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+      : "border-indigo-500/50 bg-indigo-500/15 text-indigo-200";
   return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>{role}</span>;
 }
 
@@ -221,7 +221,8 @@ export function CgnatDeviceDetailPage() {
                 <thead className="sticky top-0 bg-brand-900/90">
                   <tr>
                     <th className={th}>Interface</th>
-                    <th className={th}>IP Addresses</th>
+                    <th className={th}>IPv4</th>
+                    <th className={th}>IPv6</th>
                     <th className={th}>NAT Role</th>
                     <th className={th}>VLAN</th>
                     <th className={th}>Admin/Oper</th>
@@ -232,20 +233,23 @@ export function CgnatDeviceDetailPage() {
                 <tbody className="divide-y divide-brand-800/60">
                   {interfaces.map((i) => {
                     const addrs = i.addresses && i.addresses.length ? i.addresses : (i.ip_address ? [i.ip_address] : []);
+                    const v4 = addrs.filter((a) => !a.includes(":"));
+                    const v6 = addrs.filter((a) => a.includes(":"));
+                    const addrCell = (list: string[], colour: string) =>
+                      list.length === 0 ? (
+                        <span className="text-slate-500">--</span>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {list.map((a) => (
+                            <div key={a} className={colour}>{a}</div>
+                          ))}
+                        </div>
+                      );
                     return (
                     <tr key={i.id} className="hover:bg-brand-800/40">
                       <td className={cell}>{i.name}</td>
-                      <td className={`${cell} font-mono text-xs`}>
-                        {addrs.length === 0 ? (
-                          <span className="text-slate-500">--</span>
-                        ) : (
-                          <div className="space-y-0.5">
-                            {addrs.map((a) => (
-                              <div key={a} className={a.includes(":") ? "text-sky-300" : "text-primary-200"}>{a}</div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
+                      <td className={`${cell} font-mono text-xs`}>{addrCell(v4, "text-primary-200")}</td>
+                      <td className={`${cell} font-mono text-xs`}>{addrCell(v6, "text-sky-300")}</td>
                       <td className={cell}><NatRoleBadge role={i.nat_role} /></td>
                       <td className={cell}>{i.vlan ?? "--"}</td>
                       <td className={cell}>

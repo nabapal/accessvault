@@ -177,7 +177,7 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         first_v4 = _clean(v4_addrs[0].get("ipv4-address")) if v4_addrs else None
         inside = bool(ip_blk.get("inside")) or bool(ip6_blk.get("inside"))
         outside = bool(ip_blk.get("outside")) or bool(ip6_blk.get("outside"))
-        nat_role = "inside" if inside else ("outside" if outside else "mgmt/logging")
+        nat_role = "inside" if inside else ("outside" if outside else "other")
         ifaces.append(
             {
                 "name": f"ve{ve.get('ifnum')}",
@@ -314,7 +314,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
 
     # NAT role by VLAN (verified §D3): a VLAN is *inside* when a virtual server
     # listens on it (virtual.vlans), *outside* when it is an LSN pool egress
-    # interface (lsn-pool.egressInterfaces); else mgmt/logging. Outside wins on
+    # interface (lsn-pool.egressInterfaces); else "other". Outside wins on
     # the rare overlap.
     inside_vlans: set[str] = set()
     for v in virtuals:
@@ -336,7 +336,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
             return "outside"
         if vlan_short in inside_vlans:
             return "inside"
-        return "mgmt/logging"
+        return "other"
 
     ifaces: List[Dict[str, Any]] = []
     for i in interfaces:
