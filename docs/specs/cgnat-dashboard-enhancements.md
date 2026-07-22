@@ -49,11 +49,26 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 
 ## 4. Design (per requirement)
 ### R1 License
-- Collect: F5 `/mgmt/tm/sys/license`; A10 `/axapi/v3/glm` + `/version/oper`.
-- Model: add `CgnatDevice.license` JSON (raw per-vendor) + normalized columns
-  `license_type`, `license_registration`, `license_expiry` (nullable),
-  `license_modules` JSON. Populate what each vendor exposes; leave rest null.
-- UI: License card on Overview tab (and/or a KPI tile) showing available fields.
+- Collect:
+  - F5 — REST `/mgmt/tm/sys/license` (registrationKey, licensedOnDate,
+    serviceCheckDate, licensedVersion, platformId, serials, active-modules).
+  - A10 — **SSH `show license-info`** (D4). Validated live on `10.60.139.94`:
+    returns a header block (Host ID, Billing Serials, Product, Platform, Burst,
+    Product-description=notes, GLM Ping Interval) + an "Enabled Licenses" table
+    with columns `Name | Expiry Date (UTC) | Notes`. The **bandwidth allocation
+    row** is exactly what R1 wants, e.g.:
+    `1000 Mbps Bandwidth   01-July-2026   Bandwidth license - Grace period days remaining 10.`
+    Parse: bandwidth (Mbps), expiry date, notes; plus per-feature rows
+    (SLB/CGN/…) with their expiry/notes; header key-values.
+- Model: add `CgnatDevice.license` JSON (raw per-vendor parse) + normalized
+  columns `license_product`, `license_expiry` (nullable date),
+  `license_bandwidth_mbps` (nullable int), `license_notes`, `license_modules`
+  JSON. Populate what each vendor exposes; leave rest null.
+- Collector: A10 path needs SSH (Netmiko `device_type="a10"`) using the device's
+  stored credentials; keep REST for everything else. SSH is best-effort — if it
+  fails, license fields stay null and the sync still succeeds.
+- UI: License card on Overview tab showing product, bandwidth + expiry (amber
+  when near/!expiry), notes, and the per-feature module table.
 
 ### R2 Translations & Exhaustion — **keep + sharpen** (pending §10-D2)
 - Define **Translations** = active translations (gauge) + total allocated (counter).
@@ -148,15 +163,18 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   exposes a usable interface NAT role. Belongs to Phase 2 (interfaces); does
   not block Phase 1. Until confirmed, plan of record: A10 shows real role, F5
   shows "—".
-- **D4 — R1 A10 license fidelity:** ⏳ PENDING user choice. **Phase-0 finding
+- **D4 — R1 A10 license fidelity:** ✅ RESOLVED — **add SSH `show license`
+  fallback for A10** to capture notes + bandwidth allocation + expiry (CGNAT
+  becomes REST + SSH for A10). F5 stays REST. **Phase-0 finding
   (probed `10.60.139.94`, vThunder 6.0.4 GLM VNF):** license notes + bandwidth
   allocation expiry are **NOT exposed via aXAPI**. `/glm`, `/glm/oper`,
   `/license-manager`, `/license-manager/oper` all return **204 (empty)**;
   entitlement/flexpool/instance oper endpoints 404; `/system/bandwidth` gives
   only warning/critical thresholds (75/95), not allocated bandwidth or expiry.
   (Earlier device `10.88.19.37` did return `/glm` config: token/enterprise/
-  allocate-bandwidth=1000 — but still no expiry/notes.) So **notes + expiry
-  require SSH `show license` / GLM portal**, not REST. Options: (a) accept REST
-  can't provide it → A10 license shows only what `/glm` + `/version/oper` give,
-  expiry/notes = "—"; (b) add SSH `show license` fallback for A10 (new: CGNAT
-  is REST-only today).
+  allocate-bandwidth=1000 — but still no expiry/notes.) **SSH validated:**
+  `show license-info` on `10.60.139.94` returns the bandwidth allocation with
+  expiry + notes (`1000 Mbps Bandwidth | 01-July-2026 | Bandwidth license -
+  Grace period days remaining 10`) plus product-description and per-feature
+  license rows. `show license` alone only prints Host ID; `show glm` is not a
+  valid command. → **Decision: SSH `show license-info` for A10 (Phase 5).**
