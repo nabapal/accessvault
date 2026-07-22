@@ -85,6 +85,8 @@ class CgnatInterfaceRead(BaseModel):
     ip_address: Optional[str] = None
     addresses: List[str] = []
     nat_role: Optional[str] = None
+    partition: Optional[str] = None
+    route_domain: Optional[str] = None
     vlan: Optional[str] = None
     mtu: Optional[int] = None
     mac: Optional[str] = None
@@ -124,6 +126,7 @@ class CgnatStaticRouteRead(BaseModel):
     next_hop: Optional[str] = None
     distance: Optional[int] = None
     route_domain: Optional[str] = None
+    partition: Optional[str] = None
     family: Optional[str] = None
     description: Optional[str] = None
 

@@ -159,7 +159,16 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   `egressInterfaces` (outside), else other. UI: interface table shows all
   addresses (IPv6 highlighted) + NAT-role badge. Verified live on F5 + 2× A10
   (incl. dual-stack ve686/ve2421, inside ve650, outside ve2422). tsc+build clean.
-- **Phase 3 (tenancy):** R8 all partitions/RDs, R9 selector.
+- **Phase 3 (tenancy):** R8 all partitions/RDs, R9 selector. — ✅ IMPLEMENTED.
+  Model: `partition`+`route_domain` on interfaces, `partition` on routes; unique
+  constraints now include partition (A10 reuses ve numbers across L3V). A10
+  collector iterates shared + each active partition via
+  `active-partition/{name}`, tagging every interface/pool/route; F5 tags
+  route_domain (from `%rd`) + partition on all entities. UI: Device Detail gains
+  a Route-Domain/Partition selector (shown when >1 scope) filtering the Pools/
+  Interfaces/Routes tabs + counts. Verified live end-to-end on A10 10.60.139.94
+  (3 scopes: shared/IPDR-FTTX-WL/IPDR-5G-AF) and F5 10.64.41.9 (RDs
+  0/1/101/201/250/301/302/861). tsc+build clean; DB apply clean.
 - **Phase 4 (routes):** R7 next-hop → egress VLAN/interface.
 - **Phase 5 (license):** R1 license model + collect + UI.
 - **R2** resolved as a decision (§10-D2); no dedicated code phase beyond relabel.

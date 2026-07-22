@@ -90,7 +90,8 @@ class CgnatDevice(Base):
 
 class CgnatInterface(Base):
     __tablename__ = "cgnat_interfaces"
-    __table_args__ = (UniqueConstraint("device_id", "name", name="uq_cgnat_interface"),)
+    # partition included: A10 L3V partitions can reuse the same ve number.
+    __table_args__ = (UniqueConstraint("device_id", "name", "partition", name="uq_cgnat_interface"),)
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     device_id = Column(GUID(), ForeignKey("cgnat_devices.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -100,7 +101,9 @@ class CgnatInterface(Base):
     oper_state = Column(String, nullable=True)
     ip_address = Column(String, nullable=True)  # primary IPv4 (back-compat)
     addresses = Column(JSON, nullable=False, default=list)  # all addrs incl IPv6 (CIDR strings)
-    nat_role = Column(String, nullable=True)  # inside | outside | mgmt/logging
+    nat_role = Column(String, nullable=True)  # inside | outside | other
+    partition = Column(String, nullable=True)  # A10 L3V partition / F5 partition
+    route_domain = Column(String, nullable=True)  # F5 route-domain id
     vlan = Column(String, nullable=True)
     mtu = Column(Integer, nullable=True)
     mac = Column(String, nullable=True)
@@ -115,7 +118,7 @@ class CgnatNatPool(Base):
     """Unified NAT / LSN pool across A10 (cgnv6 nat pool) and F5 (ltm lsn-pool)."""
 
     __tablename__ = "cgnat_nat_pools"
-    __table_args__ = (UniqueConstraint("device_id", "pool_name", name="uq_cgnat_pool"),)
+    __table_args__ = (UniqueConstraint("device_id", "pool_name", "partition", name="uq_cgnat_pool"),)
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     device_id = Column(GUID(), ForeignKey("cgnat_devices.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -154,6 +157,7 @@ class CgnatStaticRoute(Base):
     next_hop = Column(String, nullable=True)
     distance = Column(Integer, nullable=True)
     route_domain = Column(String, nullable=True)
+    partition = Column(String, nullable=True)  # A10 L3V partition / F5 partition
     family = Column(String, nullable=True)  # ipv4 | ipv6
     description = Column(String, nullable=True)
     attributes = Column(JSON, nullable=False, default=dict)

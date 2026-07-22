@@ -67,6 +67,7 @@ export function CgnatDeviceDetailPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [isLoading, setIsLoading] = useState(true);
   const [routeSort, setRouteSort] = useState<{ key: RouteSortKey; dir: SortDir }>({ key: "destination", dir: "asc" });
+  const [scope, setScope] = useState<string>("all");
 
   useEffect(() => {
     if (!deviceId) return;
@@ -91,6 +92,24 @@ export function CgnatDeviceDetailPage() {
     return () => { cancelled = true; };
   }, [deviceId]);
 
+  // Tenancy scope (R8/R9): F5 = route-domain, A10 = partition.
+  const scopeField: "route_domain" | "partition" = device?.vendor === "f5" ? "route_domain" : "partition";
+  const scopeLabel = device?.vendor === "f5" ? "Route Domain" : "Partition";
+  const scopeValues = useMemo(() => {
+    const set = new Set<string>();
+    [...interfaces, ...pools, ...routes].forEach((row) => {
+      const v = (row as unknown as Record<string, unknown>)[scopeField];
+      if (v != null && v !== "") set.add(String(v));
+    });
+    return Array.from(set).sort((a, b) => compareValues(a, b));
+  }, [interfaces, pools, routes, scopeField]);
+
+  const inScope = (row: CgnatInterface | CgnatNatPool | CgnatStaticRoute): boolean =>
+    scope === "all" || String((row as unknown as Record<string, unknown>)[scopeField] ?? "") === scope;
+  const filteredInterfaces = useMemo(() => interfaces.filter(inScope), [interfaces, scope, scopeField]);
+  const filteredPools = useMemo(() => pools.filter(inScope), [pools, scope, scopeField]);
+  const filteredRoutes = useMemo(() => routes.filter(inScope), [routes, scope, scopeField]);
+
   const sortedRoutes = useMemo(() => {
     const getter: Record<RouteSortKey, (r: CgnatStaticRoute) => unknown> = {
       destination: (r) => r.destination,
@@ -102,8 +121,8 @@ export function CgnatDeviceDetailPage() {
     };
     const get = getter[routeSort.key];
     const dir = routeSort.dir === "asc" ? 1 : -1;
-    return [...routes].sort((a, b) => dir * compareValues(get(a), get(b)));
-  }, [routes, routeSort]);
+    return [...filteredRoutes].sort((a, b) => dir * compareValues(get(a), get(b)));
+  }, [filteredRoutes, routeSort]);
 
   const toggleRouteSort = (key: RouteSortKey) =>
     setRouteSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
@@ -160,10 +179,27 @@ export function CgnatDeviceDetailPage() {
           {kpi("Exhaustion", num(device.exhaustion_events))}
         </section>
 
-        <div className="flex flex-wrap gap-1 border-b border-brand-800/70">
-          {([["overview", "Overview"], ["pools", `NAT Pools (${pools.length})`], ["interfaces", `Interfaces (${interfaces.length})`], ["routes", `Static Routes (${routes.length})`]] as [Tab, string][]).map(([id, label]) => (
-            <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-t-md px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${tab === id ? "border-b-2 border-primary-500 text-white" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>
-          ))}
+        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-brand-800/70">
+          <div className="flex flex-wrap gap-1">
+            {([["overview", "Overview"], ["pools", `NAT Pools (${filteredPools.length})`], ["interfaces", `Interfaces (${filteredInterfaces.length})`], ["routes", `Static Routes (${filteredRoutes.length})`]] as [Tab, string][]).map(([id, label]) => (
+              <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-t-md px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${tab === id ? "border-b-2 border-primary-500 text-white" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>
+            ))}
+          </div>
+          {scopeValues.length > 1 && (
+            <label className="mb-1 flex items-center gap-2 text-xs text-slate-400">
+              <span className="uppercase tracking-wide">{scopeLabel}</span>
+              <select
+                value={scope}
+                onChange={(e) => setScope(e.currentTarget.value)}
+                className="rounded border border-brand-700 bg-brand-900/80 px-2 py-1 text-xs text-slate-200 focus:border-primary-500 focus:outline-none"
+              >
+                <option value="all">All ({scopeValues.length})</option>
+                {scopeValues.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <section className="rounded-lg border border-brand-700 bg-brand-900/60">
@@ -195,7 +231,7 @@ export function CgnatDeviceDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-800/60">
-                  {pools.map((p) => (
+                  {filteredPools.map((p) => (
                     <tr key={p.id} className="hover:bg-brand-800/40">
                       <td className={cell}>
                         {p.pool_name}
@@ -231,7 +267,7 @@ export function CgnatDeviceDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-800/60">
-                  {interfaces.map((i) => {
+                  {filteredInterfaces.map((i) => {
                     const addrs = i.addresses && i.addresses.length ? i.addresses : (i.ip_address ? [i.ip_address] : []);
                     const v4 = addrs.filter((a) => !a.includes(":"));
                     const v6 = addrs.filter((a) => a.includes(":"));

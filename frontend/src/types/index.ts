@@ -924,6 +924,8 @@ export interface CgnatInterface {
   ip_address?: string | null;
   addresses?: string[];
   nat_role?: string | null;
+  partition?: string | null;
+  route_domain?: string | null;
   vlan?: string | null;
   mtu?: number | null;
   mac?: string | null;
@@ -1000,6 +1002,7 @@ export interface CgnatStaticRoute {
   next_hop?: string | null;
   distance?: number | null;
   route_domain?: string | null;
+  partition?: string | null;
   family?: string | null;
   description?: string | null;
 }

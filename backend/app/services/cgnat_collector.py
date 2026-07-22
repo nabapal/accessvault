@@ -82,6 +82,13 @@ def _short_vlan(value: Any) -> str | None:
     return value.rstrip("/").split("/")[-1] or None
 
 
+def _rd_from(value: Any) -> str | None:
+    """Extract the F5 route-domain id from an address like '10.0.0.1%302/29' -> '302'."""
+    if isinstance(value, str) and "%" in value:
+        return value.split("%", 1)[1].split("/")[0].strip() or None
+    return None
+
+
 # --------------------------------------------------------------------------- A10
 
 async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[str, Any]:
@@ -101,30 +108,181 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
             logger.debug("A10 GET %s failed: %s", path, exc)
         return {}
 
+    async def switch(scope: str) -> None:
+        try:
+            await client.post(f"/axapi/v3/active-partition/{scope}")
+        except httpx.HTTPError:
+            pass
+
+    def build_ves(ve_list: List[Dict[str, Any]], vlans_raw: List[Dict[str, Any]], scope: str) -> List[Dict[str, Any]]:
+        # VLAN <-> ve (SVI) mapping: network/vlan carries `ve` = the ve ifnum it backs.
+        ve_to_vlan: Dict[Any, str] = {}
+        for vl in vlans_raw:
+            ve_num = vl.get("ve")
+            if ve_num is not None:
+                ve_to_vlan[ve_num] = _clean(vl.get("vlan-num")) or _clean(vl.get("name"))
+        out: List[Dict[str, Any]] = []
+        for ve in ve_list:
+            ip_blk = ve.get("ip") or {}
+            ip6_blk = ve.get("ipv6") or {}
+            v4_addrs = ip_blk.get("address-list") or []
+            v6_addrs = ip6_blk.get("address-list") or []
+            addresses: List[str] = []
+            for a in v4_addrs:
+                cidr = _v4_cidr(a.get("ipv4-address"), a.get("ipv4-netmask"))
+                if cidr:
+                    addresses.append(cidr)
+            for a in v6_addrs:
+                v6 = _clean(a.get("ipv6-addr"))
+                if v6:
+                    addresses.append(v6)
+            first_v4 = _clean(v4_addrs[0].get("ipv4-address")) if v4_addrs else None
+            inside = bool(ip_blk.get("inside")) or bool(ip6_blk.get("inside"))
+            outside = bool(ip_blk.get("outside")) or bool(ip6_blk.get("outside"))
+            nat_role = "inside" if inside else ("outside" if outside else "other")
+            out.append(
+                {
+                    "name": f"ve{ve.get('ifnum')}",
+                    "description": _clean(ve.get("name")),
+                    "admin_state": _clean(ve.get("action")),
+                    "oper_state": None,
+                    "ip_address": first_v4,
+                    "addresses": addresses,
+                    "nat_role": nat_role,
+                    "partition": scope,
+                    "route_domain": None,
+                    "vlan": ve_to_vlan.get(ve.get("ifnum")),
+                    "mtu": _int(ve.get("mtu")),
+                    "mac": None,
+                    "attributes": {"kind": "ve"},
+                }
+            )
+        return out
+
+    def build_pools(pools: List[Dict[str, Any]], groups: List[Dict[str, Any]], scope: str) -> List[Dict[str, Any]]:
+        pool_group: Dict[str, str] = {}
+        for g in groups:
+            gname = g.get("pool-group-name")
+            for m in g.get("member-list", []) or []:
+                if m.get("pool-name"):
+                    pool_group[m["pool-name"]] = gname
+        out: List[Dict[str, Any]] = []
+        for p in pools:
+            name = p.get("pool-name")
+            if not name:
+                continue
+            out.append(
+                {
+                    "pool_name": name,
+                    "kind": "nat",
+                    "mode": None,
+                    "partition": scope,
+                    "route_domain": None,
+                    "start_address": _clean(p.get("start-address")),
+                    "end_address": _clean(p.get("end-address")),
+                    "prefix": _clean(p.get("netmask")),
+                    "port_block_size": _int(p.get("port-batch-v2-size")),
+                    "log_profile": None,
+                    "pool_group": pool_group.get(name),
+                    "active_translations": None,
+                    "translation_requests": None,
+                    "translation_failures": None,
+                    "port_util_pct": None,
+                    "attributes": {k: v for k, v in p.items() if k not in ("uuid", "a10-url")},
+                }
+            )
+        return out
+
+    def build_routes(routes_v4: List[Dict[str, Any]], routes_v6: List[Dict[str, Any]], scope: str) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for r in routes_v4:
+            dest = f"{r.get('ip-dest-addr')}{r.get('ip-mask') or ''}"
+            for nh in (r.get("ip-nexthop-ipv4") or [{}]):
+                out.append(
+                    {
+                        "name": None,
+                        "destination": dest,
+                        "next_hop": _clean(nh.get("ip-next-hop")),
+                        "distance": _int(nh.get("distance-nexthop-ip")),
+                        "route_domain": None,
+                        "partition": scope,
+                        "family": "ipv4",
+                        "description": _clean(nh.get("description-nexthop-ip")),
+                        "attributes": {},
+                    }
+                )
+        for r in routes_v6:
+            dest = _clean(r.get("ipv6-address"))
+            for nh in (r.get("ipv6-nexthop-ipv6") or [{}]):
+                out.append(
+                    {
+                        "name": None,
+                        "destination": dest,
+                        "next_hop": _clean(nh.get("ipv6-nexthop")),
+                        "distance": _int(nh.get("distance")),
+                        "route_domain": None,
+                        "partition": scope,
+                        "family": "ipv6",
+                        "description": _clean(nh.get("description")),
+                        "attributes": {},
+                    }
+                )
+        return out
+
+    ifaces: List[Dict[str, Any]] = []
+    pool_rows: List[Dict[str, Any]] = []
+    routes: List[Dict[str, Any]] = []
     try:
+        # Global / shared-context facts + device-wide CGNAT stats.
         version = (await get("/axapi/v3/version/oper")).get("version", {}).get("oper", {})
         hostname = (await get("/axapi/v3/hostname")).get("hostname", {}).get("value")
         interfaces_raw = (await get("/axapi/v3/interface")).get("interface", {})
-        ve_list = (await get("/axapi/v3/interface/ve")).get("ve-list", [])
-        vlans_raw = (await get("/axapi/v3/network/vlan")).get("vlan-list", [])
-        pools = (await get("/axapi/v3/cgnv6/nat/pool")).get("pool-list", [])
-        groups = (await get("/axapi/v3/cgnv6/nat/pool-group")).get("pool-group-list", [])
         stats = (await get("/axapi/v3/cgnv6/lsn/global/stats")).get("global", {}).get("stats", {})
-        routes_v4 = (await get("/axapi/v3/ip/route/rib")).get("rib-list", [])
-        routes_v6 = (await get("/axapi/v3/ipv6/route/rib")).get("rib-list", [])
+
+        # Enumerate L3V partitions; iterate shared + each active partition (R8).
+        part_list = (
+            (await get("/axapi/v3/partition-all/oper")).get("partition-all", {}).get("oper", {}).get("partition-list", [])
+        )
+        active_parts = [p.get("partition-name") for p in part_list if p.get("status") == "Active" and p.get("partition-name")]
+        scopes = ["shared"] + active_parts
+
+        # Physical (ethernet) interfaces are global -> tag as shared.
+        for eth in (interfaces_raw.get("ethernet-list") or []):
+            ifaces.append(
+                {
+                    "name": f"ethernet{eth.get('ifnum')}",
+                    "description": _clean(eth.get("name")),
+                    "admin_state": _clean(eth.get("action")),
+                    "oper_state": None,
+                    "ip_address": None,
+                    "addresses": [],
+                    "nat_role": None,
+                    "partition": "shared",
+                    "route_domain": None,
+                    "vlan": None,
+                    "mtu": _int(eth.get("mtu")),
+                    "mac": None,
+                    "attributes": {"kind": "ethernet"},
+                }
+            )
+
+        for scope in scopes:
+            await switch(scope)
+            ve_list = (await get("/axapi/v3/interface/ve")).get("ve-list", [])
+            vlans_raw = (await get("/axapi/v3/network/vlan")).get("vlan-list", [])
+            pools = (await get("/axapi/v3/cgnv6/nat/pool")).get("pool-list", [])
+            groups = (await get("/axapi/v3/cgnv6/nat/pool-group")).get("pool-group-list", [])
+            routes_v4 = (await get("/axapi/v3/ip/route/rib")).get("rib-list", [])
+            routes_v6 = (await get("/axapi/v3/ipv6/route/rib")).get("rib-list", [])
+            ifaces.extend(build_ves(ve_list, vlans_raw, scope))
+            pool_rows.extend(build_pools(pools, groups, scope))
+            routes.extend(build_routes(routes_v4, routes_v6, scope))
     finally:
+        await switch("shared")
         try:
             await client.post("/axapi/v3/logoff")
         except httpx.HTTPError:
             pass
-
-    # pool -> group name
-    pool_group: Dict[str, str] = {}
-    for g in groups:
-        gname = g.get("pool-group-name")
-        for m in g.get("member-list", []) or []:
-            if m.get("pool-name"):
-                pool_group[m["pool-name"]] = gname
 
     facts = {
         "hostname": _clean(hostname),
@@ -134,91 +292,6 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         "uptime_text": _clean(version.get("up-time")),
         "uptime_seconds": _uptime_seconds(version.get("up-time")),
     }
-
-    # VLAN <-> ve (SVI) mapping: network/vlan carries `ve` = the ve ifnum it backs.
-    ve_to_vlan: Dict[Any, str] = {}
-    for vl in vlans_raw:
-        ve_num = vl.get("ve")
-        if ve_num is not None:
-            ve_to_vlan[ve_num] = _clean(vl.get("vlan-num")) or _clean(vl.get("name"))
-
-    ifaces: List[Dict[str, Any]] = []
-    for eth in (interfaces_raw.get("ethernet-list") or []):
-        ifaces.append(
-            {
-                "name": f"ethernet{eth.get('ifnum')}",
-                "description": _clean(eth.get("name")),
-                "admin_state": _clean(eth.get("action")),
-                "oper_state": None,
-                "ip_address": None,
-                "addresses": [],
-                "nat_role": None,
-                "vlan": None,
-                "mtu": _int(eth.get("mtu")),
-                "mac": None,
-                "attributes": {"kind": "ethernet"},
-            }
-        )
-    # L3 IP addresses live on 've' (SVI) interfaces; inside/outside is native.
-    for ve in ve_list:
-        ip_blk = ve.get("ip") or {}
-        ip6_blk = ve.get("ipv6") or {}
-        v4_addrs = ip_blk.get("address-list") or []
-        v6_addrs = ip6_blk.get("address-list") or []
-        addresses: List[str] = []
-        for a in v4_addrs:
-            cidr = _v4_cidr(a.get("ipv4-address"), a.get("ipv4-netmask"))
-            if cidr:
-                addresses.append(cidr)
-        for a in v6_addrs:
-            v6 = _clean(a.get("ipv6-addr"))
-            if v6:
-                addresses.append(v6)
-        first_v4 = _clean(v4_addrs[0].get("ipv4-address")) if v4_addrs else None
-        inside = bool(ip_blk.get("inside")) or bool(ip6_blk.get("inside"))
-        outside = bool(ip_blk.get("outside")) or bool(ip6_blk.get("outside"))
-        nat_role = "inside" if inside else ("outside" if outside else "other")
-        ifaces.append(
-            {
-                "name": f"ve{ve.get('ifnum')}",
-                "description": _clean(ve.get("name")),
-                "admin_state": _clean(ve.get("action")),
-                "oper_state": None,
-                "ip_address": first_v4,
-                "addresses": addresses,
-                "nat_role": nat_role,
-                "vlan": ve_to_vlan.get(ve.get("ifnum")),
-                "mtu": _int(ve.get("mtu")),
-                "mac": None,
-                "attributes": {"kind": "ve"},
-            }
-        )
-
-    pool_rows: List[Dict[str, Any]] = []
-    for p in pools:
-        name = p.get("pool-name")
-        if not name:
-            continue
-        pool_rows.append(
-            {
-                "pool_name": name,
-                "kind": "nat",
-                "mode": None,
-                "partition": None,
-                "route_domain": None,
-                "start_address": _clean(p.get("start-address")),
-                "end_address": _clean(p.get("end-address")),
-                "prefix": _clean(p.get("netmask")),
-                "port_block_size": _int(p.get("port-batch-v2-size")),
-                "log_profile": None,
-                "pool_group": pool_group.get(name),
-                "active_translations": None,
-                "translation_requests": None,
-                "translation_failures": None,
-                "port_util_pct": None,
-                "attributes": {k: v for k, v in p.items() if k not in ("uuid", "a10-url")},
-            }
-        )
 
     def s(key: str) -> int:
         return _int(stats.get(key)) or 0
@@ -235,38 +308,6 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         ),
         "virtual_server_count": None,
     }
-
-    routes: List[Dict[str, Any]] = []
-    for r in routes_v4:
-        dest = f"{r.get('ip-dest-addr')}{r.get('ip-mask') or ''}"
-        for nh in (r.get("ip-nexthop-ipv4") or [{}]):
-            routes.append(
-                {
-                    "name": None,
-                    "destination": dest,
-                    "next_hop": _clean(nh.get("ip-next-hop")),
-                    "distance": _int(nh.get("distance-nexthop-ip")),
-                    "route_domain": None,
-                    "family": "ipv4",
-                    "description": _clean(nh.get("description-nexthop-ip")),
-                    "attributes": {},
-                }
-            )
-    for r in routes_v6:
-        dest = _clean(r.get("ipv6-address"))
-        for nh in (r.get("ipv6-nexthop-ipv6") or [{}]):
-            routes.append(
-                {
-                    "name": None,
-                    "destination": dest,
-                    "next_hop": _clean(nh.get("ipv6-nexthop")),
-                    "distance": _int(nh.get("distance")),
-                    "route_domain": None,
-                    "family": "ipv6",
-                    "description": _clean(nh.get("description")),
-                    "attributes": {},
-                }
-            )
 
     return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": stats}
 
@@ -352,6 +393,8 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
                 "ip_address": None,
                 "addresses": [],
                 "nat_role": None,
+                "partition": _clean(i.get("partition")),
+                "route_domain": None,
                 "vlan": None,
                 "mtu": _int(i.get("mtu")),
                 "mac": _clean(i.get("macAddress")),
@@ -372,6 +415,8 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
                 "ip_address": addr,
                 "addresses": [addr] if addr else [],
                 "nat_role": _f5_role(vlan),
+                "partition": _clean(sf.get("partition")),
+                "route_domain": _rd_from(addr),
                 "vlan": vlan,
                 "mtu": None,
                 "mac": None,
@@ -414,13 +459,14 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
         dev_trans += requests or 0
         dev_fail += fails
         pba = p.get("portBlockAllocation") or {}
+        members = p.get("members", []) or []
         pool_rows.append(
             {
                 "pool_name": p.get("name"),
                 "kind": "lsn",
                 "mode": _clean(p.get("mode")),
                 "partition": _clean(p.get("partition")),
-                "route_domain": None,
+                "route_domain": _rd_from(members[0]) if members else None,
                 "start_address": None,
                 "end_address": None,
                 "prefix": ", ".join(p.get("members", []) or []) or None,
@@ -457,6 +503,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
                 "next_hop": _clean(r.get("gw") or r.get("tmInterface")),
                 "distance": None,
                 "route_domain": rd,
+                "partition": _clean(r.get("partition")),
                 "family": "ipv6" if (net and ":" in net) else "ipv4",
                 "description": _clean(r.get("description")),
                 "attributes": {"tmInterface": r.get("tmInterface"), "partition": r.get("partition")},
