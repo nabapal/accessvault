@@ -21,7 +21,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 | 1 | License info | ✅ full — `/mgmt/tm/sys/license`: registrationKey, licensedOnDate, serviceCheckDate, licensedVersion, platformId, appliance/chassis serial, active-modules | ⚠️ partial — `/axapi/v3/glm`: token, enterprise host, uuid, allocate-bandwidth; `/version/oper`: serial, platform, sw-version. **No expiry/feature-entitlement object via aXAPI on vThunder** | Asymmetric — model a flexible license blob + normalized fields where present |
 | 2 | Translations & Exhaustion — needed? | ✅ meaningful — `lsn-pool/stats`: activeTranslations, translationRequests, pba.portBlockAllocationFailures, pba.percentFreePortBlocks, clientsReachedLimit | ✅ meaningful — `cgnv6/lsn/global/stats`: total_tcp/udp/icmp_allocated, data_session_created, nat_port_unavailable_*, *_user_quota_exceeded, nat_pool_unusable | **Core CGNAT health signal — recommend KEEP + sharpen definitions (§10-D2)** |
 | 3 | IPv6 interface addresses | ✅ self-IPs already return IPv6 (`2405:…%rd/prefix`) | ✅ `interface/ve` has separate `ipv6.address-list[]` alongside `ip.address-list[]` | Model currently stores a single `ip_address`; must hold v4 + v6 |
-| 4a | Per-interface NAT inside/outside | ❌ no native interface attribute (F5 CGNAT is virtual-server/LSN based; IN/OUT only appears in self-IP *names*) | ✅ native — `ve.ip.inside/outside` and `ve.ipv6.inside/outside` (0/1) | **Gap on F5 — decision §10-D3** |
+| 4a | Per-interface NAT inside/outside | ✅ derivable — **inside** = VLAN in a virtual-server's `vlans` list; **outside** = VLAN in an LSN pool's `egressInterfaces` list (verified live: `lsnpool_ibr_pub.egressInterfaces = [vl_ibr40g_cross_out, vl_ibr40g_out]`); else mgmt/logging | ✅ native — `ve.ip.inside/outside` and `ve.ipv6.inside/outside` (0/1) | §10-D3 resolved |
 | 4b | Per-interface VLAN | ✅ self-IP already carries `vlan` | ✅ derive via `network/vlan.ve == interface ifnum` (VLAN endpoint currently fetched but unused) | |
 | 5 | Enable/Disable + colour | ✅ interface `enabled/disabled` | ✅ `action: enable/disable` | Mostly frontend; collector must set a real admin_state (F5 self-IP currently mis-maps `floating`) |
 | 6 | Sortable static-route columns | ✅ frontend-only | ✅ frontend-only | No device/backend dependency |
@@ -33,6 +33,9 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 - F5 self-IP: `{name: self_a10_302_IN_v6, address: 2405:200:1410:2da::273%302/125, vlan: /Common/vl_A10_IN_XLAT_302, partition: Common}` — IPv6 + RD(302) + vlan all present.
 - F5 route: `{name: A10_UE_Pool_FTTX, network: 10.64.8.32%302/27, gw: 10.64.190.249%302, partition: Common}` — next-hop `gw` + RD.
 - F5 route-domains: 8, each with a `vlans[]` list → RD↔VLAN map.
+- F5 NAT role: VS `vs_cgnat_rd_ibr_tcp.vlans=[vl_ibr40g_cross_in, vl_ibr40g_in]`
+  (inside) + `lsnpool_ibr_pub.egressInterfaces=[vl_ibr40g_cross_out,
+  vl_ibr40g_out]` (outside) — both fields present in `ltm/virtual` + `ltm/lsn-pool`.
 - A10 ve: `{ifnum: 650, name: A10_1_ACI_5G_DPI_IPV4_IN, action: enable, ip:{address-list:[{ipv4-address:10.60.146.210, ipv4-netmask:255.255.255.248}], inside:1, outside:0}}` — inside/outside native.
 - A10 ve651: `ipv6.address-list:[{ipv6-addr: 2405:200:1410:2d0::3ca/125}], inside:1`.
 - A10 vlan: `{vlan-num:650, ve:650, name:…, tagged-trunk-list:[…]}` → VLAN↔ve join.
@@ -89,7 +92,17 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 - UI: interface table shows all addresses (v4 + v6).
 
 ### R4 NAT inside/outside + VLAN per interface
-- `nat_role`: A10 from `inside/outside` → "inside"/"outside"/null. F5 per §10-D3.
+- `nat_role`:
+  - A10 — from `ve.ip.inside/outside` (and `ipv6.inside/outside`) → "inside"/
+    "outside"/null.
+  - F5 — derive per interface's VLAN (verified §10-D3):
+    - **outside** if the VLAN is in any LSN pool's `egressInterfaces`;
+    - else **inside** if the VLAN is in any virtual-server's `vlans` list;
+    - else **mgmt/logging**.
+    Precedence = outside > inside (a VLAN in both an `egressInterfaces` list and
+    a VS `vlans` list is treated as outside; observed for `vl_ibr40g_cross_out`).
+    Collector must fetch `ltm/virtual` (name, vlans) + `ltm/lsn-pool`
+    (egressInterfaces) and build VLAN→role maps.
 - `vlan`: A10 join `network/vlan.ve == ifnum`; F5 already from self-IP.
 - UI: two columns (NAT role, VLAN); NAT role badge.
 
@@ -163,10 +176,14 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 - **D2 — R2 Translations/Exhaustion:** ✅ RESOLVED — **keep + sharpen labels**
   (Translations = active + total allocated; Exhaustion = port-unavailable +
   quota-exceeded). No data removal.
-- **D3 — F5 NAT inside/outside:** ⏳ PENDING — user will verify whether F5
-  exposes a usable interface NAT role. Belongs to Phase 2 (interfaces); does
-  not block Phase 1. Until confirmed, plan of record: A10 shows real role, F5
-  shows "—".
+- **D3 — F5 NAT inside/outside:** ✅ RESOLVED — F5 role IS API-derivable
+  (verified live on `10.64.41.9`): **outside** = VLAN in an LSN pool's
+  `egressInterfaces` (e.g. `lsnpool_ibr_pub → [vl_ibr40g_cross_out,
+  vl_ibr40g_out]`); **inside** = VLAN in a virtual-server's `vlans` list (e.g.
+  `vs_cgnat_rd_ibr_* → [vl_ibr40g_in, vl_ibr40g_cross_in]`); else mgmt/logging.
+  Precedence outside > inside on the rare overlap. No naming heuristic needed.
+  Matches the user-supplied rule exactly (initial miss: first probe didn't read
+  the `egressInterfaces` field).
 - **D4 — R1 A10 license fidelity:** ✅ RESOLVED — **A10 aXAPI CLI-passthrough
   `POST /axapi/v3/clideploy {"commandlist":["show license-info"]}`** returns the
   license text over REST (validated live, HTTP 200). No SSH — CGNAT stays
