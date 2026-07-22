@@ -1,7 +1,7 @@
 # CGNAT Dashboard Enhancements
 
 - **Feature:** Nine CGNAT dashboard/device-detail enhancements across F5 BIG-IP and A10 Thunder.
-- **Status:** Approved for Phase 1 — Phase 0 validated live; decisions §10 (D1/D2 resolved, D3/D4 pending user verification, both in later phases)
+- **Status:** Implemented — all 5 phases shipped + verified live (F5 + A10); all §10 decisions resolved
 - **Module:** CGNAT Inventory
 - **Date:** 2026-07-17
 - **Probed live:** F5 `10.64.41.9` (BIG-IP 17.5.1), A10 `10.88.19.37` (vThunder 6.0.4)
@@ -176,7 +176,14 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   columns on the routes table. Verified live: F5 82/84 resolved (rd-scoped,
   e.g. nh 10.64.190.249%302 → self_a10_302_IN_v4 / vl_A10_IN_302), A10 18/25
   (unresolved = recursive/default next-hops). tsc+build clean.
-- **Phase 5 (license):** R1 license model + collect + UI.
+- **Phase 5 (license):** R1 license model + collect + UI. — ✅ IMPLEMENTED.
+  `cgnat_devices` gains license/license_product/license_expiry/
+  license_bandwidth_mbps/license_notes/license_modules. F5 parses REST
+  `/mgmt/tm/sys/license`; A10 parses `clideploy` `show license-info` (whitespace
+  column split). UI: License card on Overview (product, bandwidth, expiry,
+  notes + licensed-feature table). Verified live end-to-end: A10 10.60.139.94
+  (CFW, 1000 Mbps, exp 01-July-2026, 23 modules) and F5 10.64.41.9
+  (BIG-IP 11.5.3, service-check 2025/04/01). tsc+build clean; DB apply clean.
 - **R2** resolved as a decision (§10-D2); no dedicated code phase beyond relabel.
 
 ## 8. Rollout

@@ -68,6 +68,11 @@ class CgnatDeviceRead(BaseModel):
     port_util_pct: Optional[float] = None
     exhaustion_events: Optional[int] = None
     virtual_server_count: Optional[int] = None
+    license_product: Optional[str] = None
+    license_expiry: Optional[str] = None
+    license_bandwidth_mbps: Optional[int] = None
+    license_notes: Optional[str] = None
+    license_modules: Optional[List[Dict[str, Any]]] = None
     created_at: datetime
     updated_at: datetime
 

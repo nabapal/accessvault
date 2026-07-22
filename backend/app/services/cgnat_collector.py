@@ -136,6 +136,74 @@ def _resolve_route_egress(routes: List[Dict[str, Any]], ifaces: List[Dict[str, A
             r["egress_vlan"] = best[2]
 
 
+def _parse_f5_license(lic: Dict[str, Any]) -> Dict[str, Any]:
+    """Parse F5 /mgmt/tm/sys/license into a normalized license dict."""
+    out: Dict[str, Any] = {"raw": lic, "product": None, "expiry": None, "bandwidth_mbps": None, "notes": None, "modules": []}
+    for _url, e in ((lic or {}).get("entries", {}) or {}).items():
+        ns = (e.get("nestedStats", {}) or {}).get("entries", {}) or {}
+
+        def d(key: str) -> Any:
+            return (ns.get(key, {}) or {}).get("description")
+
+        ver = d("licensedVersion")
+        out["product"] = f"BIG-IP {ver}" if ver else "BIG-IP"
+        out["expiry"] = _clean(d("serviceCheckDate"))
+        parts = [p for p in (
+            f"Reg {d('registrationKey')}" if d("registrationKey") else None,
+            f"licensed {d('licensedOnDate')}" if d("licensedOnDate") else None,
+            _clean(d("platformId")),
+        ) if p]
+        out["notes"] = " · ".join(parts) or None
+        for key, v in ns.items():
+            if key.endswith("active-modules"):
+                for _mk, mv in ((v.get("nestedStats", {}) or {}).get("entries", {}) or {}).items():
+                    desc = (((mv.get("nestedStats", {}) or {}).get("entries", {}) or {}).get("description", {}) or {}).get("description")
+                    if desc:
+                        out["modules"].append({"name": desc, "expiry": None, "notes": None})
+        break
+    return out
+
+
+def _parse_a10_license(text: str) -> Dict[str, Any]:
+    """Parse A10 'show license-info' text into a normalized license dict."""
+    out: Dict[str, Any] = {"raw": text, "product": None, "expiry": None, "bandwidth_mbps": None, "notes": None, "modules": []}
+    if not text:
+        return out
+    lines = text.splitlines()
+    header: Dict[str, str] = {}
+    table_idx: Optional[int] = None
+    for idx, line in enumerate(lines):
+        if "Expiry Date" in line and "Notes" in line:
+            table_idx = idx
+            break
+        if ":" in line and "#" not in line.split(":", 1)[0]:
+            k, _, v = line.partition(":")
+            header[k.strip()] = v.strip()
+    out["product"] = header.get("Product")
+    out["notes"] = header.get("Product-description")
+    if table_idx is not None:
+        # Columns are separated by runs of 2+ spaces; names/notes use single spaces.
+        for line in lines[table_idx + 1:]:
+            if not line.strip() or set(line.strip()) <= {"-"}:
+                continue
+            parts = re.split(r"\s{2,}", line.strip())
+            name = parts[0]
+            expiry = parts[1] if len(parts) > 1 else ""
+            notes = " ".join(parts[2:]) if len(parts) > 2 else ""
+            if not name:
+                continue
+            out["modules"].append({"name": name, "expiry": expiry or None, "notes": notes or None})
+            if "bandwidth" in name.lower():
+                m = re.search(r"(\d+)\s*Mbps", name, re.IGNORECASE)
+                if m:
+                    out["bandwidth_mbps"] = int(m.group(1))
+                if expiry and expiry.lower() != "none":
+                    out["expiry"] = expiry
+                if notes:
+                    out["notes"] = f"{out['notes']} · {notes}" if out["notes"] else notes
+    return out
+
+
 # --------------------------------------------------------------------------- A10
 
 async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[str, Any]:
@@ -279,12 +347,21 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
     ifaces: List[Dict[str, Any]] = []
     pool_rows: List[Dict[str, Any]] = []
     routes: List[Dict[str, Any]] = []
+    license_info: Dict[str, Any] = {}
     try:
         # Global / shared-context facts + device-wide CGNAT stats.
         version = (await get("/axapi/v3/version/oper")).get("version", {}).get("oper", {})
         hostname = (await get("/axapi/v3/hostname")).get("hostname", {}).get("value")
         interfaces_raw = (await get("/axapi/v3/interface")).get("interface", {})
         stats = (await get("/axapi/v3/cgnv6/lsn/global/stats")).get("global", {}).get("stats", {})
+
+        # License via aXAPI CLI-passthrough (D4): 'show license-info' -> text.
+        try:
+            lr = await client.post("/axapi/v3/clideploy", json={"commandlist": ["show license-info"]})
+            if lr.status_code == 200:
+                license_info = _parse_a10_license(lr.text)
+        except httpx.HTTPError as exc:
+            logger.debug("A10 clideploy show license-info failed: %s", exc)
 
         # Enumerate L3V partitions; iterate shared + each active partition (R8).
         part_list = (
@@ -357,7 +434,7 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
     }
 
     _resolve_route_egress(routes, ifaces, "partition")
-    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": stats}
+    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": stats, "license": license_info}
 
 
 # --------------------------------------------------------------------------- F5
@@ -385,6 +462,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
 
     device_items = (await get("/mgmt/tm/cm/device")).get("items", [])
     device = device_items[0] if device_items else {}
+    license_info = _parse_f5_license(await get("/mgmt/tm/sys/license"))
     interfaces = (await get("/mgmt/tm/net/interface")).get("items", [])
     self_ips = (await get("/mgmt/tm/net/self")).get("items", [])
     pools = (await get("/mgmt/tm/ltm/lsn-pool")).get("items", [])
@@ -559,7 +637,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
         )
 
     _resolve_route_egress(routes, ifaces, "route_domain")
-    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": {}}
+    return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": {}, "license": license_info}
 
 
 # --------------------------------------------------------------------------- shared
@@ -598,6 +676,13 @@ async def _apply(session: AsyncSession, device: CgnatDevice, snap: Dict[str, Any
     device.port_util_pct = m.get("port_util_pct")
     device.exhaustion_events = m.get("exhaustion_events")
     device.virtual_server_count = m.get("virtual_server_count")
+    lic = snap.get("license") or {}
+    device.license = lic or None
+    device.license_product = lic.get("product")
+    device.license_expiry = lic.get("expiry")
+    device.license_bandwidth_mbps = lic.get("bandwidth_mbps")
+    device.license_notes = lic.get("notes")
+    device.license_modules = lic.get("modules") or []
     device.raw_facts = {"stats": snap.get("raw_stats", {})}
 
     await session.execute(delete(CgnatInterface).where(CgnatInterface.device_id == device.id))

@@ -901,6 +901,11 @@ export interface CgnatDevice {
   port_util_pct?: number | null;
   exhaustion_events?: number | null;
   virtual_server_count?: number | null;
+  license_product?: string | null;
+  license_expiry?: string | null;
+  license_bandwidth_mbps?: number | null;
+  license_notes?: string | null;
+  license_modules?: { name: string; expiry?: string | null; notes?: string | null }[] | null;
   created_at: string;
   updated_at: string;
 }

@@ -79,6 +79,13 @@ class CgnatDevice(Base):
     port_util_pct = Column(Float, nullable=True)
     exhaustion_events = Column(Integer, nullable=True)
     virtual_server_count = Column(Integer, nullable=True)  # F5 context only
+    # License (R1): F5 REST /sys/license; A10 aXAPI clideploy 'show license-info'.
+    license = Column(JSON, nullable=True)  # full parsed structure incl. raw
+    license_product = Column(String, nullable=True)
+    license_expiry = Column(String, nullable=True)  # kept as text (vendor formats differ)
+    license_bandwidth_mbps = Column(Integer, nullable=True)  # A10 FlexPool allocation
+    license_notes = Column(String, nullable=True)
+    license_modules = Column(JSON, nullable=True)  # list of {name, expiry, notes}
     raw_facts = Column(JSON, nullable=False, default=dict)  # incl. raw stat blob
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

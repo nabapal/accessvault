@@ -206,15 +206,51 @@ export function CgnatDeviceDetailPage() {
 
         <section className="rounded-lg border border-brand-700 bg-brand-900/60">
           {tab === "overview" && (
-            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-              {kpi("Serial", device.serial ?? "--")}
-              {kpi("Uptime", device.uptime_text ?? "--")}
-              {kpi("Subscribers", num(device.active_subscribers))}
-              {kpi("Port Utilization", device.port_util_pct == null ? "--" : `${device.port_util_pct}%`)}
-              {kpi("NAT/LSN Pools", pools.length)}
-              {kpi("Interfaces", interfaces.length)}
-              {device.vendor === "f5" ? kpi("Virtual Servers", num(device.virtual_server_count)) : kpi("Role", device.role ?? "--")}
-              {kpi("Site / Rack", `${device.site_name ?? "--"} / ${device.rack_location ?? "--"}`)}
+            <div className="space-y-4 p-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {kpi("Serial", device.serial ?? "--")}
+                {kpi("Uptime", device.uptime_text ?? "--")}
+                {kpi("Subscribers", num(device.active_subscribers))}
+                {kpi("Port Utilization", device.port_util_pct == null ? "--" : `${device.port_util_pct}%`)}
+                {kpi("NAT/LSN Pools", pools.length)}
+                {kpi("Interfaces", interfaces.length)}
+                {device.vendor === "f5" ? kpi("Virtual Servers", num(device.virtual_server_count)) : kpi("Role", device.role ?? "--")}
+                {kpi("Site / Rack", `${device.site_name ?? "--"} / ${device.rack_location ?? "--"}`)}
+              </div>
+
+              <div className="rounded-lg border border-brand-700 bg-brand-900/40 p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-100">License</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {kpi("Product", device.license_product ?? "--")}
+                  {kpi("Bandwidth", device.license_bandwidth_mbps == null ? "--" : `${device.license_bandwidth_mbps} Mbps`)}
+                  {kpi("Expiry", device.license_expiry ?? "--")}
+                  {kpi("Notes", device.license_notes ?? "--")}
+                </div>
+                {device.license_modules && device.license_modules.filter((m) => (m.expiry && m.expiry !== "None") || m.notes).length > 0 && (
+                  <div className="mt-3 max-h-64 overflow-auto rounded border border-brand-800/70">
+                    <table className="min-w-full divide-y divide-brand-800/70 text-sm">
+                      <thead className="sticky top-0 bg-brand-900/90">
+                        <tr>
+                          <th className={th}>Licensed Feature</th>
+                          <th className={th}>Expiry</th>
+                          <th className={th}>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-brand-800/60">
+                        {device.license_modules
+                          .filter((m) => (m.expiry && m.expiry !== "None") || m.notes)
+                          .map((m) => (
+                            <tr key={m.name} className="hover:bg-brand-800/40">
+                              <td className={cell}>{m.name}</td>
+                              <td className={cell}>{m.expiry && m.expiry !== "None" ? m.expiry : "--"}</td>
+                              <td className={cell}>{m.notes ?? "--"}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
