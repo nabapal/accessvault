@@ -93,8 +93,11 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 
 ### R4 NAT inside/outside + VLAN per interface
 - `nat_role`:
-  - A10 — from `ve.ip.inside/outside` (and `ipv6.inside/outside`) → "inside"/
-    "outside"/null.
+  - A10 — CGN uses `ve.ip.inside/outside`; **CFW** uses `ve.ip.client`(=inside)/
+    `ve.ip.server`(=outside). Check both flag pairs (and the ipv6 block):
+    inside if any of inside/client, outside if any of outside/server, else
+    "other". Verified on CFW 10.60.139.94 (ve1505 client→inside, ve1506
+    server→outside, logging→other) and CGN 10.88.19.37 (inside/outside intact).
   - F5 — derive per interface's VLAN (verified §10-D3):
     - **outside** if the VLAN is in any LSN pool's `egressInterfaces`;
     - else **inside** if the VLAN is in any virtual-server's `vlans` list;

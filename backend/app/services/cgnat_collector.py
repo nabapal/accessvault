@@ -252,8 +252,9 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
                 if v6:
                     addresses.append(v6)
             first_v4 = _clean(v4_addrs[0].get("ipv4-address")) if v4_addrs else None
-            inside = bool(ip_blk.get("inside")) or bool(ip6_blk.get("inside"))
-            outside = bool(ip_blk.get("outside")) or bool(ip6_blk.get("outside"))
+            # CGN uses ip inside/outside; CFW uses ip client(=inside)/server(=outside).
+            inside = any(bool(b.get(k)) for b in (ip_blk, ip6_blk) for k in ("inside", "client"))
+            outside = any(bool(b.get(k)) for b in (ip_blk, ip6_blk) for k in ("outside", "server"))
             nat_role = "inside" if inside else ("outside" if outside else "other")
             out.append(
                 {
