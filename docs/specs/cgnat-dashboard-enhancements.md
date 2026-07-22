@@ -1,7 +1,7 @@
 # CGNAT Dashboard Enhancements
 
 - **Feature:** Nine CGNAT dashboard/device-detail enhancements across F5 BIG-IP and A10 Thunder.
-- **Status:** Draft — Phase 0 complete (both devices validated live); awaiting decisions (§10) + phase approval
+- **Status:** Approved for Phase 1 — Phase 0 validated live; decisions §10 (D1/D2 resolved, D3/D4 pending user verification, both in later phases)
 - **Module:** CGNAT Inventory
 - **Date:** 2026-07-17
 - **Probed live:** F5 `10.64.41.9` (BIG-IP 17.5.1), A10 `10.88.19.37` (vThunder 6.0.4)
@@ -119,7 +119,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 
 ## 7. Proposed phases
 - **Phase 1 (frontend-only, ship first):** R6 sortable routes, R5 colour-coded
-  status. No schema/device change.
+  status. No schema/device change. — ✅ IMPLEMENTED (tsc+build clean).
 - **Phase 2 (interfaces):** R3 IPv6, R4 NAT role + VLAN. Model+collector+UI.
 - **Phase 3 (tenancy):** R8 all partitions/RDs, R9 selector.
 - **Phase 4 (routes):** R7 next-hop → egress VLAN/interface.
@@ -138,13 +138,16 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   only Common exists.
 - License fields absent (A10 expiry/modules) → render "—", never error.
 
-## 10. Open decisions (need confirmation before finalizing)
-- **D1 — Phasing order:** proposed Phase 1→5 above (frontend quick wins first).
-- **D2 — R2 Translations/Exhaustion:** recommend **keep + sharpen labels**
-  (they are the core CGNAT health signal, populated on both). Alt: remove.
-- **D3 — F5 NAT inside/outside:** F5 has no native interface attribute. Options:
-  (a) A10 shows real role, F5 shows "—" (N/A); (b) infer F5 role from self-IP
-  name convention (`_IN_`/`_OUT_`) — best-effort, may be wrong.
-- **D4 — R1 A10 license fidelity:** aXAPI exposes only GLM enrollment (token,
-  enterprise, allocated bandwidth) + serial/platform/version on vThunder — no
-  expiry/feature list. Confirm showing "what's available" is acceptable.
+## 10. Decisions
+- **D1 — Phasing order:** ✅ RESOLVED — frontend quick-wins first
+  (Phase 1 = R6 + R5), then Phase 2→5 as in §7.
+- **D2 — R2 Translations/Exhaustion:** ✅ RESOLVED — **keep + sharpen labels**
+  (Translations = active + total allocated; Exhaustion = port-unavailable +
+  quota-exceeded). No data removal.
+- **D3 — F5 NAT inside/outside:** ⏳ PENDING — user will verify whether F5
+  exposes a usable interface NAT role. Belongs to Phase 2 (interfaces); does
+  not block Phase 1. Until confirmed, plan of record: A10 shows real role, F5
+  shows "—".
+- **D4 — R1 A10 license fidelity:** ⏳ PENDING — user will check whether richer
+  A10 license data is obtainable. Belongs to Phase 5 (license); does not block
+  Phase 1. Until confirmed, plan of record: show GLM + serial/platform/version.

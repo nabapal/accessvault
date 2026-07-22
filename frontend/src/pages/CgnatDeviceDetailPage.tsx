@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -17,6 +17,35 @@ type Tab = "overview" | "pools" | "interfaces" | "routes";
 const cell = "px-3 py-2 text-slate-100";
 const th = "px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-400";
 
+type SortDir = "asc" | "desc";
+type RouteSortKey = "destination" | "next_hop" | "family" | "route_domain" | "distance" | "name";
+
+// Colour-coded admin/oper status badge (R5). Green = enabled/up, red =
+// disabled/down, slate = unknown/other (e.g. F5 self-IP "floating").
+function StateBadge({ value }: { value?: string | null }) {
+  if (!value) return <span className="text-slate-500">--</span>;
+  const v = value.toLowerCase();
+  const up = ["enable", "enabled", "up", "true", "active"].some((s) => v.includes(s));
+  const down = ["disable", "disabled", "down", "false", "inactive"].some((s) => v.includes(s));
+  const tone = up
+    ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
+    : down
+      ? "border-rose-500/50 bg-rose-500/15 text-rose-200"
+      : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+  return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>{value}</span>;
+}
+
+// Generic comparator: nulls last; numeric when both numeric; else case-insensitive string.
+function compareValues(a: unknown, b: unknown): number {
+  const an = a == null || a === "";
+  const bn = b == null || b === "";
+  if (an && bn) return 0;
+  if (an) return 1;
+  if (bn) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
 export function CgnatDeviceDetailPage() {
   const { deviceId } = useParams<{ deviceId: string }>();
   const [device, setDevice] = useState<CgnatDevice | null>(null);
@@ -25,6 +54,7 @@ export function CgnatDeviceDetailPage() {
   const [routes, setRoutes] = useState<CgnatStaticRoute[]>([]);
   const [tab, setTab] = useState<Tab>("overview");
   const [isLoading, setIsLoading] = useState(true);
+  const [routeSort, setRouteSort] = useState<{ key: RouteSortKey; dir: SortDir }>({ key: "destination", dir: "asc" });
 
   useEffect(() => {
     if (!deviceId) return;
@@ -49,6 +79,23 @@ export function CgnatDeviceDetailPage() {
     return () => { cancelled = true; };
   }, [deviceId]);
 
+  const sortedRoutes = useMemo(() => {
+    const getter: Record<RouteSortKey, (r: CgnatStaticRoute) => unknown> = {
+      destination: (r) => r.destination,
+      next_hop: (r) => r.next_hop,
+      family: (r) => r.family,
+      route_domain: (r) => r.route_domain,
+      distance: (r) => r.distance,
+      name: (r) => r.name || r.description
+    };
+    const get = getter[routeSort.key];
+    const dir = routeSort.dir === "asc" ? 1 : -1;
+    return [...routes].sort((a, b) => dir * compareValues(get(a), get(b)));
+  }, [routes, routeSort]);
+
+  const toggleRouteSort = (key: RouteSortKey) =>
+    setRouteSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+
   if (isLoading) {
     return <AppShell><div className="space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-24 w-full" /><Skeleton className="h-64 w-full" /></div></AppShell>;
   }
@@ -63,6 +110,25 @@ export function CgnatDeviceDetailPage() {
     </div>
   );
   const num = (v?: number | null) => (v == null ? "--" : v.toLocaleString());
+
+  // Clickable sortable header for the static-route table (R6).
+  const SortTh = ({ label, sortKey }: { label: string; sortKey: RouteSortKey }) => {
+    const active = routeSort.key === sortKey;
+    return (
+      <th className={th}>
+        <button
+          type="button"
+          onClick={() => toggleRouteSort(sortKey)}
+          className={`flex items-center gap-1 uppercase tracking-wide transition hover:text-slate-200 ${active ? "text-slate-100" : ""}`}
+        >
+          {label}
+          <span className={`text-[9px] ${active ? "text-primary-300" : "text-slate-600"}`}>
+            {active ? (routeSort.dir === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </button>
+      </th>
+    );
+  };
 
   return (
     <AppShell>
@@ -156,7 +222,12 @@ export function CgnatDeviceDetailPage() {
                       <td className={cell}>{i.name}</td>
                       <td className={`${cell} font-mono text-xs ${i.ip_address ? "text-primary-200" : "text-slate-500"}`}>{i.ip_address ?? "--"}</td>
                       <td className={cell}>{i.vlan ?? "--"}</td>
-                      <td className={cell}>{i.admin_state ?? "--"}/{i.oper_state ?? "--"}</td>
+                      <td className={cell}>
+                        <span className="flex flex-wrap items-center gap-1">
+                          <StateBadge value={i.admin_state} />
+                          <StateBadge value={i.oper_state} />
+                        </span>
+                      </td>
                       <td className={cell}>{i.description ?? "--"}</td>
                       <td className={cell}>{i.mtu ?? "--"}</td>
                     </tr>
@@ -171,16 +242,16 @@ export function CgnatDeviceDetailPage() {
               <table className="min-w-full divide-y divide-brand-800/70 text-sm">
                 <thead className="sticky top-0 bg-brand-900/90">
                   <tr>
-                    <th className={th}>Destination</th>
-                    <th className={th}>Next Hop</th>
-                    <th className={th}>Family</th>
-                    <th className={th}>RD</th>
-                    <th className={th}>Distance</th>
-                    <th className={th}>Name / Description</th>
+                    <SortTh label="Destination" sortKey="destination" />
+                    <SortTh label="Next Hop" sortKey="next_hop" />
+                    <SortTh label="Family" sortKey="family" />
+                    <SortTh label="RD" sortKey="route_domain" />
+                    <SortTh label="Distance" sortKey="distance" />
+                    <SortTh label="Name / Description" sortKey="name" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-800/60">
-                  {routes.map((r) => (
+                  {sortedRoutes.map((r) => (
                     <tr key={r.id} className="hover:bg-brand-800/40">
                       <td className={`${cell} font-mono text-xs`}>{r.destination ?? "--"}</td>
                       <td className={`${cell} font-mono text-xs`}>{r.next_hop ?? "--"}</td>
