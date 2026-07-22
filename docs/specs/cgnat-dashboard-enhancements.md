@@ -26,7 +26,7 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 | 5 | Enable/Disable + colour | ✅ interface `enabled/disabled` | ✅ `action: enable/disable` | Mostly frontend; collector must set a real admin_state (F5 self-IP currently mis-maps `floating`) |
 | 6 | Sortable static-route columns | ✅ frontend-only | ✅ frontend-only | No device/backend dependency |
 | 7 | VLAN + interface per route (by next-hop) | ✅ derive — match `gw` against self-IP subnets → self-IP.vlan | ✅ derive — match `ip-next-hop` against `ve` subnets → ve → vlan | Longest-prefix match at collect time; store resolved egress iface+vlan |
-| 8 | All route-domains / partitions | Tenancy = **route-domain** (8 present: 0/861/301/302/250/101/201/1). Routes/self-IPs already carry `%rd`; also iterate partitions if >1 (device has 1 = Common) | Tenancy = **partition** (L3V). Device has **0 active partitions** (shared only); iterate when `partition-all/oper.active-partition-count > 0` via per-partition `curr_part_name` | Tag every interface/pool/route with partition + route_domain |
+| 8 | All route-domains / partitions | Tenancy = **route-domain** (8 present: 0/861/301/302/250/101/201/1). Routes/self-IPs already carry `%rd`; also iterate partitions if >1 (device has 1 = Common) | Tenancy = **partition** (L3V). Confirmed on `10.60.139.94`: `partition-all/oper` lists CGNv6 L3V partitions IPDR-FTTX-WL(4,Active), IPDR-5G-AF(5,Active), IPDR-FTTX-UBR(6,Not-Active), `active-partition-count:2`. Iterate via `POST /axapi/v3/active-partition/{name}` then query cgnv6/interfaces/routes per partition | Tag every interface/pool/route with partition + route_domain |
 | 9 | Route-domain/partition dropdown | ✅ frontend selector filtering by §8 data | ✅ same | Depends on §8 |
 
 ### Key raw evidence
@@ -148,6 +148,15 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   exposes a usable interface NAT role. Belongs to Phase 2 (interfaces); does
   not block Phase 1. Until confirmed, plan of record: A10 shows real role, F5
   shows "—".
-- **D4 — R1 A10 license fidelity:** ⏳ PENDING — user will check whether richer
-  A10 license data is obtainable. Belongs to Phase 5 (license); does not block
-  Phase 1. Until confirmed, plan of record: show GLM + serial/platform/version.
+- **D4 — R1 A10 license fidelity:** ⏳ PENDING user choice. **Phase-0 finding
+  (probed `10.60.139.94`, vThunder 6.0.4 GLM VNF):** license notes + bandwidth
+  allocation expiry are **NOT exposed via aXAPI**. `/glm`, `/glm/oper`,
+  `/license-manager`, `/license-manager/oper` all return **204 (empty)**;
+  entitlement/flexpool/instance oper endpoints 404; `/system/bandwidth` gives
+  only warning/critical thresholds (75/95), not allocated bandwidth or expiry.
+  (Earlier device `10.88.19.37` did return `/glm` config: token/enterprise/
+  allocate-bandwidth=1000 — but still no expiry/notes.) So **notes + expiry
+  require SSH `show license` / GLM portal**, not REST. Options: (a) accept REST
+  can't provide it → A10 license shows only what `/glm` + `/version/oper` give,
+  expiry/notes = "—"; (b) add SSH `show license` fallback for A10 (new: CGNAT
+  is REST-only today).
