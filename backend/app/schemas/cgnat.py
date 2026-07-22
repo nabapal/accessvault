@@ -127,6 +127,8 @@ class CgnatStaticRouteRead(BaseModel):
     distance: Optional[int] = None
     route_domain: Optional[str] = None
     partition: Optional[str] = None
+    egress_interface: Optional[str] = None
+    egress_vlan: Optional[str] = None
     family: Optional[str] = None
     description: Optional[str] = None
 

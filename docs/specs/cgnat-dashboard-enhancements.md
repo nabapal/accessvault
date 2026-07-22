@@ -169,7 +169,13 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
   Interfaces/Routes tabs + counts. Verified live end-to-end on A10 10.60.139.94
   (3 scopes: shared/IPDR-FTTX-WL/IPDR-5G-AF) and F5 10.64.41.9 (RDs
   0/1/101/201/250/301/302/861). tsc+build clean; DB apply clean.
-- **Phase 4 (routes):** R7 next-hop → egress VLAN/interface.
+- **Phase 4 (routes):** R7 next-hop → egress VLAN/interface. — ✅ IMPLEMENTED.
+  `cgnat_static_routes` gains `egress_interface` + `egress_vlan`; collector does
+  a scoped longest-prefix match of each route's next_hop against interface
+  subnets (A10 scoped by partition, F5 by route_domain). UI: two sortable
+  columns on the routes table. Verified live: F5 82/84 resolved (rd-scoped,
+  e.g. nh 10.64.190.249%302 → self_a10_302_IN_v4 / vl_A10_IN_302), A10 18/25
+  (unresolved = recursive/default next-hops). tsc+build clean.
 - **Phase 5 (license):** R1 license model + collect + UI.
 - **R2** resolved as a decision (§10-D2); no dedicated code phase beyond relabel.
 

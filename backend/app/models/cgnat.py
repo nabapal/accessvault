@@ -158,6 +158,8 @@ class CgnatStaticRoute(Base):
     distance = Column(Integer, nullable=True)
     route_domain = Column(String, nullable=True)
     partition = Column(String, nullable=True)  # A10 L3V partition / F5 partition
+    egress_interface = Column(String, nullable=True)  # resolved from next_hop (R7)
+    egress_vlan = Column(String, nullable=True)
     family = Column(String, nullable=True)  # ipv4 | ipv6
     description = Column(String, nullable=True)
     attributes = Column(JSON, nullable=False, default=dict)

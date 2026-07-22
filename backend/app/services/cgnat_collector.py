@@ -89,6 +89,53 @@ def _rd_from(value: Any) -> str | None:
     return None
 
 
+def _to_network(addr: str) -> "ipaddress._BaseNetwork | None":
+    """Parse an interface address string into an ip_network, dropping any %rd token.
+    Accepts '10.0.0.1%302/29', '10.0.0.1/29', '2405::1/125'."""
+    if not addr:
+        return None
+    a = addr
+    if "%" in a:
+        left, right = a.split("%", 1)
+        a = left + ("/" + right.split("/", 1)[1] if "/" in right else "")
+    try:
+        return ipaddress.ip_network(a, strict=False)
+    except (ValueError, ipaddress.AddressValueError):
+        return None
+
+
+def _resolve_route_egress(routes: List[Dict[str, Any]], ifaces: List[Dict[str, Any]], scope_field: str) -> None:
+    """Resolve each route's next_hop to the egress interface + VLAN by longest-prefix
+    match against interface subnets, within the same tenancy scope (R7). Mutates routes."""
+    candidates: List[tuple] = []  # (network, iface_name, vlan, scope)
+    for i in ifaces:
+        for a in (i.get("addresses") or []):
+            net = _to_network(a)
+            if net is not None:
+                candidates.append((net, i.get("name"), i.get("vlan"), i.get(scope_field)))
+    for r in routes:
+        r["egress_interface"] = None
+        r["egress_vlan"] = None
+        nh = r.get("next_hop")
+        if not nh:
+            continue
+        bare = nh.split("%")[0].split("/")[0].strip()
+        try:
+            ip = ipaddress.ip_address(bare)
+        except ValueError:
+            continue
+        rscope = r.get(scope_field)
+        best: tuple | None = None  # (prefixlen, name, vlan)
+        for net, name, vlan, iscope in candidates:
+            if iscope != rscope or ip.version != net.version:
+                continue
+            if ip in net and (best is None or net.prefixlen > best[0]):
+                best = (net.prefixlen, name, vlan)
+        if best is not None:
+            r["egress_interface"] = best[1]
+            r["egress_vlan"] = best[2]
+
+
 # --------------------------------------------------------------------------- A10
 
 async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[str, Any]:
@@ -309,6 +356,7 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         "virtual_server_count": None,
     }
 
+    _resolve_route_egress(routes, ifaces, "partition")
     return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": stats}
 
 
@@ -510,6 +558,7 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
             }
         )
 
+    _resolve_route_egress(routes, ifaces, "route_domain")
     return {"facts": facts, "interfaces": ifaces, "pools": pool_rows, "routes": routes, "metrics": metrics, "raw_stats": {}}
 
 

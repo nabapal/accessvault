@@ -1003,6 +1003,8 @@ export interface CgnatStaticRoute {
   distance?: number | null;
   route_domain?: string | null;
   partition?: string | null;
+  egress_interface?: string | null;
+  egress_vlan?: string | null;
   family?: string | null;
   description?: string | null;
 }

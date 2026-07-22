@@ -18,7 +18,7 @@ const cell = "px-3 py-2 text-slate-100";
 const th = "px-3 py-2 text-left text-xs uppercase tracking-wide text-slate-400";
 
 type SortDir = "asc" | "desc";
-type RouteSortKey = "destination" | "next_hop" | "family" | "route_domain" | "distance" | "name";
+type RouteSortKey = "destination" | "next_hop" | "egress_interface" | "egress_vlan" | "family" | "route_domain" | "distance" | "name";
 
 // Colour-coded admin/oper status badge (R5). Green = enabled/up, red =
 // disabled/down, slate = unknown/other (e.g. F5 self-IP "floating").
@@ -114,6 +114,8 @@ export function CgnatDeviceDetailPage() {
     const getter: Record<RouteSortKey, (r: CgnatStaticRoute) => unknown> = {
       destination: (r) => r.destination,
       next_hop: (r) => r.next_hop,
+      egress_interface: (r) => r.egress_interface,
+      egress_vlan: (r) => r.egress_vlan,
       family: (r) => r.family,
       route_domain: (r) => r.route_domain,
       distance: (r) => r.distance,
@@ -311,6 +313,8 @@ export function CgnatDeviceDetailPage() {
                   <tr>
                     <SortTh label="Destination" sortKey="destination" />
                     <SortTh label="Next Hop" sortKey="next_hop" />
+                    <SortTh label="Egress Iface" sortKey="egress_interface" />
+                    <SortTh label="Egress VLAN" sortKey="egress_vlan" />
                     <SortTh label="Family" sortKey="family" />
                     <SortTh label="RD" sortKey="route_domain" />
                     <SortTh label="Distance" sortKey="distance" />
@@ -322,6 +326,8 @@ export function CgnatDeviceDetailPage() {
                     <tr key={r.id} className="hover:bg-brand-800/40">
                       <td className={`${cell} font-mono text-xs`}>{r.destination ?? "--"}</td>
                       <td className={`${cell} font-mono text-xs`}>{r.next_hop ?? "--"}</td>
+                      <td className={cell}>{r.egress_interface ?? "--"}</td>
+                      <td className={cell}>{r.egress_vlan ?? "--"}</td>
                       <td className={cell}>{r.family ?? "--"}</td>
                       <td className={cell}>{r.route_domain ?? "--"}</td>
                       <td className={cell}>{r.distance ?? "--"}</td>
