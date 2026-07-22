@@ -17,6 +17,7 @@ import {
   WrenchScrewdriverIcon
 } from "@heroicons/react/24/outline";
 
+import { AppFooter } from "@/components/layout/AppFooter";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 
@@ -120,6 +121,7 @@ export function AppShell({ children, sidebarContent }: AppShellProps) {
       <div className="flex flex-1 flex-col">
         <Header />
         <main className="flex-1 overflow-y-auto bg-brand-800/40 p-6">{children}</main>
+        <AppFooter />
       </div>
     </div>
   );

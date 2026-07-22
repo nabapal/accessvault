@@ -1,13 +1,37 @@
 import json
+import os
 from functools import lru_cache
+from pathlib import Path
 from typing import List, Optional, Union
 
 from pydantic import AnyUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _resolve_version() -> str:
+    """Version from APP_VERSION env, else the repo-root VERSION file, else dev."""
+    env = os.getenv("APP_VERSION")
+    if env:
+        return env.strip()
+    candidates = [
+        Path(__file__).resolve().parents[3] / "VERSION",  # repo root (backend/app/core/config.py)
+        Path("/app/VERSION"),
+        Path("VERSION"),
+    ]
+    for path in candidates:
+        try:
+            if path.is_file():
+                return path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+    return "0.0.0-dev"
+
+
 class Settings(BaseSettings):
     app_name: str = "NetVerse AI"
+    app_version: str = Field(default_factory=_resolve_version)
+    git_sha: str = Field(default_factory=lambda: os.getenv("GIT_SHA", "dev"))
+    build_date: str = Field(default_factory=lambda: os.getenv("BUILD_DATE", ""))
     api_v1_prefix: str = "/api/v1"
     secret_key: str
     jwt_algorithm: str = "HS256"

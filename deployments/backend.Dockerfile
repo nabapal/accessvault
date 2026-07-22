@@ -7,6 +7,19 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Build metadata (traceability): passed by docker compose / deploy.sh.
+ARG VERSION=0.0.0-dev
+ARG GIT_SHA=dev
+ARG BUILD_DATE=
+ENV APP_VERSION=$VERSION \
+    GIT_SHA=$GIT_SHA \
+    BUILD_DATE=$BUILD_DATE
+LABEL org.opencontainers.image.title="NetVerse AI backend" \
+      org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$GIT_SHA \
+      org.opencontainers.image.created=$BUILD_DATE \
+      org.opencontainers.image.source="https://github.com/nabapal/accessvault"
+
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt

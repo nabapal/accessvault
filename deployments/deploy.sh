@@ -64,6 +64,11 @@ else
 fi
 
 echo "[deploy] Building and starting containers..."
+# Build metadata for traceability (baked into images + exposed at /api/v1/version).
+export VERSION="$(cat "${ROOT_DIR}/VERSION" 2>/dev/null || echo 0.0.0-dev)"
+export GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo dev)"
+export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "[deploy] Version ${VERSION} (${GIT_SHA}) built ${BUILD_DATE}"
 ${COMPOSE_CMD} up --build -d
 
 echo "[deploy] Installing backend dependencies inside container..."

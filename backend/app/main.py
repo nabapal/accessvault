@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
             await inventory_poller.stop()
 
 
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 app.add_middleware(
