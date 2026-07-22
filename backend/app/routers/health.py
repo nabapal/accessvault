@@ -11,6 +11,7 @@ def _version_payload() -> dict:
         "status": "ok",
         "name": s.app_name,
         "version": s.app_version,
+        "environment": s.environment,
         "git_sha": s.git_sha,
         "build_date": s.build_date,
     }

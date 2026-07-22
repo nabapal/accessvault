@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     app_version: str = Field(default_factory=_resolve_version)
     git_sha: str = Field(default_factory=lambda: os.getenv("GIT_SHA", "dev"))
     build_date: str = Field(default_factory=lambda: os.getenv("BUILD_DATE", ""))
+    # Deployment stage (dev | pre_pod | prod); set per-host in backend/.env.docker.
+    environment: str = Field(default_factory=lambda: os.getenv("APP_ENV", "dev"))
     api_v1_prefix: str = "/api/v1"
     secret_key: str
     jwt_algorithm: str = "HS256"
