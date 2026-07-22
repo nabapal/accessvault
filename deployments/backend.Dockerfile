@@ -25,6 +25,9 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
+# Bundle VERSION so the app reports the right version even if APP_VERSION isn't
+# passed as a build arg (fallback read at /app/VERSION).
+COPY VERSION ./VERSION
 
 # Ensure the application can create the data directory at runtime if it does not exist.
 RUN mkdir -p /app/data
