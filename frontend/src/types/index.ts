@@ -922,6 +922,8 @@ export interface CgnatInterface {
   admin_state?: string | null;
   oper_state?: string | null;
   ip_address?: string | null;
+  addresses?: string[];
+  nat_role?: string | null;
   vlan?: string | null;
   mtu?: number | null;
   mac?: string | null;

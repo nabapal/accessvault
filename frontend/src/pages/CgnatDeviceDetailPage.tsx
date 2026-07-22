@@ -35,6 +35,18 @@ function StateBadge({ value }: { value?: string | null }) {
   return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>{value}</span>;
 }
 
+// NAT role badge (R4): inside = teal, outside = amber, mgmt/logging = slate.
+function NatRoleBadge({ role }: { role?: string | null }) {
+  if (!role) return <span className="text-slate-500">--</span>;
+  const r = role.toLowerCase();
+  const tone = r === "inside"
+    ? "border-teal-500/50 bg-teal-500/15 text-teal-200"
+    : r === "outside"
+      ? "border-amber-500/50 bg-amber-500/15 text-amber-200"
+      : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+  return <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>{role}</span>;
+}
+
 // Generic comparator: nulls last; numeric when both numeric; else case-insensitive string.
 function compareValues(a: unknown, b: unknown): number {
   const an = a == null || a === "";
@@ -209,7 +221,8 @@ export function CgnatDeviceDetailPage() {
                 <thead className="sticky top-0 bg-brand-900/90">
                   <tr>
                     <th className={th}>Interface</th>
-                    <th className={th}>IP Address</th>
+                    <th className={th}>IP Addresses</th>
+                    <th className={th}>NAT Role</th>
                     <th className={th}>VLAN</th>
                     <th className={th}>Admin/Oper</th>
                     <th className={th}>Description</th>
@@ -217,10 +230,23 @@ export function CgnatDeviceDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-800/60">
-                  {interfaces.map((i) => (
+                  {interfaces.map((i) => {
+                    const addrs = i.addresses && i.addresses.length ? i.addresses : (i.ip_address ? [i.ip_address] : []);
+                    return (
                     <tr key={i.id} className="hover:bg-brand-800/40">
                       <td className={cell}>{i.name}</td>
-                      <td className={`${cell} font-mono text-xs ${i.ip_address ? "text-primary-200" : "text-slate-500"}`}>{i.ip_address ?? "--"}</td>
+                      <td className={`${cell} font-mono text-xs`}>
+                        {addrs.length === 0 ? (
+                          <span className="text-slate-500">--</span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {addrs.map((a) => (
+                              <div key={a} className={a.includes(":") ? "text-sky-300" : "text-primary-200"}>{a}</div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className={cell}><NatRoleBadge role={i.nat_role} /></td>
                       <td className={cell}>{i.vlan ?? "--"}</td>
                       <td className={cell}>
                         <span className="flex flex-wrap items-center gap-1">
@@ -231,7 +257,8 @@ export function CgnatDeviceDetailPage() {
                       <td className={cell}>{i.description ?? "--"}</td>
                       <td className={cell}>{i.mtu ?? "--"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

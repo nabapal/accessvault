@@ -98,7 +98,9 @@ class CgnatInterface(Base):
     description = Column(String, nullable=True)
     admin_state = Column(String, nullable=True)
     oper_state = Column(String, nullable=True)
-    ip_address = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)  # primary IPv4 (back-compat)
+    addresses = Column(JSON, nullable=False, default=list)  # all addrs incl IPv6 (CIDR strings)
+    nat_role = Column(String, nullable=True)  # inside | outside | mgmt/logging
     vlan = Column(String, nullable=True)
     mtu = Column(Integer, nullable=True)
     mac = Column(String, nullable=True)

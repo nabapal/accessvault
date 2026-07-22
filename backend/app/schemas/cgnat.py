@@ -83,6 +83,8 @@ class CgnatInterfaceRead(BaseModel):
     admin_state: Optional[str] = None
     oper_state: Optional[str] = None
     ip_address: Optional[str] = None
+    addresses: List[str] = []
+    nat_role: Optional[str] = None
     vlan: Optional[str] = None
     mtu: Optional[int] = None
     mac: Optional[str] = None

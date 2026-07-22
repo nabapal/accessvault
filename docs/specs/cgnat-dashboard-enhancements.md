@@ -153,6 +153,12 @@ Probes: `backend/scripts/probe_cgnat_device.py` + deep field probes (read-only).
 - **Phase 1 (frontend-only, ship first):** R6 sortable routes, R5 colour-coded
   status. No schema/device change. — ✅ IMPLEMENTED (tsc+build clean).
 - **Phase 2 (interfaces):** R3 IPv6, R4 NAT role + VLAN. Model+collector+UI.
+  — ✅ IMPLEMENTED. `cgnat_interfaces` gains `addresses` (JSON, v4+v6 CIDRs) +
+  `nat_role`; A10 ve collects v4+v6 address-lists, native inside/outside, and
+  `vlan.ve` join; F5 self-IPs get NAT role via VS `vlans` (inside) / LSN
+  `egressInterfaces` (outside), else mgmt/logging. UI: interface table shows all
+  addresses (IPv6 highlighted) + NAT-role badge. Verified live on F5 + 2× A10
+  (incl. dual-stack ve686/ve2421, inside ve650, outside ve2422). tsc+build clean.
 - **Phase 3 (tenancy):** R8 all partitions/RDs, R9 selector.
 - **Phase 4 (routes):** R7 next-hop → egress VLAN/interface.
 - **Phase 5 (license):** R1 license model + collect + UI.

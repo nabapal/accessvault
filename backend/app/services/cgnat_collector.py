@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 from dataclasses import dataclass
@@ -60,6 +61,27 @@ def _uptime_seconds(text: str | None) -> int | None:
     return total if found else None
 
 
+def _v4_cidr(addr: Any, netmask: Any) -> str | None:
+    """Combine an IPv4 address + dotted-quad netmask into CIDR (e.g. 10.0.0.1/29)."""
+    a = _clean(addr)
+    if not a:
+        return None
+    m = _clean(netmask)
+    if m:
+        try:
+            return f"{a}/{ipaddress.IPv4Network(f'0.0.0.0/{m}').prefixlen}"
+        except (ValueError, ipaddress.AddressValueError):
+            pass
+    return a
+
+
+def _short_vlan(value: Any) -> str | None:
+    """F5 vlan/interface path '/Common/vl_x' -> 'vl_x'."""
+    if not isinstance(value, str):
+        return None
+    return value.rstrip("/").split("/")[-1] or None
+
+
 # --------------------------------------------------------------------------- A10
 
 async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[str, Any]:
@@ -113,6 +135,13 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
         "uptime_seconds": _uptime_seconds(version.get("up-time")),
     }
 
+    # VLAN <-> ve (SVI) mapping: network/vlan carries `ve` = the ve ifnum it backs.
+    ve_to_vlan: Dict[Any, str] = {}
+    for vl in vlans_raw:
+        ve_num = vl.get("ve")
+        if ve_num is not None:
+            ve_to_vlan[ve_num] = _clean(vl.get("vlan-num")) or _clean(vl.get("name"))
+
     ifaces: List[Dict[str, Any]] = []
     for eth in (interfaces_raw.get("ethernet-list") or []):
         ifaces.append(
@@ -122,29 +151,46 @@ async def _collect_a10(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[s
                 "admin_state": _clean(eth.get("action")),
                 "oper_state": None,
                 "ip_address": None,
+                "addresses": [],
+                "nat_role": None,
                 "vlan": None,
                 "mtu": _int(eth.get("mtu")),
                 "mac": None,
                 "attributes": {"kind": "ethernet"},
             }
         )
-    # L3 IP addresses live on 've' (SVI) interfaces.
+    # L3 IP addresses live on 've' (SVI) interfaces; inside/outside is native.
     for ve in ve_list:
-        addrs = (ve.get("ip") or {}).get("address-list") or []
-        first = addrs[0] if addrs else {}
-        ip = _clean(first.get("ipv4-address"))
-        mask = _clean(first.get("ipv4-netmask"))
+        ip_blk = ve.get("ip") or {}
+        ip6_blk = ve.get("ipv6") or {}
+        v4_addrs = ip_blk.get("address-list") or []
+        v6_addrs = ip6_blk.get("address-list") or []
+        addresses: List[str] = []
+        for a in v4_addrs:
+            cidr = _v4_cidr(a.get("ipv4-address"), a.get("ipv4-netmask"))
+            if cidr:
+                addresses.append(cidr)
+        for a in v6_addrs:
+            v6 = _clean(a.get("ipv6-addr"))
+            if v6:
+                addresses.append(v6)
+        first_v4 = _clean(v4_addrs[0].get("ipv4-address")) if v4_addrs else None
+        inside = bool(ip_blk.get("inside")) or bool(ip6_blk.get("inside"))
+        outside = bool(ip_blk.get("outside")) or bool(ip6_blk.get("outside"))
+        nat_role = "inside" if inside else ("outside" if outside else "mgmt/logging")
         ifaces.append(
             {
                 "name": f"ve{ve.get('ifnum')}",
                 "description": _clean(ve.get("name")),
                 "admin_state": _clean(ve.get("action")),
                 "oper_state": None,
-                "ip_address": ip,
-                "vlan": None,
+                "ip_address": first_v4,
+                "addresses": addresses,
+                "nat_role": nat_role,
+                "vlan": ve_to_vlan.get(ve.get("ifnum")),
                 "mtu": _int(ve.get("mtu")),
                 "mac": None,
-                "attributes": {"kind": "ve", "netmask": mask, "addresses": addrs},
+                "attributes": {"kind": "ve"},
             }
         )
 
@@ -266,6 +312,32 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
         "uptime_seconds": None,
     }
 
+    # NAT role by VLAN (verified §D3): a VLAN is *inside* when a virtual server
+    # listens on it (virtual.vlans), *outside* when it is an LSN pool egress
+    # interface (lsn-pool.egressInterfaces); else mgmt/logging. Outside wins on
+    # the rare overlap.
+    inside_vlans: set[str] = set()
+    for v in virtuals:
+        for vl in (v.get("vlans") or []):
+            short = _short_vlan(vl)
+            if short:
+                inside_vlans.add(short)
+    outside_vlans: set[str] = set()
+    for p in pools:
+        for vl in (p.get("egressInterfaces") or []):
+            short = _short_vlan(vl)
+            if short:
+                outside_vlans.add(short)
+
+    def _f5_role(vlan_short: str | None) -> str | None:
+        if not vlan_short:
+            return None
+        if vlan_short in outside_vlans:
+            return "outside"
+        if vlan_short in inside_vlans:
+            return "inside"
+        return "mgmt/logging"
+
     ifaces: List[Dict[str, Any]] = []
     for i in interfaces:
         ifaces.append(
@@ -275,6 +347,8 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
                 "admin_state": _clean(i.get("enabled") and "enabled" or i.get("disabled") and "disabled"),
                 "oper_state": _clean(i.get("mediaActive")),
                 "ip_address": None,
+                "addresses": [],
+                "nat_role": None,
                 "vlan": None,
                 "mtu": _int(i.get("mtu")),
                 "mac": _clean(i.get("macAddress")),
@@ -283,20 +357,22 @@ async def _collect_f5(client: httpx.AsyncClient, user: str, pwd: str) -> Dict[st
         )
     # L3 IP addresses live on self-IPs (address carries %<route-domain>/<prefix>).
     for sf in self_ips:
-        vlan = sf.get("vlan")
-        if isinstance(vlan, str) and "/" in vlan:
-            vlan = vlan.rstrip("/").split("/")[-1]
+        vlan = _short_vlan(sf.get("vlan")) or _clean(sf.get("vlan"))
+        addr = _clean(sf.get("address"))
         ifaces.append(
             {
                 "name": sf.get("name"),
                 "description": None,
-                "admin_state": _clean(sf.get("floating")),
+                # self-IPs have no admin enable/disable; report link state as "up".
+                "admin_state": "up",
                 "oper_state": None,
-                "ip_address": _clean(sf.get("address")),
-                "vlan": _clean(vlan),
+                "ip_address": addr,
+                "addresses": [addr] if addr else [],
+                "nat_role": _f5_role(vlan),
+                "vlan": vlan,
                 "mtu": None,
                 "mac": None,
-                "attributes": {"kind": "self-ip", "trafficGroup": sf.get("trafficGroup")},
+                "attributes": {"kind": "self-ip", "trafficGroup": sf.get("trafficGroup"), "floating": sf.get("floating")},
             }
         )
 
