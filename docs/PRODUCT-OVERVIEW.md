@@ -63,6 +63,16 @@ with the same data available through a documented API.
 - Health metrics: active sessions/subscribers, translations, port utilization, pool exhaustion.
 - Device detail with Overview / NAT Pools / Interfaces / Static Routes tabs.
 
+### 🔴 CPNR Inventory (Cisco Prime Network Registrar — DHCP) — *new*
+- Per‑VM DHCP config inventory over **REST** (`:8443`): scopes, prefixes,
+  IPv4/IPv6 reservations, clients, and client‑classes.
+- **Primary ↔ secondary pair consistency** — verifies both VMs of a service pair
+  hold identical config and **flags drift** per object (missing / value mismatch).
+- **Change tracking** — timestamped add/modify/remove per VM, with a Changes tab
+  and per‑VM log export.
+- Summary (pairs in‑sync vs drift, by site/service), VMs list, VM detail
+  (6 object tabs + Changes), and a **Pair Comparison** view. Bulk onboarding.
+
 ### 🟣 NX‑OS Inventory (Cisco Nexus) — *new*
 - Onboard Nexus switches **by Nautobot role** (`Nexus`, `ToR`) over SSH.
 - Interfaces, VRFs, hardware, and **BGP** neighbors (all VRFs, IPv4/IPv6).

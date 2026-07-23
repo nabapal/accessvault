@@ -11,6 +11,7 @@ NetVerse AI is a secure infrastructure operations portal for multinational teams
 - **IP-MPLS Inventory** — Cisco IOS-XR/XE device onboarding (by Nautobot role), interface/VRF/neighbor/hardware collection via Netmiko + pyATS/Genie, and an interactive ISIS topology (Cytoscape) with role/location filters and fullscreen.
 - **NX-OS Inventory** — Cisco Nexus onboarding by Nautobot role (`Nexus`/`ToR`), interface/VRF/BGP/hardware collection via Netmiko + pyATS/Genie, and a CDP+LLDP topology.
 - **CGNAT Inventory** — A10 Thunder (aXAPI) and F5 BIG-IP (iControl REST) CGNAT gateways: NAT/LSN pools, IP interfaces, static routes, and health metrics (sessions, translations, port utilization, exhaustion). Manual onboarding.
+- **CPNR Inventory** — Cisco Prime Network Registrar (DHCP) VMs over REST (`:8443`): scopes, prefixes, IPv4/IPv6 reservations, clients, and client-classes per VM; **primary↔secondary pair consistency checking** (drift flagged per object), **per-VM change tracking** with log export, and bulk onboarding. Per-VM onboarding.
 
 ## Features
 - JWT authentication with role-based access control (admin, user)
@@ -179,6 +180,55 @@ docker compose exec backend python backend/scripts/import_ipmpls_devices.py \
 ```
 
 Only **Active** devices are imported by default (Decommissioned/Offline are skipped).
+
+## Onboarding CPNR VMs
+
+CPNR (Cisco Prime Network Registrar / DHCP) VMs are onboarded per-VM. Two ways:
+
+**A) Admin UI** — *CPNR Inventory → (Admin) → CPNR VMs*: add each VM (mgmt IP,
+port 8443, username/password, site/service/role). Set a **matching Pair ID** on a
+primary + secondary to enable the consistency check. The CPNR poller
+(`CPNR_POLLER_ENABLED`, default on) keeps them synced.
+
+**B) Bulk script** — `backend/scripts/import_cpnr_vms.py` reads a JSON keyed by
+`<site>-<service>-<role>` (role = `primary`|`secondary`|`local`) and idempotently
+upserts each VM (keyed on mgmt IP; passwords Fernet-encrypted), then runs a first
+sync. Primary+secondary of the same `<site>-<service>` automatically share a
+`pair_id`; `local` gets none.
+
+```json
+{
+  "bangalore-utility-primary":   {"base": "https://10.64.38.28:8443", "username": "admin", "password": "***", "verify_ssl": false},
+  "bangalore-utility-secondary": {"base": "https://10.64.38.29:8443", "username": "admin", "password": "***", "verify_ssl": false},
+  "bangalore-pcpe-local":        {"base": "https://10.64.38.20:8443", "username": "admin", "password": "***", "verify_ssl": false}
+}
+```
+
+**Local / dev** (from `backend/`, venv active):
+```bash
+python scripts/import_cpnr_vms.py --file cpnr_vms.json --dry-run   # preview mapping, no changes
+python scripts/import_cpnr_vms.py --file cpnr_vms.json             # import + first sync
+python scripts/import_cpnr_vms.py --file cpnr_vms.json --no-sync   # import only
+```
+
+**Prepod / Prod (Docker)** — place the JSON in the mounted `./data` volume (so it's
+visible inside the container as `/app/data/…`) and run the script in the backend
+container from the repo root (`/opt/accessvault`) so it writes to the same DB:
+```bash
+cd /opt/accessvault
+cp cpnr_vms.json data/                     # ./data is mounted to /app/data
+docker compose exec backend python backend/scripts/import_cpnr_vms.py \
+  --file /app/data/cpnr_vms.json --dry-run           # preview
+docker compose exec backend python backend/scripts/import_cpnr_vms.py \
+  --file /app/data/cpnr_vms.json                     # import + first sync
+rm -f data/cpnr_vms.json                   # remove the plaintext-credential file afterwards
+```
+
+Notes:
+- The backend container must have **network reachability** to the CPNR VMs
+  (`:8443`). Collection is read-only (REST GETs).
+- The JSON contains **plaintext passwords** — delete it after import (stored
+  encrypted in the DB). Re-running is safe (idempotent upsert by mgmt IP).
 
 Options: `--role` (repeatable), `--status` (Nautobot status slug, default `active`; pass
 empty `''` for all), `--collect` (SSH-collect reachable devices immediately; otherwise the
