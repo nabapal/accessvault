@@ -1,7 +1,13 @@
 # CPNR Inventory (Cisco Prime Network Registrar — DHCP)
 
 - **Feature:** Per-VM CPNR DHCP config inventory, primary↔secondary consistency checking, and change tracking.
-- **Status:** Approved — Phase 0 validated live; decisions resolved (§7); phased; ready to implement.
+- **Status:** Implemented (P1–P4) — verified live on the Bangalore Utility pair; backend import + tsc/build clean.
+
+> Implementation note: the six object types are stored in a single typed
+> `cpnr_objects` table (object_type discriminator + business key + normalized
+> `data` + `content_hash`) rather than six physical tables — the diff /
+> persistence / API / UI are all generic, and per-type views are filters. This
+> satisfies the "per-VM inventory" intent (D1) with far less surface area.
 - **Module:** CPNR Inventory (IPSE service module, on the CGNAT pattern — see [[ipse-service-inventory]]).
 - **Date:** 2026-07-23
 - **Probed live:** Bangalore Utility pair — primary `10.64.38.28`, secondary `10.64.38.29` (CPNR REST on :8443).

@@ -8,6 +8,15 @@ from .cgnat import (
     CgnatStaticRoute,
     CgnatVendor,
 )
+from .cpnr import (
+    CPNR_OBJECT_TYPES,
+    CpnrChangeEvent,
+    CpnrObject,
+    CpnrPairStatus,
+    CpnrRole,
+    CpnrStatus,
+    CpnrVm,
+)
 from .system import System, SystemCredential, AccessType
 from .inventory import (
     InventoryEndpoint,
@@ -99,4 +108,11 @@ __all__ = [
     "CgnatNatPool",
     "CgnatStaticRoute",
     "CgnatVendor",
+    "CpnrVm",
+    "CpnrObject",
+    "CpnrChangeEvent",
+    "CpnrRole",
+    "CpnrStatus",
+    "CpnrPairStatus",
+    "CPNR_OBJECT_TYPES",
 ]

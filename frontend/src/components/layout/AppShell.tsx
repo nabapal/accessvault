@@ -61,6 +61,14 @@ const SIDEBAR_SECTIONS = [
     ]
   },
   {
+    title: "CPNR Inventory",
+    items: [
+      { label: "Summary", to: "/cpnr/summary", icon: ChartPieIcon },
+      { label: "VMs", to: "/cpnr/vms", icon: ServerIcon },
+      { label: "Pair Comparison", to: "/cpnr/pairs", icon: ShareIcon }
+    ]
+  },
+  {
     title: "CGNAT Inventory",
     items: [
       { label: "Summary", to: "/cgnat/summary", icon: ChartPieIcon },
@@ -74,7 +82,8 @@ const SIDEBAR_SECTIONS = [
       { label: "VM Collectors", to: "/inventory/admin", icon: CloudArrowDownIcon },
       { label: "IP-MPLS Devices", to: "/ipmpls/admin", icon: WrenchScrewdriverIcon },
       { label: "NX-OS Devices", to: "/nxos/admin", icon: WrenchScrewdriverIcon },
-      { label: "CGNAT Devices", to: "/cgnat/admin", icon: WrenchScrewdriverIcon }
+      { label: "CGNAT Devices", to: "/cgnat/admin", icon: WrenchScrewdriverIcon },
+      { label: "CPNR VMs", to: "/cpnr/admin", icon: WrenchScrewdriverIcon }
     ]
   },
   {

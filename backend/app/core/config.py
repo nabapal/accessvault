@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     nxos_poll_tick_seconds: int = Field(default=30, ge=5, le=600)
     cgnat_poller_enabled: bool = True
     cgnat_poll_tick_seconds: int = Field(default=30, ge=5, le=600)
+    cpnr_poller_enabled: bool = True
+    cpnr_poll_tick_seconds: int = Field(default=60, ge=5, le=600)
     # Optional default SSH credentials for IP-MPLS devices (per-device creds in the
     # DB take precedence; these are a convenience fallback, e.g. for a shared lab).
     net_username: Optional[str] = None

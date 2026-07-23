@@ -21,6 +21,11 @@ import { CgnatSummaryPage } from "@/pages/CgnatSummaryPage";
 import { CgnatDevicesPage } from "@/pages/CgnatDevicesPage";
 import { CgnatDeviceDetailPage } from "@/pages/CgnatDeviceDetailPage";
 import { CgnatDevicesAdminPage } from "@/pages/CgnatDevicesAdminPage";
+import { CpnrSummaryPage } from "@/pages/CpnrSummaryPage";
+import { CpnrVmsPage } from "@/pages/CpnrVmsPage";
+import { CpnrVmDetailPage } from "@/pages/CpnrVmDetailPage";
+import { CpnrPairComparisonPage } from "@/pages/CpnrPairComparisonPage";
+import { CpnrVmsAdminPage } from "@/pages/CpnrVmsAdminPage";
 import { AciFabricSummaryPage } from "@/pages/AciFabricSummaryPage";
 import { AciNodeDetailPage } from "@/pages/AciNodeDetailPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -70,6 +75,11 @@ export default function App() {
     <Route path="/cgnat/devices" element={<CgnatDevicesPage />} />
     <Route path="/cgnat/devices/:deviceId" element={<CgnatDeviceDetailPage />} />
     <Route path="/cgnat/admin" element={<CgnatDevicesAdminPage />} />
+    <Route path="/cpnr/summary" element={<CpnrSummaryPage />} />
+    <Route path="/cpnr/vms" element={<CpnrVmsPage />} />
+    <Route path="/cpnr/vms/:vmId" element={<CpnrVmDetailPage />} />
+    <Route path="/cpnr/pairs" element={<CpnrPairComparisonPage />} />
+    <Route path="/cpnr/admin" element={<CpnrVmsAdminPage />} />
     <Route path="/telco/onboarding" element={<TelcoOnboardingPage />} />
     <Route path="/accessvault" element={<AccessVaultPage />} />
       </Route>

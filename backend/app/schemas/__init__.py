@@ -79,6 +79,19 @@ from .cgnat import (
     CgnatSummary,
     CgnatSyncResult,
 )
+from .cpnr import (
+    CpnrChangeEventRead,
+    CpnrConnectivityResult,
+    CpnrObjectRead,
+    CpnrPairComparison,
+    CpnrPairSummary,
+    CpnrSummary,
+    CpnrSyncResult,
+    CpnrVmCreate,
+    CpnrVmPage,
+    CpnrVmRead,
+    CpnrVmUpdate,
+)
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
 
@@ -137,6 +150,17 @@ __all__ = [
     "CgnatStaticRouteRead",
     "CgnatSummary",
     "CgnatSyncResult",
+    "CpnrVmCreate",
+    "CpnrVmUpdate",
+    "CpnrVmRead",
+    "CpnrVmPage",
+    "CpnrObjectRead",
+    "CpnrChangeEventRead",
+    "CpnrConnectivityResult",
+    "CpnrSyncResult",
+    "CpnrPairComparison",
+    "CpnrPairSummary",
+    "CpnrSummary",
     "NxosConnectivityResult",
     "NxosSyncResult",
     "NxosSummary",

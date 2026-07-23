@@ -1017,3 +1017,139 @@ export interface CgnatStaticRoute {
 export interface InventoryTopologyNode { id: string; label: string; kind: string; }
 export interface InventoryTopologyLink { source: string; target: string; label?: string | null; }
 export interface InventoryVmTopology { nodes: InventoryTopologyNode[]; links: InventoryTopologyLink[]; }
+
+// --- CPNR (Cisco Prime Network Registrar / DHCP) ---
+export type CpnrRole = "primary" | "secondary" | "local";
+export type CpnrStatus = "pending" | "ok" | "error";
+export type CpnrPairStatus = "single" | "unknown" | "in_sync" | "drift";
+
+export interface CpnrVm {
+  id: string;
+  name: string;
+  site?: string | null;
+  service?: string | null;
+  role: CpnrRole;
+  pair_id?: string | null;
+  mgmt_ip: string;
+  port: number;
+  verify_ssl: boolean;
+  username?: string | null;
+  version?: string | null;
+  cluster_role?: string | null;
+  description?: string | null;
+  poll_interval_seconds: number;
+  status: CpnrStatus;
+  last_polled_at?: string | null;
+  last_error?: string | null;
+  scope_count?: number | null;
+  prefix_count?: number | null;
+  reservation4_count?: number | null;
+  reservation6_count?: number | null;
+  client_count?: number | null;
+  client_class_count?: number | null;
+  pair_status: CpnrPairStatus;
+  inconsistency_count?: number | null;
+  last_compared_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CpnrVmPage {
+  items: CpnrVm[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface CpnrObject {
+  id: string;
+  object_type: string;
+  object_key: string;
+  content_hash: string;
+  data: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface CpnrChangeEntry { field: string; old: unknown; new: unknown; }
+export interface CpnrChangeEvent {
+  id: string;
+  ts: string;
+  object_type: string;
+  object_key: string;
+  action: string;
+  changes?: CpnrChangeEntry[] | null;
+}
+
+export interface CpnrVmCreate {
+  name: string;
+  mgmt_ip: string;
+  port?: number;
+  site?: string | null;
+  service?: string | null;
+  role?: CpnrRole;
+  pair_id?: string | null;
+  verify_ssl?: boolean;
+  description?: string | null;
+  poll_interval_seconds?: number;
+  username: string;
+  password: string;
+}
+
+export interface CpnrSyncResult {
+  success: boolean;
+  message?: string | null;
+  counts: Record<string, number>;
+  vm: CpnrVm;
+}
+
+export interface CpnrConnectivityResult {
+  reachable: boolean;
+  checked_at: string;
+  version?: string | null;
+  message?: string | null;
+}
+
+export interface CpnrPairTypeReport {
+  primary_count: number;
+  secondary_count: number;
+  only_primary: string[];
+  only_secondary: string[];
+  mismatched: { key: string; changes: CpnrChangeEntry[] }[];
+  inconsistency_count: number;
+}
+
+export interface CpnrPairComparison {
+  pair_id: string;
+  in_sync: boolean;
+  inconsistency_count: number;
+  primary: Record<string, unknown>;
+  secondary: Record<string, unknown>;
+  by_type: Record<string, CpnrPairTypeReport>;
+}
+
+export interface CpnrPairSummary {
+  pair_id: string;
+  service?: string | null;
+  site?: string | null;
+  primary?: CpnrVm | null;
+  secondary?: CpnrVm | null;
+  pair_status: CpnrPairStatus;
+  inconsistency_count?: number | null;
+  last_compared_at?: string | null;
+}
+
+export interface CpnrSummary {
+  total_vms: number;
+  total_pairs: number;
+  pairs_in_sync: number;
+  pairs_drift: number;
+  error_vms: number;
+  total_scopes: number;
+  total_prefixes: number;
+  total_reservations: number;
+  by_site: Record<string, number>;
+  by_service: Record<string, number>;
+  by_status: Record<string, number>;
+}
