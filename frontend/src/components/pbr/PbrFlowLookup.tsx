@@ -2,7 +2,34 @@ import { FormEvent, useState } from "react";
 import { isAxiosError } from "axios";
 
 import { pbrFlowLookup } from "@/services/pbr";
-import { PbrFlowLookupResult } from "@/types";
+import { PbrFlowCandidate, PbrFlowLookupResult } from "@/types";
+import { PbrServiceDetailView } from "./PbrServiceDetailView";
+
+const shortName = (dn: string) => dn.split("/brc-").pop()?.split("/").pop() ?? dn;
+const prefixLen = (cidr: string) => cidr.split("/")[1] ?? "";
+
+// A matched flow renders the full service (EPGs, topology, node cards) plus the
+// consumer/provider match basis — parity with the prototype's flow-lookup result.
+function MatchedFlowCard({ candidate }: { candidate: PbrFlowCandidate }) {
+  const consumerPrefix = candidate.src_side === "consumer" ? candidate.src_prefix : candidate.dst_prefix;
+  const providerPrefix = candidate.src_side === "consumer" ? candidate.dst_prefix : candidate.src_prefix;
+  return (
+    <div className="rounded-lg border border-emerald-500/50 bg-emerald-500/5">
+      <div className="border-b border-emerald-500/30 px-4 py-2">
+        <div className="text-sm font-semibold text-emerald-300">Matched — {shortName(candidate.contract_dn)}</div>
+        <div className="text-xs text-slate-400">
+          both source and destination fall on opposite sides of the same service — a genuine end-to-end match
+          {candidate.used_default_route ? " (via default route)" : ""}
+        </div>
+      </div>
+      {candidate.service_id ? <PbrServiceDetailView serviceId={candidate.service_id} /> : null}
+      <div className="border-t border-emerald-500/30 px-4 py-2 font-mono text-[11px] text-slate-400">
+        Consumer-side match: <span className="text-teal-300">{consumerPrefix}</span> (/{prefixLen(consumerPrefix)}) ·
+        Provider-side match: <span className="text-amber-300">{providerPrefix}</span> (/{prefixLen(providerPrefix)})
+      </div>
+    </div>
+  );
+}
 
 // Light client-side validation mirroring the server rules (SDD §5.3 / §10.2). The
 // server re-validates authoritatively; this is just fast feedback.
@@ -95,7 +122,7 @@ export function PbrFlowLookup({ fabricId }: { fabricId: string }) {
       ) : null}
 
       {result ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-3">
           {!result.matched ? (
             <p className="rounded border border-slate-500/40 bg-slate-500/10 px-3 py-2 text-sm text-slate-300">
               {result.message ?? "No scope-valid subnet match for this flow."}
@@ -107,20 +134,9 @@ export function PbrFlowLookup({ fabricId }: { fabricId: string }) {
                   {result.message ?? "Multiple candidate services matched — all shown below."}
                 </p>
               ) : null}
-              <ul className="space-y-1">
-                {result.candidates.map((c, idx) => (
-                  <li
-                    key={`${c.service_id ?? "svc"}-${idx}`}
-                    className="rounded-md border border-brand-800/70 bg-brand-900/40 px-3 py-2 text-sm"
-                  >
-                    <div className="font-medium text-slate-100">{c.contract_dn}</div>
-                    <div className="text-xs text-slate-400">
-                      {c.src_prefix} → {c.dst_prefix}
-                      {c.used_default_route ? " · via default route" : " · specific subnet"}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              {result.candidates.map((c, idx) => (
+                <MatchedFlowCard key={`${c.service_id ?? "svc"}-${idx}`} candidate={c} />
+              ))}
             </>
           )}
         </div>

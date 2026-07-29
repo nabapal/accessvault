@@ -264,6 +264,8 @@ async def flow_lookup(
             contract_dn=c.contract_dn,
             src_prefix=c.src_subnet.prefix,
             dst_prefix=c.dst_subnet.prefix,
+            src_side=c.src_subnet.side or None,
+            dst_side=c.dst_subnet.side or None,
             used_default_route=c.used_default_route,
         )
         for c in result.candidates

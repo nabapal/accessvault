@@ -63,7 +63,8 @@ _PBR_CLASSES: Dict[str, Dict[str, bool]] = {
     "vnsSvcRedirectPol": {"subtree": False, "verify": False},
     "vnsRedirectDest": {"subtree": False, "verify": False},
     "vnsL1L2RedirectDest": {"subtree": False, "verify": False},
-    "vnsEPpInfo": {"subtree": False, "verify": False},  # connector shadow-EPG VLAN encap
+    "vnsEPpInfo": {"subtree": False, "verify": False},  # connector shadow-EPG VLAN encap (BD side)
+    "l3extRsPathL3OutAtt": {"subtree": False, "verify": False},  # L3Out logical-interface VLAN encap
     "l3extSubnet": {"subtree": False, "verify": False},
     "fvRsProv": {"subtree": False, "verify": True},   # count-verified (Bug #3)
     "fvRsCons": {"subtree": False, "verify": True},   # count-verified (Bug #3)
@@ -272,6 +273,8 @@ class _ParsedService:
     provider_epg_dn: Optional[str] = None
     consumer_epg_name: Optional[str] = None
     provider_epg_name: Optional[str] = None
+    consumer_epg_dns: List[str] = field(default_factory=list)  # all consumer external-EPG DNs
+    provider_epg_dns: List[str] = field(default_factory=list)
     consumer_epgs: List[Dict[str, Any]] = field(default_factory=list)  # {l3out,epg,subnets,...}
     provider_epgs: List[Dict[str, Any]] = field(default_factory=list)
     nodes: List[_ParsedNode] = field(default_factory=list)
@@ -372,6 +375,20 @@ def _parse_encaps(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[Tuple[str, 
     return out
 
 
+def _parse_l3out_encaps(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
+    """L3Out name -> VLAN encap, from l3extRsPathL3OutAtt (…/out-<L3Out>/…, encap 'vlan-N')."""
+    out: Dict[str, str] = {}
+    for mo in datasets.get("l3extRsPathL3OutAtt", []):
+        a = _attrs(mo, "l3extRsPathL3OutAtt")
+        encap = a.get("encap")
+        if not encap or not str(encap).startswith("vlan"):
+            continue
+        m = re.search(r"/out-([^/]+)/", a.get("dn") or "")
+        if m and m.group(1) not in out:
+            out[m.group(1)] = encap
+    return out
+
+
 def _learned_ip_macs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
     """learned endpoint IP -> MAC, from fvIp.dn (…/cep-<MAC>/ip-[<addr>])."""
     out: Dict[str, str] = {}
@@ -432,6 +449,7 @@ def _hydrate_node(
     ip_macs: Dict[str, str],
     leaf_map: Dict[str, List[str]],
     encaps: Dict[Tuple[str, str], str],
+    l3out_encaps: Dict[str, str],
 ) -> _ParsedNode:
     sides = nd["sides"]
     cons = sides.get("consumer", {})
@@ -512,10 +530,20 @@ def _hydrate_node(
         "breached": breached,
     }
 
-    def _encap(bd: Optional[str]) -> Optional[str]:
+    def _encap(side: Dict[str, Any]) -> Optional[str]:
+        # L1 connectors carry no VLAN tag; L3 BD-side comes from vnsEPpInfo; L3Out-side
+        # comes from the L3Out logical-interface path attachment.
         if layer == PbrLayer.L1:
             return "L1 (no VLAN)"
-        return encaps.get((devgrp_name or "", bd or "")) if bd else None
+        bd = side.get("bd")
+        if bd:
+            enc = encaps.get((devgrp_name or "", bd))
+            if enc:
+                return enc
+        l3o = side.get("l3out")
+        if l3o and l3o[0]:
+            return l3out_encaps.get(l3o[0])
+        return None
 
     detail = {
         "node": nd.get("node_name"),
@@ -525,12 +553,12 @@ def _hydrate_node(
         "consumer_bd": cons.get("bd"),
         "consumer_l3out": cons.get("l3out"),
         "consumer_vrf": cons.get("vrf"),
-        "consumer_lif_encap": _encap(cons.get("bd")),
+        "consumer_lif_encap": _encap(cons),
         "consumer_redirect_policy": cons.get("redirect_policy"),
         "provider_bd": prov.get("bd"),
         "provider_l3out": prov.get("l3out"),
         "provider_vrf": prov.get("vrf"),
-        "provider_lif_encap": _encap(prov.get("bd")),
+        "provider_lif_encap": _encap(prov),
         "provider_redirect_policy": prov.get("redirect_policy"),
         "redirect_dests": redirect_dests,
         "redirect_interfaces": redirect_interfaces,
@@ -616,6 +644,7 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
     leaf_map = _parse_leafs(datasets)
     ip_macs = _learned_ip_macs(datasets)
     encaps = _parse_encaps(datasets)
+    l3out_encaps = _parse_l3out_encaps(datasets)
 
     # l3extSubnet grouped by owning external-EPG DN, tagged scope-valid.
     subnets_by_epg: Dict[str, List[Dict[str, Any]]] = {}
@@ -648,7 +677,10 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
         provider_groups = _epg_groups(epg["provider"], subnets_by_epg)
         provider_dn = epg["provider"][0] if epg["provider"] else None
         consumer_dn = epg["consumer"][0] if epg["consumer"] else None
-        nodes = [_hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map, encaps) for nd in ldev[(cname, gname)]]
+        nodes = [
+            _hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map, encaps, l3out_encaps)
+            for nd in ldev[(cname, gname)]
+        ]
         nodes.sort(key=lambda n: n.name or "")
         services.append(
             _ParsedService(
@@ -660,6 +692,8 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
                 provider_epg_dn=provider_dn,
                 consumer_epg_name=_epg_short_name(consumer_dn),
                 provider_epg_name=_epg_short_name(provider_dn),
+                consumer_epg_dns=list(epg["consumer"]),
+                provider_epg_dns=list(epg["provider"]),
                 consumer_epgs=consumer_groups,
                 provider_epgs=provider_groups,
                 nodes=nodes,
@@ -682,10 +716,10 @@ def classify_subnets(
     epg_index: Dict[str, List[Tuple[Tuple[str, str], str]]] = {}
     for svc in services:
         key = (svc.contract_name or "", svc.graph_name or "")
-        if svc.consumer_epg_dn:
-            epg_index.setdefault(svc.consumer_epg_dn, []).append((key, "consumer"))
-        if svc.provider_epg_dn:
-            epg_index.setdefault(svc.provider_epg_dn, []).append((key, "provider"))
+        for epg_dn in svc.consumer_epg_dns:
+            epg_index.setdefault(epg_dn, []).append((key, "consumer"))
+        for epg_dn in svc.provider_epg_dns:
+            epg_index.setdefault(epg_dn, []).append((key, "provider"))
 
     out: List[Dict[str, Any]] = []
     for mo in datasets.get("l3extSubnet", []):

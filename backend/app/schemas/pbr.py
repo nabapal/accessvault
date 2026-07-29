@@ -143,6 +143,8 @@ class PbrFlowCandidate(BaseModel):
     contract_dn: str
     src_prefix: str
     dst_prefix: str
+    src_side: Optional[str] = None  # "consumer" | "provider"
+    dst_side: Optional[str] = None
     used_default_route: bool
 
 

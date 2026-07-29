@@ -1322,6 +1322,8 @@ export interface PbrFlowCandidate {
   contract_dn: string;
   src_prefix: string;
   dst_prefix: string;
+  src_side?: string | null;
+  dst_side?: string | null;
   used_default_route: boolean;
 }
 
