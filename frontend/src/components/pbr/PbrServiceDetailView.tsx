@@ -33,24 +33,25 @@ function EpgBlock({ title, groups, accent }: { title: string; groups: PbrEpgGrou
                 {g.l3out} <span className="text-slate-500">/</span> {g.epg}
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
-                {g.subnets.length === 0 && g.excluded_subnets.length === 0 ? (
+                {g.subnets.length === 0 ? (
                   <span className="text-xs text-slate-500">no scope-valid subnets on record</span>
-                ) : null}
-                {g.subnets.map((s) => (
-                  <span key={s} className="rounded border border-brand-700 bg-brand-800/60 px-1.5 py-0.5 font-mono text-[11px] text-slate-200">
-                    {s}
-                  </span>
-                ))}
-                {g.excluded_subnets.map((s) => (
-                  <span
-                    key={s}
-                    title="route-control only — not used for classification (no import-security)"
-                    className="rounded border border-rose-500/40 bg-rose-500/5 px-1.5 py-0.5 font-mono text-[11px] text-rose-300/70 line-through"
-                  >
-                    {s}
-                  </span>
-                ))}
+                ) : (
+                  g.subnets.map((s) => (
+                    <span key={s} className="rounded border border-brand-700 bg-brand-800/60 px-1.5 py-0.5 font-mono text-[11px] text-slate-200">
+                      {s}
+                    </span>
+                  ))
+                )}
               </div>
+              {g.excluded_subnets.length > 0 ? (
+                <div
+                  className="mt-1 text-[11px] text-slate-500"
+                  title={`route-control only (no import-security), not used for classification:\n${g.excluded_subnets.join("\n")}`}
+                >
+                  + {g.excluded_subnets.length} route-control-only subnet
+                  {g.excluded_subnets.length === 1 ? "" : "s"} (excluded from classification)
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

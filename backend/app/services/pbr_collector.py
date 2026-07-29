@@ -63,6 +63,7 @@ _PBR_CLASSES: Dict[str, Dict[str, bool]] = {
     "vnsSvcRedirectPol": {"subtree": False, "verify": False},
     "vnsRedirectDest": {"subtree": False, "verify": False},
     "vnsL1L2RedirectDest": {"subtree": False, "verify": False},
+    "vnsEPpInfo": {"subtree": False, "verify": False},  # connector shadow-EPG VLAN encap
     "l3extSubnet": {"subtree": False, "verify": False},
     "fvRsProv": {"subtree": False, "verify": True},   # count-verified (Bug #3)
     "fvRsCons": {"subtree": False, "verify": True},   # count-verified (Bug #3)
@@ -345,6 +346,32 @@ def _parse_leafs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[st
     return {k: sorted(v) for k, v in out.items()}
 
 
+def _parse_encaps(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[Tuple[str, str], str]:
+    """(device-group name, BD/connector name) -> VLAN encap, from vnsEPpInfo.
+
+    e.g. dn '…/lDevVip-DG-CGNAT-TEST…/G-…-N-BD_CGN_Test_683-C-CGNAT-683', encap
+    'vlan-683'  ->  ('DG-CGNAT-TEST', 'BD_CGN_Test_683') -> 'vlan-683'.
+    """
+    out: Dict[Tuple[str, str], str] = {}
+    for mo in datasets.get("vnsEPpInfo", []):
+        a = _attrs(mo, "vnsEPpInfo")
+        dn = a.get("dn") or ""
+        encap = a.get("encap")
+        if not encap or encap == "unknown":
+            continue
+        dg = _name_after(dn, "lDevVip-")
+        # trim any trailing bracket/path noise from the device-group token
+        if dg:
+            dg = re.split(r"[\]/]", dg)[0]
+        seg = dn.rstrip("/").split("/")[-1]
+        nname = None
+        if "-N-" in seg and "-C-" in seg:
+            nname = seg.rsplit("-C-", 1)[0].split("-N-", 1)[1]
+        if dg and nname:
+            out[(dg, nname)] = encap
+    return out
+
+
 def _learned_ip_macs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
     """learned endpoint IP -> MAC, from fvIp.dn (…/cep-<MAC>/ip-[<addr>])."""
     out: Dict[str, str] = {}
@@ -404,6 +431,7 @@ def _hydrate_node(
     learned_ips: set[str],
     ip_macs: Dict[str, str],
     leaf_map: Dict[str, List[str]],
+    encaps: Dict[Tuple[str, str], str],
 ) -> _ParsedNode:
     sides = nd["sides"]
     cons = sides.get("consumer", {})
@@ -484,6 +512,11 @@ def _hydrate_node(
         "breached": breached,
     }
 
+    def _encap(bd: Optional[str]) -> Optional[str]:
+        if layer == PbrLayer.L1:
+            return "L1 (no VLAN)"
+        return encaps.get((devgrp_name or "", bd or "")) if bd else None
+
     detail = {
         "node": nd.get("node_name"),
         "devgrp": devgrp_name,
@@ -492,12 +525,12 @@ def _hydrate_node(
         "consumer_bd": cons.get("bd"),
         "consumer_l3out": cons.get("l3out"),
         "consumer_vrf": cons.get("vrf"),
-        "consumer_lif_encap": "L1 (no VLAN)" if layer == PbrLayer.L1 else None,
+        "consumer_lif_encap": _encap(cons.get("bd")),
         "consumer_redirect_policy": cons.get("redirect_policy"),
         "provider_bd": prov.get("bd"),
         "provider_l3out": prov.get("l3out"),
         "provider_vrf": prov.get("vrf"),
-        "provider_lif_encap": "L1 (no VLAN)" if layer == PbrLayer.L1 else None,
+        "provider_lif_encap": _encap(prov.get("bd")),
         "provider_redirect_policy": prov.get("redirect_policy"),
         "redirect_dests": redirect_dests,
         "redirect_interfaces": redirect_interfaces,
@@ -582,6 +615,7 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
     ldev = _parse_ldevctx(datasets, pols)
     leaf_map = _parse_leafs(datasets)
     ip_macs = _learned_ip_macs(datasets)
+    encaps = _parse_encaps(datasets)
 
     # l3extSubnet grouped by owning external-EPG DN, tagged scope-valid.
     subnets_by_epg: Dict[str, List[Dict[str, Any]]] = {}
@@ -614,7 +648,7 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
         provider_groups = _epg_groups(epg["provider"], subnets_by_epg)
         provider_dn = epg["provider"][0] if epg["provider"] else None
         consumer_dn = epg["consumer"][0] if epg["consumer"] else None
-        nodes = [_hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map) for nd in ldev[(cname, gname)]]
+        nodes = [_hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map, encaps) for nd in ldev[(cname, gname)]]
         nodes.sort(key=lambda n: n.name or "")
         services.append(
             _ParsedService(
