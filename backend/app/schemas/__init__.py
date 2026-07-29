@@ -92,6 +92,21 @@ from .cpnr import (
     CpnrVmRead,
     CpnrVmUpdate,
 )
+from .pbr import (
+    PbrBlastRadius,
+    PbrBlastRadiusItem,
+    PbrFabricRead,
+    PbrFlowCandidate,
+    PbrFlowLookupRequest,
+    PbrFlowLookupResult,
+    PbrHealthHistory,
+    PbrHealthSampleRead,
+    PbrNodeRead,
+    PbrRedirectDestRead,
+    PbrServiceDetail,
+    PbrServicePage,
+    PbrServiceRead,
+)
 from .system import AccessType, SystemCreate, SystemRead, SystemUpdate
 from .user import UserCreate, UserRead, UserRole, UserUpdate
 
@@ -180,6 +195,19 @@ __all__ = [
     "TelcoOnboardingJobCreate",
     "TelcoOnboardingJobRead",
     "TelcoOnboardingValidationRequest",
+    "PbrServiceRead",
+    "PbrServiceDetail",
+    "PbrServicePage",
+    "PbrNodeRead",
+    "PbrRedirectDestRead",
+    "PbrFabricRead",
+    "PbrBlastRadius",
+    "PbrBlastRadiusItem",
+    "PbrHealthHistory",
+    "PbrHealthSampleRead",
+    "PbrFlowLookupRequest",
+    "PbrFlowLookupResult",
+    "PbrFlowCandidate",
     "AccessType",
     "SystemCreate",
     "SystemRead",

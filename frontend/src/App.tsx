@@ -7,6 +7,7 @@ import { AciInventoryPage } from "@/pages/AciInventoryPage";
 import { AciEndpointsPage } from "@/pages/AciEndpointsPage";
 import { AciFreePortsPage } from "@/pages/AciFreePortsPage";
 import { AciVlansPage } from "@/pages/AciVlansPage";
+import { PbrMonitoringPage } from "@/pages/PbrMonitoringPage";
 import { IpMplsDevicesPage } from "@/pages/IpMplsDevicesPage";
 import { IpMplsSummaryPage } from "@/pages/IpMplsSummaryPage";
 import { IpMplsDeviceDetailPage } from "@/pages/IpMplsDeviceDetailPage";
@@ -57,6 +58,7 @@ export default function App() {
     <Route path="/inventory/hosts/:hostId" element={<HostDetailPage />} />
     <Route path="/telco/aci" element={<AciInventoryPage />} />
     <Route path="/telco/aci/endpoints" element={<AciEndpointsPage />} />
+    <Route path="/telco/aci/pbr" element={<PbrMonitoringPage />} />
     <Route path="/telco/aci/free-ports" element={<AciFreePortsPage />} />
     <Route path="/telco/aci/vlans" element={<AciVlansPage />} />
     <Route path="/telco/aci/summary" element={<AciFabricSummaryPage />} />
