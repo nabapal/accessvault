@@ -32,6 +32,8 @@ function EpgBlock({ title, groups, accent }: { title: string; groups: PbrEpgGrou
               <div className="font-mono text-[13px] text-slate-200">
                 {g.l3out} <span className="text-slate-500">/</span> {g.epg}
               </div>
+              {/* Only "External Subnets for the External EPG" (scope contains
+                  import-security) are shown — the classification-valid set. */}
               <div className="mt-1 flex flex-wrap gap-1">
                 {g.subnets.length === 0 ? (
                   <span className="text-xs text-slate-500">no scope-valid subnets on record</span>
@@ -43,15 +45,6 @@ function EpgBlock({ title, groups, accent }: { title: string; groups: PbrEpgGrou
                   ))
                 )}
               </div>
-              {g.excluded_subnets.length > 0 ? (
-                <div
-                  className="mt-1 text-[11px] text-slate-500"
-                  title={`route-control only (no import-security), not used for classification:\n${g.excluded_subnets.join("\n")}`}
-                >
-                  + {g.excluded_subnets.length} route-control-only subnet
-                  {g.excluded_subnets.length === 1 ? "" : "s"} (excluded from classification)
-                </div>
-              ) : null}
             </div>
           ))}
         </div>
