@@ -65,6 +65,7 @@ _PBR_CLASSES: Dict[str, Dict[str, bool]] = {
     "vnsL1L2RedirectDest": {"subtree": False, "verify": False},
     "vnsEPpInfo": {"subtree": False, "verify": False},  # connector shadow-EPG VLAN encap (BD side)
     "l3extRsPathL3OutAtt": {"subtree": False, "verify": False},  # L3Out logical-interface VLAN encap
+    "l3extRsEctx": {"subtree": False, "verify": False},  # L3Out -> VRF
     "l3extSubnet": {"subtree": False, "verify": False},
     "fvRsProv": {"subtree": False, "verify": True},   # count-verified (Bug #3)
     "fvRsCons": {"subtree": False, "verify": True},   # count-verified (Bug #3)
@@ -389,6 +390,18 @@ def _parse_l3out_encaps(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, 
     return out
 
 
+def _parse_l3out_vrfs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
+    """L3Out name -> VRF name, from l3extRsEctx (…/out-<L3Out>/…, tDn '…/ctx-<VRF>')."""
+    out: Dict[str, str] = {}
+    for mo in datasets.get("l3extRsEctx", []):
+        a = _attrs(mo, "l3extRsEctx")
+        m = re.search(r"/out-([^/]+)/", a.get("dn") or "")
+        vrf = _name_after(a.get("tDn"), "ctx-") or a.get("tnFvCtxName")
+        if m and vrf:
+            out.setdefault(m.group(1), vrf)
+    return out
+
+
 def _learned_ip_macs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
     """learned endpoint IP -> MAC, from fvIp.dn (…/cep-<MAC>/ip-[<addr>])."""
     out: Dict[str, str] = {}
@@ -450,10 +463,18 @@ def _hydrate_node(
     leaf_map: Dict[str, List[str]],
     encaps: Dict[Tuple[str, str], str],
     l3out_encaps: Dict[str, str],
+    l3out_vrfs: Dict[str, str],
 ) -> _ParsedNode:
     sides = nd["sides"]
     cons = sides.get("consumer", {})
     prov = sides.get("provider", {})
+
+    def _vrf(side: Dict[str, Any]) -> Optional[str]:
+        # Prefer the connector's own ctxDn; fall back to the L3Out's VRF.
+        if side.get("vrf"):
+            return side["vrf"]
+        l3o = side.get("l3out")
+        return l3out_vrfs.get(l3o[0]) if l3o and l3o[0] else None
 
     # Collect the policies referenced by this node's connectors.
     pol_dns = [s.get("redirect_pol_dn") for s in (cons, prov) if s.get("redirect_pol_dn")]
@@ -552,12 +573,12 @@ def _hydrate_node(
         "device_layer": layer.value,
         "consumer_bd": cons.get("bd"),
         "consumer_l3out": cons.get("l3out"),
-        "consumer_vrf": cons.get("vrf"),
+        "consumer_vrf": _vrf(cons),
         "consumer_lif_encap": _encap(cons),
         "consumer_redirect_policy": cons.get("redirect_policy"),
         "provider_bd": prov.get("bd"),
         "provider_l3out": prov.get("l3out"),
-        "provider_vrf": prov.get("vrf"),
+        "provider_vrf": _vrf(prov),
         "provider_lif_encap": _encap(prov),
         "provider_redirect_policy": prov.get("redirect_policy"),
         "redirect_dests": redirect_dests,
@@ -645,6 +666,7 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
     ip_macs = _learned_ip_macs(datasets)
     encaps = _parse_encaps(datasets)
     l3out_encaps = _parse_l3out_encaps(datasets)
+    l3out_vrfs = _parse_l3out_vrfs(datasets)
 
     # l3extSubnet grouped by owning external-EPG DN, tagged scope-valid.
     subnets_by_epg: Dict[str, List[Dict[str, Any]]] = {}
@@ -678,7 +700,7 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
         provider_dn = epg["provider"][0] if epg["provider"] else None
         consumer_dn = epg["consumer"][0] if epg["consumer"] else None
         nodes = [
-            _hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map, encaps, l3out_encaps)
+            _hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map, encaps, l3out_encaps, l3out_vrfs)
             for nd in ldev[(cname, gname)]
         ]
         nodes.sort(key=lambda n: n.name or "")
