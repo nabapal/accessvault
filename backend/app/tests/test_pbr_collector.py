@@ -76,20 +76,42 @@ async def test_fetch_class_ok_when_counts_match():
 # --------------------------------------------------------------------------- #
 
 
+def _ldevctx(cname, gname, node="N1"):
+    # Mirror the live shape: vnsGraphInst exposes DNs; vnsLDevCtx exposes name-or-lbl.
+    return {
+        "vnsLDevCtx": {
+            "attributes": {
+                "ctrctNameOrLbl": cname,
+                "graphNameOrLbl": gname,
+                "nodeNameOrLbl": node,
+                "dn": f"uni/tn-T/ldevCtx-c-{cname}-g-{gname}-n-{node}",
+            },
+            "children": [],
+        }
+    }
+
+
+def _graphinst(cname, gname):
+    return {
+        "vnsGraphInst": {
+            "attributes": {
+                "ctrctDn": f"uni/tn-T/brc-{cname}",
+                "graphDn": f"uni/tn-T/AbsGraph-{gname}",
+            }
+        }
+    }
+
+
 def test_service_intersection_only_keeps_pairs_in_both():
     datasets = {
-        "vnsGraphInst": [
-            {"vnsGraphInst": {"attributes": {"ctrctDn": "c1", "graphDn": "g1", "ctrctName": "C1", "graphName": "G1"}}},
-            {"vnsGraphInst": {"attributes": {"ctrctDn": "c2", "graphDn": "g2"}}},  # only in graphInst
-        ],
-        "vnsLDevCtx": [
-            {"vnsLDevCtx": {"attributes": {"ctrctDn": "c1", "graphDn": "g1"}}},
-            {"vnsLDevCtx": {"attributes": {"ctrctDn": "c3", "graphDn": "g3"}}},  # only in ldevCtx
-        ],
+        "vnsGraphInst": [_graphinst("C1", "G1"), _graphinst("C2", "G2")],  # C2/G2 only here
+        "vnsLDevCtx": [_ldevctx("C1", "G1"), _ldevctx("C3", "G3")],        # C3/G3 only here
     }
     services = build_services(datasets)
-    keys = {(s.contract_dn, s.graph_dn) for s in services}
-    assert keys == {("c1", "g1")}  # intersection only
+    keys = {(s.contract_name, s.graph_name) for s in services}
+    assert keys == {("C1", "G1")}  # intersection only (name-matched)
+    # node hydrated from the vnsLDevCtx entry
+    assert [n.name for n in services[0].nodes] == ["N1"]
 
 
 # --------------------------------------------------------------------------- #
@@ -112,16 +134,23 @@ def test_scope_is_valid(scope, expected):
     assert scope_is_valid(scope) is expected
 
 
+def _subnet(prefix, scope, epg):
+    return {"l3extSubnet": {"attributes": {"ip": prefix, "scope": scope, "dn": f"{epg}/extsubnet-[{prefix}]"}}}
+
+
 def test_classify_subnets_flags_scope_and_default():
-    subnets = classify_subnets(
-        [
-            {"l3extSubnet": {"attributes": {"ip": "10.0.0.0/24", "scope": "import-security"}}},
-            {"l3extSubnet": {"attributes": {"ip": "0.0.0.0/0", "scope": "import-security"}}},
-            {"l3extSubnet": {"attributes": {"ip": "192.168.0.0/24", "scope": "shared-rtctrl"}}},
+    epg = "uni/tn-T/out-O/instP-E"
+    datasets = {
+        "l3extSubnet": [
+            _subnet("10.0.0.0/24", "import-security", epg),
+            _subnet("0.0.0.0/0", "import-security", epg),
+            _subnet("192.168.0.0/24", "shared-rtctrl", "uni/tn-T/out-O/instP-E2"),
         ]
-    )
+    }
+    subnets = classify_subnets(datasets, [])  # no services -> unlinked
     by_prefix = {s["prefix"]: s for s in subnets}
     assert by_prefix["10.0.0.0/24"]["scope_valid"] is True
     assert by_prefix["10.0.0.0/24"]["is_default_route"] is False
+    assert by_prefix["10.0.0.0/24"]["epg_dn"] == epg
     assert by_prefix["0.0.0.0/0"]["is_default_route"] is True
     assert by_prefix["192.168.0.0/24"]["scope_valid"] is False  # retained but never resolves
