@@ -111,6 +111,12 @@ class PbrService(Base):
     health_pct = Column(Float, nullable=True)
     state = Column(Enum(PbrServiceState), nullable=False, default=PbrServiceState.UNKNOWN)
 
+    # Per-side external EPG groups with their subnet chips (matches the prototype's
+    # consumer_l3out_epg / provider_l3out_epg): list of
+    #   {l3out, epg, subnets[], excluded_subnets[], default_v4, default_v6}
+    consumer_epgs = Column(JSON, nullable=False, default=list)
+    provider_epgs = Column(JSON, nullable=False, default=list)
+
     # Last APIC poll this service was refreshed from (stale-safety, SDD §10.4).
     stale_as_of = Column(DateTime(timezone=True), nullable=True)
     raw_attributes = Column(JSON, nullable=False, default=dict)
@@ -169,6 +175,12 @@ class PbrNode(Base):
     health_pct = Column(Float, nullable=True)
     live_status = Column(Enum(PbrNodeStatus), nullable=False, default=PbrNodeStatus.UNKNOWN)
     bypassed = Column(Boolean, nullable=False, default=False)
+    active_pct = Column(Float, nullable=True)
+
+    # Full per-node detail for the topology + node cards (matches the prototype node
+    # schema): leafs[], per-side bd/vrf/l3out/lif_encap/redirect_policy, redirect_dests[]
+    # (ip/configured_mac/learned_mac/active), redirect_interfaces{}, threshold{}.
+    detail = Column(JSON, nullable=False, default=dict)
 
     raw_attributes = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

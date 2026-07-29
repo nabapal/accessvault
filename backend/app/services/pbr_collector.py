@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 _PBR_CLASSES: Dict[str, Dict[str, bool]] = {
     "vnsGraphInst": {"subtree": False, "verify": False},
     "vnsLDevCtx": {"subtree": True, "verify": False},
+    "vnsRsCIfPathAtt": {"subtree": False, "verify": False},  # concrete path -> leaf ids
     "vnsSvcRedirectPol": {"subtree": False, "verify": False},
     "vnsRedirectDest": {"subtree": False, "verify": False},
     "vnsL1L2RedirectDest": {"subtree": False, "verify": False},
@@ -228,6 +229,9 @@ async def _fetch_all(client: httpx.AsyncClient) -> Dict[str, List[Dict[str, Any]
 # --------------------------------------------------------------------------- #
 
 
+import re
+
+
 @dataclass
 class _Pol:
     name: Optional[str]
@@ -246,13 +250,14 @@ class _ParsedNode:
     layer: PbrLayer
     device_group_dn: Optional[str]
     device_group_name: Optional[str]
-    consumer_bd: Optional[str]
     redirect_policy_names: List[str] = field(default_factory=list)
     threshold_enable: bool = False
     min_threshold_pct: Optional[float] = None
     max_threshold_pct: Optional[float] = None
     threshold_down_action: PbrThresholdAction = PbrThresholdAction.UNKNOWN
-    dests: List[Dict[str, Any]] = field(default_factory=list)
+    active_pct: Optional[float] = None
+    dests: List[Dict[str, Any]] = field(default_factory=list)  # for health calc
+    detail: Dict[str, Any] = field(default_factory=dict)       # full prototype-shape node
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -266,6 +271,8 @@ class _ParsedService:
     provider_epg_dn: Optional[str] = None
     consumer_epg_name: Optional[str] = None
     provider_epg_name: Optional[str] = None
+    consumer_epgs: List[Dict[str, Any]] = field(default_factory=list)  # {l3out,epg,subnets,...}
+    provider_epgs: List[Dict[str, Any]] = field(default_factory=list)
     nodes: List[_ParsedNode] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -295,7 +302,9 @@ def _parse_redirect_policies(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[
         dn = a.get("dn") or ""
         parent = dn.split("/L1L2RedirectDest")[0]
         if parent in pols:
-            pols[parent].l1_dests.append({"ref": dn, "name": a.get("destName") or a.get("name")})
+            pols[parent].l1_dests.append(
+                {"destName": a.get("destName") or a.get("name"), "interface": a.get("implName") or a.get("destName")}
+            )
     return pols
 
 
@@ -319,8 +328,204 @@ def _resolve_epgs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[s
     return out
 
 
-def _parse_ldevctx(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[Tuple[str, str], List[Dict[str, Any]]]:
-    """(contract_name, graph_name) -> list of raw node descriptors from vnsLDevCtx subtree."""
+_LEAF_RE = re.compile(r"/(?:protpaths|paths)-([0-9-]+)/")
+
+
+def _parse_leafs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[str]]:
+    """device-group DN (lDevVip-<DG>) -> sorted leaf ids, from vnsRsCIfPathAtt tDn
+    (e.g. topology/pod-1/protpaths-701-751/pathep-[…] -> '701-751')."""
+    out: Dict[str, set] = {}
+    for mo in datasets.get("vnsRsCIfPathAtt", []):
+        a = _attrs(mo, "vnsRsCIfPathAtt")
+        dn = a.get("dn") or ""
+        devgrp = dn.split("/cDev-")[0]
+        m = _LEAF_RE.search(a.get("tDn") or "")
+        if devgrp and m:
+            out.setdefault(devgrp, set()).add(m.group(1))
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def _learned_ip_macs(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
+    """learned endpoint IP -> MAC, from fvIp.dn (…/cep-<MAC>/ip-[<addr>])."""
+    out: Dict[str, str] = {}
+    for mo in datasets.get("fvIp", []):
+        a = _attrs(mo, "fvIp")
+        addr = a.get("addr")
+        m = re.search(r"/cep-([0-9A-Fa-f:]{17})", a.get("dn") or "")
+        if addr and m:
+            out[addr] = m.group(1)
+    return out
+
+
+def _lifctx_sides(body: Dict[str, Any], pols: Dict[str, _Pol]) -> Dict[str, Dict[str, Any]]:
+    """Parse a vnsLDevCtx body's direct vnsLIfCtx children into consumer/provider sides."""
+    sides: Dict[str, Dict[str, Any]] = {}
+    idx = 0
+    for child in body.get("children", []) or []:
+        lif = child.get("vnsLIfCtx")
+        if not lif:
+            continue
+        a = lif.get("attributes", {}) or {}
+        conn = (a.get("connNameOrLbl") or "").lower()
+        if conn.startswith("cons"):
+            side = "consumer"
+        elif conn.startswith("prov"):
+            side = "provider"
+        else:
+            side = "consumer" if idx == 0 else "provider"
+        idx += 1
+        info: Dict[str, Any] = {
+            "vrf": _name_after(a.get("ctxDn"), "ctx-"),
+            "bd": None,
+            "l3out": None,
+            "redirect_policy": None,
+            "redirect_pol_dn": None,
+        }
+        for gc, ga in _walk(lif):
+            if gc == "vnsRsLIfCtxToBD":
+                info["bd"] = _name_after(ga.get("tDn"), "BD-")
+            elif gc == "vnsRsLIfCtxToSvcRedirectPol":
+                info["redirect_pol_dn"] = ga.get("tDn")
+                pol = pols.get(ga.get("tDn"))
+                info["redirect_policy"] = pol.name if pol else _name_after(ga.get("tDn"), "svcRedirectPol-")
+            elif gc == "vnsRsLIfCtxToInstP":
+                tdn = ga.get("tDn") or ""
+                l3o = _name_after(tdn, "out-")
+                epg = _name_after(tdn, "instP-")
+                if l3o or epg:
+                    info["l3out"] = [l3o, epg]
+        sides[side] = info
+    return sides
+
+
+def _hydrate_node(
+    nd: Dict[str, Any],
+    pols: Dict[str, _Pol],
+    learned_ips: set[str],
+    ip_macs: Dict[str, str],
+    leaf_map: Dict[str, List[str]],
+) -> _ParsedNode:
+    sides = nd["sides"]
+    cons = sides.get("consumer", {})
+    prov = sides.get("provider", {})
+
+    # Collect the policies referenced by this node's connectors.
+    pol_dns = [s.get("redirect_pol_dn") for s in (cons, prov) if s.get("redirect_pol_dn")]
+    l3: List[Dict[str, Any]] = []
+    l1: List[Dict[str, Any]] = []
+    chosen: Optional[_Pol] = None
+    pol_names: List[str] = []
+    for pol_dn in pol_dns:
+        pol = pols.get(pol_dn)
+        if not pol:
+            continue
+        if pol.name and pol.name not in pol_names:
+            pol_names.append(pol.name)
+        l3.extend(pol.l3_dests)
+        l1.extend(pol.l1_dests)
+        if chosen is None or (pol.threshold_enable and not chosen.threshold_enable):
+            chosen = pol
+
+    layer = PbrLayer.L1 if (l1 and not l3) else PbrLayer.L3
+    devgrp_dn = nd.get("devgrp")
+    devgrp_name = _name_after(devgrp_dn, "lDevVip-")
+    leafs = leaf_map.get(devgrp_dn or "", [])
+
+    redirect_dests: List[Dict[str, Any]] = []
+    redirect_interfaces: Optional[Dict[str, Any]] = None
+    health_dests: List[Dict[str, Any]] = []
+    if layer == PbrLayer.L1:
+        cons_pol = pols.get(cons.get("redirect_pol_dn"))
+        prov_pol = pols.get(prov.get("redirect_pol_dn"))
+        redirect_interfaces = {
+            "consumer": [
+                {"destName": d.get("destName"), "device": devgrp_name, "interface": d.get("interface")}
+                for d in (cons_pol.l1_dests if cons_pol else [])
+            ],
+            "provider": [
+                {"destName": d.get("destName"), "device": devgrp_name, "interface": d.get("interface")}
+                for d in (prov_pol.l1_dests if prov_pol else [])
+            ],
+        }
+        resolved = bool(redirect_interfaces["consumer"] or redirect_interfaces["provider"])
+        health_dests = [{"layer": "L1", "resolved": resolved}] if resolved else []
+    else:
+        seen = set()
+        for d in l3:
+            ip = d.get("ip")
+            if not ip or ip in seen:
+                continue
+            seen.add(ip)
+            active = ip in learned_ips
+            redirect_dests.append(
+                {
+                    "ip": ip,
+                    "configured_mac": d.get("mac"),
+                    "learned_mac": ip_macs.get(ip, "00:00:00:00:00:00"),
+                    "active": active,
+                }
+            )
+            health_dests.append({"ip": ip, "learned": active, "layer": "L3"})
+
+    # Active % + breach (L3 only), computed for display in the node card.
+    active_pct: Optional[float] = None
+    breached = False
+    if layer == PbrLayer.L3 and redirect_dests:
+        active_pct = round(sum(1 for d in redirect_dests if d["active"]) / len(redirect_dests) * 100)
+        if chosen and chosen.threshold_enable and chosen.min_pct is not None:
+            breached = active_pct < chosen.min_pct
+
+    threshold = {
+        "enable": bool(chosen and chosen.threshold_enable),
+        "min": chosen.min_pct if chosen else 0,
+        "max": chosen.max_pct if chosen else 0,
+        "action": (chosen.action.value if chosen else PbrThresholdAction.UNKNOWN.value),
+        "active_pct": active_pct,
+        "breached": breached,
+    }
+
+    detail = {
+        "node": nd.get("node_name"),
+        "devgrp": devgrp_name,
+        "leafs": leafs,
+        "device_layer": layer.value,
+        "consumer_bd": cons.get("bd"),
+        "consumer_l3out": cons.get("l3out"),
+        "consumer_vrf": cons.get("vrf"),
+        "consumer_lif_encap": "L1 (no VLAN)" if layer == PbrLayer.L1 else None,
+        "consumer_redirect_policy": cons.get("redirect_policy"),
+        "provider_bd": prov.get("bd"),
+        "provider_l3out": prov.get("l3out"),
+        "provider_vrf": prov.get("vrf"),
+        "provider_lif_encap": "L1 (no VLAN)" if layer == PbrLayer.L1 else None,
+        "provider_redirect_policy": prov.get("redirect_policy"),
+        "redirect_dests": redirect_dests,
+        "redirect_interfaces": redirect_interfaces,
+        "threshold": threshold,
+    }
+
+    return _ParsedNode(
+        dn=nd["dn"] or "",
+        name=nd.get("node_name"),
+        layer=layer,
+        device_group_dn=devgrp_dn,
+        device_group_name=devgrp_name,
+        redirect_policy_names=pol_names,
+        threshold_enable=bool(chosen and chosen.threshold_enable and layer == PbrLayer.L3),
+        min_threshold_pct=chosen.min_pct if chosen else None,
+        max_threshold_pct=chosen.max_pct if chosen else None,
+        threshold_down_action=chosen.action if chosen else PbrThresholdAction.UNKNOWN,
+        active_pct=active_pct,
+        dests=health_dests,
+        detail=detail,
+        raw=nd.get("raw", {}),
+    )
+
+
+def _parse_ldevctx(
+    datasets: Dict[str, List[Dict[str, Any]]], pols: Dict[str, _Pol]
+) -> Dict[Tuple[str, str], List[Dict[str, Any]]]:
+    """(contract_name, graph_name) -> list of node descriptors with consumer/provider sides."""
     by_svc: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     for mo in datasets.get("vnsLDevCtx", []):
         body = mo.get("vnsLDevCtx", {})
@@ -330,84 +535,66 @@ def _parse_ldevctx(datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[Tuple[str,
         if not cname or not gname:
             continue
         devgrp = None
-        redirect_pol_dns: List[str] = []
-        bds: List[str] = []
         for cls, ca in _walk(body):
             if cls == "vnsRsLDevCtxToLDev":
                 devgrp = ca.get("tDn")
-            elif cls == "vnsRsLIfCtxToSvcRedirectPol":
-                tdn = ca.get("tDn")
-                if tdn and tdn not in redirect_pol_dns:
-                    redirect_pol_dns.append(tdn)
-            elif cls == "vnsRsLIfCtxToBD":
-                if ca.get("tDn"):
-                    bds.append(ca.get("tDn"))
+                break
         by_svc.setdefault((cname, gname), []).append(
             {
                 "dn": a.get("dn"),
                 "node_name": a.get("nodeNameOrLbl"),
                 "devgrp": devgrp,
-                "redirect_pol_dns": redirect_pol_dns,
-                "bds": bds,
+                "sides": _lifctx_sides(body, pols),
                 "raw": a,
             }
         )
     return by_svc
 
 
-def _hydrate_node(nd: Dict[str, Any], pols: Dict[str, _Pol], learned_ips: set[str]) -> _ParsedNode:
-    pol_names: List[str] = []
-    l3: List[Dict[str, Any]] = []
-    l1: List[Dict[str, Any]] = []
-    chosen: Optional[_Pol] = None
-    for pol_dn in nd["redirect_pol_dns"]:
-        pol = pols.get(pol_dn)
-        if not pol:
-            continue
-        if pol.name:
-            pol_names.append(pol.name)
-        l3.extend(pol.l3_dests)
-        l1.extend(pol.l1_dests)
-        # Prefer a threshold-enabled policy for the node's threshold summary.
-        if chosen is None or (pol.threshold_enable and not chosen.threshold_enable):
-            chosen = pol
-
-    layer = PbrLayer.L1 if (l1 and not l3) else PbrLayer.L3
-    dests: List[Dict[str, Any]] = []
-    if layer == PbrLayer.L1:
-        for d in l1:
-            dests.append({"layer": "L1", "l1_ref": d.get("ref"), "resolved": True, "raw": d})
-    else:
-        for d in l3:
-            ip = d.get("ip")
-            dests.append({"ip": ip, "mac": d.get("mac"), "layer": "L3", "learned": ip in learned_ips, "raw": d})
-
-    devgrp_dn = nd.get("devgrp")
-    return _ParsedNode(
-        dn=nd["dn"] or "",
-        name=nd.get("node_name"),
-        layer=layer,
-        device_group_dn=devgrp_dn,
-        device_group_name=_name_after(devgrp_dn, "lDevVip-"),
-        consumer_bd=_name_after(nd["bds"][0], "BD-") if nd.get("bds") else None,
-        redirect_policy_names=pol_names,
-        threshold_enable=bool(chosen and chosen.threshold_enable and layer == PbrLayer.L3),
-        min_threshold_pct=chosen.min_pct if chosen else None,
-        max_threshold_pct=chosen.max_pct if chosen else None,
-        threshold_down_action=chosen.action if chosen else PbrThresholdAction.UNKNOWN,
-        dests=dests,
-        raw=nd.get("raw", {}),
-    )
+def _epg_groups(
+    epg_dns: List[str], subnets_by_epg: Dict[str, List[Dict[str, Any]]]
+) -> List[Dict[str, Any]]:
+    """Build the prototype's per-EPG group: {l3out, epg, subnets[], excluded_subnets[],
+    default_v4, default_v6} (scope-valid subnets vs route-control-only excluded)."""
+    groups: List[Dict[str, Any]] = []
+    for epg_dn in epg_dns:
+        subs = subnets_by_epg.get(epg_dn, [])
+        valid = [s["prefix"] for s in subs if s["scope_valid"]]
+        excluded = [s["prefix"] for s in subs if not s["scope_valid"]]
+        groups.append(
+            {
+                "l3out": _name_after(epg_dn, "out-") or "—",
+                "epg": _epg_short_name(epg_dn) or "—",
+                "subnets": valid,
+                "excluded_subnets": excluded,
+                "default_v4": any(s["prefix"] == "0.0.0.0/0" and s["scope_valid"] for s in subs),
+                "default_v6": any(s["prefix"] == "::/0" and s["scope_valid"] for s in subs),
+            }
+        )
+    return groups
 
 
 def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optional[set[str]] = None) -> List[_ParsedService]:
-    """Apply the intersection rule (on contract+graph NAME) and hydrate nodes + EPGs."""
+    """Apply the intersection rule (on contract+graph NAME) and hydrate nodes + EPG groups."""
     learned_ips = learned_ips or set()
     pols = _parse_redirect_policies(datasets)
     epgs = _resolve_epgs(datasets)
-    ldev = _parse_ldevctx(datasets)
+    ldev = _parse_ldevctx(datasets, pols)
+    leaf_map = _parse_leafs(datasets)
+    ip_macs = _learned_ip_macs(datasets)
 
-    # vnsGraphInst keyed by (contract_name, graph_name); keep the real DNs.
+    # l3extSubnet grouped by owning external-EPG DN, tagged scope-valid.
+    subnets_by_epg: Dict[str, List[Dict[str, Any]]] = {}
+    for mo in datasets.get("l3extSubnet", []):
+        a = _attrs(mo, "l3extSubnet")
+        prefix = a.get("ip")
+        if not prefix:
+            continue
+        epg_dn = (a.get("dn") or "").split("/extsubnet-")[0]
+        subnets_by_epg.setdefault(epg_dn, []).append(
+            {"prefix": prefix, "scope_valid": scope_is_valid(a.get("scope"))}
+        )
+
     graph_meta: Dict[Tuple[str, str], Dict[str, Optional[str]]] = {}
     for mo in datasets.get("vnsGraphInst", []):
         a = _attrs(mo, "vnsGraphInst")
@@ -423,10 +610,11 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
     for (cname, gname) in sorted(keys):
         meta = graph_meta[(cname, gname)]
         epg = epgs.get(cname, {"provider": [], "consumer": []})
+        consumer_groups = _epg_groups(epg["consumer"], subnets_by_epg)
+        provider_groups = _epg_groups(epg["provider"], subnets_by_epg)
         provider_dn = epg["provider"][0] if epg["provider"] else None
         consumer_dn = epg["consumer"][0] if epg["consumer"] else None
-        nodes = [_hydrate_node(nd, pols, learned_ips) for nd in ldev[(cname, gname)]]
-        # Order nodes by name (N1, N2, …) for a stable topology.
+        nodes = [_hydrate_node(nd, pols, learned_ips, ip_macs, leaf_map) for nd in ldev[(cname, gname)]]
         nodes.sort(key=lambda n: n.name or "")
         services.append(
             _ParsedService(
@@ -438,6 +626,8 @@ def build_services(datasets: Dict[str, List[Dict[str, Any]]], learned_ips: Optio
                 provider_epg_dn=provider_dn,
                 consumer_epg_name=_epg_short_name(consumer_dn),
                 provider_epg_name=_epg_short_name(provider_dn),
+                consumer_epgs=consumer_groups,
+                provider_epgs=provider_groups,
                 nodes=nodes,
                 raw={"contract": cname, "graph": gname},
             )
@@ -552,37 +742,59 @@ async def _persist(
     learned_ips: set[str],
     timestamp: datetime,
 ) -> Dict[str, Any]:
-    """Replace this fabric's PBR rows with the freshly-collected set, computing health."""
-    await session.execute(delete(PbrSubnet).where(PbrSubnet.fabric_job_id == job.id))
-    await session.execute(delete(PbrService).where(PbrService.fabric_job_id == job.id))
-    await session.flush()
+    """Upsert this fabric's PBR rows, computing health.
 
+    Services are keyed by (contract_dn, graph_dn) and kept with a STABLE id so
+    pbr_health_samples accumulate a real per-service trend (a delete+reinsert would
+    mint a new id each poll and orphan history). Child rows are deleted explicitly
+    because SQLite FK cascade is not enforced in this environment.
+    """
+    existing = {
+        (s.contract_dn, s.graph_dn): s
+        for s in (
+            await session.execute(select(PbrService).where(PbrService.fabric_job_id == job.id))
+        ).scalars().all()
+    }
+
+    async def _clear_nodes(service_id: Any) -> None:
+        node_ids = (
+            await session.execute(select(PbrNode.id).where(PbrNode.service_id == service_id))
+        ).scalars().all()
+        if node_ids:
+            await session.execute(delete(PbrRedirectDest).where(PbrRedirectDest.node_id.in_(node_ids)))
+            await session.execute(delete(PbrNode).where(PbrNode.service_id == service_id))
+
+    seen: set = set()
     service_id_by_key: Dict[Tuple[str, str], Any] = {}
     service_count = 0
     node_count = 0
     for svc in services:
         node_healths: List[compute.NodeHealth] = []
-        db_service = PbrService(
-            fabric_job_id=job.id,
-            contract_dn=svc.contract_dn,
-            graph_dn=svc.graph_dn,
-            contract_name=svc.contract_name,
-            graph_name=svc.graph_name,
-            consumer_epg_dn=svc.consumer_epg_dn,
-            provider_epg_dn=svc.provider_epg_dn,
-            consumer_epg_name=svc.consumer_epg_name,
-            provider_epg_name=svc.provider_epg_name,
-            stale_as_of=timestamp,
-            raw_attributes=svc.raw,
-        )
-        session.add(db_service)
-        await session.flush()  # get id
+        key = (svc.contract_dn, svc.graph_dn)
+        seen.add(key)
+        db_service = existing.get(key)
+        if db_service is None:
+            db_service = PbrService(fabric_job_id=job.id, contract_dn=svc.contract_dn, graph_dn=svc.graph_dn)
+            session.add(db_service)
+            await session.flush()  # get id
+        else:
+            await _clear_nodes(db_service.id)  # refresh this service's nodes in place
+        db_service.contract_name = svc.contract_name
+        db_service.graph_name = svc.graph_name
+        db_service.consumer_epg_dn = svc.consumer_epg_dn
+        db_service.provider_epg_dn = svc.provider_epg_dn
+        db_service.consumer_epg_name = svc.consumer_epg_name
+        db_service.provider_epg_name = svc.provider_epg_name
+        db_service.consumer_epgs = svc.consumer_epgs
+        db_service.provider_epgs = svc.provider_epgs
+        db_service.stale_as_of = timestamp
+        db_service.raw_attributes = svc.raw
         service_id_by_key[(svc.contract_name or "", svc.graph_name or "")] = db_service.id
 
         for node in svc.nodes:
             configured = len(node.dests)
             learned_count = sum(
-                1 for d in node.dests if (d.get("ip") in learned_ips) or d.get("learned")
+                1 for d in node.dests if d.get("learned") or d.get("resolved")
             )
             resolved = any(d.get("resolved") for d in node.dests) if node.layer == PbrLayer.L1 else False
             node_input = compute.NodeInput(
@@ -597,6 +809,7 @@ async def _persist(
             health = compute.evaluate_node(node_input)
             node_healths.append(health)
 
+            d = node.detail
             db_node = PbrNode(
                 fabric_job_id=job.id,
                 service_id=db_service.id,
@@ -605,7 +818,13 @@ async def _persist(
                 layer=node.layer,
                 device_group_dn=node.device_group_dn,
                 device_group_name=node.device_group_name,
-                consumer_bd=node.consumer_bd,
+                leaf=",".join(d.get("leafs") or []) or None,
+                consumer_bd=d.get("consumer_bd"),
+                consumer_vrf=d.get("consumer_vrf"),
+                consumer_vlan=d.get("consumer_lif_encap"),
+                provider_bd=d.get("provider_bd"),
+                provider_vrf=d.get("provider_vrf"),
+                provider_vlan=d.get("provider_lif_encap"),
                 redirect_policy_names=node.redirect_policy_names,
                 threshold_enable=node.threshold_enable,
                 min_threshold_pct=node.min_threshold_pct,
@@ -616,21 +835,22 @@ async def _persist(
                 health_pct=health.health_pct,
                 live_status=health.live_status,
                 bypassed=health.bypassed,
+                active_pct=node.active_pct,
+                detail=node.detail,
                 raw_attributes=node.raw,
             )
             session.add(db_node)
             await session.flush()
-            for d in node.dests:
+            for rd in node.detail.get("redirect_dests", []):
                 session.add(
                     PbrRedirectDest(
                         node_id=db_node.id,
-                        ip=d.get("ip"),
-                        mac=d.get("mac"),
-                        layer=PbrLayer.from_raw(d.get("layer")) if isinstance(d.get("layer"), str) else node.layer,
-                        l1_interface_ref=d.get("l1_ref"),
-                        resolved=bool(d.get("resolved")),
-                        learned=bool((d.get("ip") in learned_ips) or d.get("learned")),
-                        raw_attributes=d.get("raw", {}),
+                        ip=rd.get("ip"),
+                        mac=rd.get("configured_mac"),
+                        layer=node.layer,
+                        resolved=bool(rd.get("active")),
+                        learned=bool(rd.get("active")),
+                        raw_attributes=rd,
                     )
                 )
             node_count += 1
@@ -652,6 +872,24 @@ async def _persist(
         )
         service_count += 1
 
+    # Prune services that no longer exist in the fabric (+ their nodes/dests/samples).
+    for key, s in existing.items():
+        if key in seen:
+            continue
+        await _clear_nodes(s.id)
+        await session.execute(delete(PbrHealthSample).where(PbrHealthSample.service_id == s.id))
+        await session.execute(delete(PbrService).where(PbrService.id == s.id))
+
+    # Self-healing cleanup of any orphaned child rows (e.g. legacy rows left behind
+    # before this upsert fix, since SQLite FK cascade isn't enforced).
+    live_services = select(PbrService.id)
+    live_nodes = select(PbrNode.id)
+    await session.execute(delete(PbrNode).where(PbrNode.service_id.notin_(live_services)))
+    await session.execute(delete(PbrHealthSample).where(PbrHealthSample.service_id.notin_(live_services)))
+    await session.execute(delete(PbrRedirectDest).where(PbrRedirectDest.node_id.notin_(live_nodes)))
+
+    # Subnets carry no history -> full replace for the fabric.
+    await session.execute(delete(PbrSubnet).where(PbrSubnet.fabric_job_id == job.id))
     for sn in subnets:
         svc_key = sn.get("svc_key")
         session.add(

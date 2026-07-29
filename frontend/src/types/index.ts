@@ -1213,22 +1213,55 @@ export interface PbrRedirectDest {
   learned: boolean;
 }
 
+export interface PbrRedirectDestDetail {
+  ip: string;
+  configured_mac?: string | null;
+  learned_mac?: string | null;
+  active: boolean;
+}
+
+export interface PbrRedirectInterface {
+  destName?: string | null;
+  device?: string | null;
+  interface?: string | null;
+}
+
+export interface PbrThresholdDetail {
+  enable: boolean;
+  min: number;
+  max: number;
+  action: PbrThresholdAction;
+  active_pct?: number | null;
+  breached: boolean;
+}
+
+export interface PbrNodeDetail {
+  node?: string | null;
+  devgrp?: string | null;
+  leafs: string[];
+  device_layer: PbrLayer;
+  consumer_bd?: string | null;
+  consumer_l3out?: [string, string] | null;
+  consumer_vrf?: string | null;
+  consumer_lif_encap?: string | null;
+  consumer_redirect_policy?: string | null;
+  provider_bd?: string | null;
+  provider_l3out?: [string, string] | null;
+  provider_vrf?: string | null;
+  provider_lif_encap?: string | null;
+  provider_redirect_policy?: string | null;
+  redirect_dests: PbrRedirectDestDetail[];
+  redirect_interfaces?: { consumer: PbrRedirectInterface[]; provider: PbrRedirectInterface[] } | null;
+  threshold: PbrThresholdDetail;
+}
+
 export interface PbrNode {
   id: string;
   distinguished_name: string;
   name?: string | null;
-  function_type?: string | null;
   layer: PbrLayer;
   device_group_dn?: string | null;
   device_group_name?: string | null;
-  leaf?: string | null;
-  path?: string | null;
-  consumer_bd?: string | null;
-  consumer_vrf?: string | null;
-  consumer_vlan?: string | null;
-  provider_bd?: string | null;
-  provider_vrf?: string | null;
-  provider_vlan?: string | null;
   redirect_policy_names: string[];
   threshold_enable: boolean;
   min_threshold_pct?: number | null;
@@ -1239,10 +1272,23 @@ export interface PbrNode {
   health_pct?: number | null;
   live_status: PbrNodeStatus;
   bypassed: boolean;
+  active_pct?: number | null;
+  detail: PbrNodeDetail;
   redirect_dests: PbrRedirectDest[];
 }
 
+export interface PbrEpgGroup {
+  l3out: string;
+  epg: string;
+  subnets: string[];
+  excluded_subnets: string[];
+  default_v4: boolean;
+  default_v6: boolean;
+}
+
 export interface PbrServiceDetail extends PbrService {
+  consumer_epgs: PbrEpgGroup[];
+  provider_epgs: PbrEpgGroup[];
   nodes: PbrNode[];
 }
 

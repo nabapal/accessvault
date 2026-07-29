@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -48,6 +48,8 @@ class PbrNodeRead(BaseModel):
     health_pct: Optional[float]
     live_status: PbrNodeStatus
     bypassed: bool
+    active_pct: Optional[float] = None
+    detail: Dict[str, Any] = Field(default_factory=dict)
     redirect_dests: List[PbrRedirectDestRead] = Field(default_factory=list)
 
     class Config:
@@ -75,6 +77,8 @@ class PbrServiceRead(BaseModel):
 
 
 class PbrServiceDetail(PbrServiceRead):
+    consumer_epgs: List[Dict[str, Any]] = Field(default_factory=list)
+    provider_epgs: List[Dict[str, Any]] = Field(default_factory=list)
     nodes: List[PbrNodeRead] = Field(default_factory=list)
 
 

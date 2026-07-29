@@ -1,212 +1,235 @@
 import { useId } from "react";
 
-import { PbrNode, PbrNodeStatus, PbrServiceDetail } from "@/types";
+import { PbrNode, PbrServiceDetail } from "@/types";
 
-// Colors per node/arrow live status (SDD §5.4 / prototype nodeLiveStatus).
-const STATUS_COLOR: Record<PbrNodeStatus, string> = {
-  live: "#34d399", // emerald
-  faulty: "#fb7185", // rose
-  bypassed: "#94a3b8", // slate (ghosted)
-  permit: "#fbbf24", // amber (informational, distinct from bypass)
-  unknown: "#64748b" // slate-gray
-};
+// Palette matched to the prototype (NetverseAI_PBR_Flow_Console_19.html).
+const TEAL = "#4fd1c5";
+const AMBER = "#fbbf24";
+const GREEN = "#34d399";
+const RED = "#f87171";
+const GRAY = "#4a5a78";
+const INK = "#dbe4f3";
+const DIM = "#7e8ba3";
 
-const BOX_W = 180;
-const BOX_H = 96;
-const GAP = 96; // horizontal gap between boxes (room for arrow + VLAN label)
+const BOX_W = 240;
+const BOX_H = 126;
+const CLOUD_W = 210;
+const CLOUD_H = 96;
+const GAP = 72;
 const PAD = 24;
-const ROW_Y = 40;
 
-interface EndpointBox {
-  kind: "epg";
-  title: string;
-  subtitle: string;
+function nodeStatus(n: PbrNode): "live" | "faulty" | "bypassed" | "unknown" {
+  if (n.bypassed) return "bypassed";
+  if (n.live_status === "faulty") return "faulty";
+  if (n.live_status === "live") return "live";
+  return "unknown";
 }
-interface NodeBox {
-  kind: "node";
-  node: PbrNode;
+function combine(a: string, b: string): "live" | "faulty" | "bypassed" | "unknown" {
+  if (a === "faulty" || b === "faulty") return "faulty";
+  if (a === "bypassed" || b === "bypassed") return "bypassed";
+  if (a === "live" && b === "live") return "live";
+  return "unknown";
 }
-type Box = EndpointBox | NodeBox;
-
-const fmtPct = (v?: number | null) => (v === undefined || v === null ? "—" : `${Math.round(v)}%`);
-const fmt = (v?: string | null) => (v ? v : "—");
-
-function vlanLabel(left?: string | null, right?: string | null): string {
-  const l = left ?? null;
-  const r = right ?? null;
-  if (l && r && l !== r) {
-    return `vlan ${l} → ${r}`; // divergent VLAN across the hop (e.g. L1→L3) — SDD §5.4
-  }
-  const v = l ?? r;
-  return v ? `vlan ${v}` : "";
-}
+const arrowColor = (s: string) => (s === "faulty" ? RED : s === "bypassed" ? AMBER : s === "live" ? GREEN : GRAY);
+const trunc = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
 
 /**
- * Node-by-node PBR topology: Consumer EPG → node(s) → Provider EPG.
- *
- * Every <defs> id is namespaced with a per-instance uid from React.useId() so that
- * multiple diagrams rendered simultaneously never collide on `url(#…)` marker refs —
- * the exact bug called out in SDD §11 (duplicate ids silently dropped shapes from all
- * but the first diagram).
+ * Node-by-node PBR topology (Consumer EPG → node(s) → Provider EPG), ported from the
+ * prototype. Every <defs> marker id is namespaced with a per-instance useId() so
+ * multiple diagrams rendered at once never collide on url(#…) refs (SDD §11).
  */
 export function PbrTopology({ service }: { service: PbrServiceDetail }) {
-  const rawId = useId();
-  const uid = rawId.replace(/[^a-zA-Z0-9]/g, ""); // colons are awkward in url(#…) refs
-  const markerId = (status: PbrNodeStatus) => `${uid}-arrow-${status}`;
-
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const marker = (s: string) => `${uid}-${s}`;
   const nodes = service.nodes ?? [];
-  const boxes: Box[] = [
-    { kind: "epg", title: "Consumer EPG", subtitle: fmt(service.consumer_epg_name ?? service.consumer_epg_dn) },
-    ...nodes.map<NodeBox>((node) => ({ kind: "node", node })),
-    { kind: "epg", title: "Provider EPG", subtitle: fmt(service.provider_epg_name ?? service.provider_epg_dn) }
-  ];
+  if (!nodes.length) return null;
 
-  const width = PAD * 2 + boxes.length * BOX_W + (boxes.length - 1) * GAP;
-  const height = ROW_Y + BOX_H + 56;
-  const statuses: PbrNodeStatus[] = ["live", "faulty", "bypassed", "permit", "unknown"];
+  const anyBypassed = nodes.some((n) => n.bypassed);
+  const cy = anyBypassed ? 150 : 100;
 
-  const boxX = (i: number) => PAD + i * (BOX_W + GAP);
+  const consEpg = service.consumer_epgs?.[0];
+  const provEpg = service.provider_epgs?.[0];
 
-  // Arrow between box i and i+1. Color/status derived from the downstream node when
-  // present, else the upstream node, else unknown. VLAN label reflects both sides.
-  const arrowFor = (i: number) => {
-    const from = boxes[i];
-    const to = boxes[i + 1];
-    const downstream = to.kind === "node" ? to.node : null;
-    const upstream = from.kind === "node" ? from.node : null;
-    const status: PbrNodeStatus = downstream?.live_status ?? upstream?.live_status ?? "unknown";
-    const left = upstream ? upstream.provider_vlan : null; // leaving the upstream node
-    const right = downstream ? downstream.consumer_vlan : null; // entering the downstream node
-    return { status, label: vlanLabel(left, right) };
-  };
+  const parts: JSX.Element[] = [];
+  let x = PAD;
+
+  // consumer cloud
+  parts.push(cloud(`c-${uid}`, x, cy, consEpg?.epg ?? service.consumer_epg_name ?? "Consumer EPG", consEpg?.l3out ?? "", TEAL, uid));
+  x += CLOUD_W;
+
+  // arrow into first node (consumer VLAN of node 0)
+  const firstLabel = encap(nodes[0]?.detail?.consumer_lif_encap);
+  parts.push(arrow(`a0-${uid}`, x, cy, GAP, nodeStatus(nodes[0]), firstLabel, marker));
+  x += GAP;
+
+  nodes.forEach((n, i) => {
+    const startX = x;
+    parts.push(nodeBox(`n${i}-${uid}`, x, cy - BOX_H / 2, n, uid));
+    x += BOX_W;
+    const endX = x;
+
+    if (n.bypassed) {
+      const topY = cy - BOX_H / 2 - 8;
+      const arcY = topY - 34;
+      parts.push(
+        <g key={`arc${i}-${uid}`}>
+          <path
+            d={`M${startX},${topY} Q${(startX + endX) / 2},${arcY} ${endX},${topY}`}
+            fill="none"
+            stroke={AMBER}
+            strokeWidth={2}
+            strokeDasharray="6,4"
+            markerEnd={`url(#${marker("bypass")})`}
+          />
+          <rect x={(startX + endX) / 2 - 62} y={arcY - 9} width={124} height={16} rx={4} fill="#0a1119" stroke={AMBER} />
+          <text x={(startX + endX) / 2} y={arcY + 3} textAnchor="middle" fontSize="9" fontWeight={700} fill={AMBER}>
+            BYPASSED — skips node
+          </text>
+        </g>
+      );
+    }
+
+    const isLast = i === nodes.length - 1;
+    const status = isLast ? nodeStatus(n) : combine(nodeStatus(n), nodeStatus(nodes[i + 1]));
+    let label: string | [string, string] | null;
+    if (isLast) {
+      label = encap(n.detail?.provider_lif_encap);
+    } else {
+      const out = encap(n.detail?.provider_lif_encap);
+      const inn = encap(nodes[i + 1].detail?.consumer_lif_encap);
+      if (out && inn && out !== inn) label = [`${out} (out)`, `${inn} (in)`];
+      else label = out || inn || null;
+    }
+    const gap = Array.isArray(label) ? GAP + 56 : GAP;
+    parts.push(arrow(`a${i + 1}-${uid}`, x, cy, gap, status, label, marker));
+    x += gap;
+  });
+
+  parts.push(cloud(`p-${uid}`, x, cy, provEpg?.epg ?? service.provider_epg_name ?? "Provider EPG", provEpg?.l3out ?? "", AMBER, uid));
+  x += CLOUD_W;
+
+  const totalW = x + PAD;
+  const totalH = cy + Math.max(CLOUD_H, BOX_H) / 2 + 40;
 
   return (
     <div className="overflow-x-auto rounded-md border border-brand-800/70 bg-brand-950/40 p-2">
-      <svg width={width} height={height} role="img" aria-label="PBR topology diagram">
+      <svg viewBox={`0 0 ${totalW} ${totalH}`} width="100%" height={totalH} style={{ minWidth: Math.max(totalW, 760) }}>
         <defs>
-          {statuses.map((s) => (
-            <marker
-              key={s}
-              id={markerId(s)}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={STATUS_COLOR[s]} />
+          {(["arrow", "fault", "live", "bypass"] as const).map((s) => (
+            <marker key={s} id={marker(s === "arrow" ? "arrow" : s)} markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 z" fill={s === "fault" ? RED : s === "live" ? GREEN : s === "bypass" ? AMBER : GRAY} />
             </marker>
           ))}
         </defs>
-
-        {/* arrows */}
-        {boxes.slice(0, -1).map((_, i) => {
-          const { status, label } = arrowFor(i);
-          const x1 = boxX(i) + BOX_W;
-          const x2 = boxX(i + 1);
-          const y = ROW_Y + BOX_H / 2;
-          const isBypassed = status === "bypassed";
-          return (
-            <g key={`arrow-${i}`}>
-              <line
-                x1={x1}
-                y1={y}
-                x2={x2 - 2}
-                y2={y}
-                stroke={STATUS_COLOR[status]}
-                strokeWidth={2}
-                strokeDasharray={isBypassed ? "5 4" : undefined}
-                markerEnd={`url(#${markerId(status)})`}
-              />
-              {label ? (
-                <text
-                  x={(x1 + x2) / 2}
-                  y={y - 8}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill="#94a3b8"
-                >
-                  {label}
-                </text>
-              ) : null}
-            </g>
-          );
-        })}
-
-        {/* boxes */}
-        {boxes.map((box, i) => {
-          const x = boxX(i);
-          if (box.kind === "epg") {
-            return (
-              <g key={`box-${i}`}>
-                <rect x={x} y={ROW_Y} width={BOX_W} height={BOX_H} rx={10} fill="#1e293b" stroke="#475569" />
-                <text x={x + BOX_W / 2} y={ROW_Y + 26} textAnchor="middle" fontSize="11" fill="#94a3b8">
-                  {box.title}
-                </text>
-                <text x={x + BOX_W / 2} y={ROW_Y + 50} textAnchor="middle" fontSize="12" fill="#e2e8f0">
-                  {truncate(box.subtitle, 24)}
-                </text>
-              </g>
-            );
-          }
-          const node = box.node;
-          const color = STATUS_COLOR[node.live_status];
-          const ghosted = node.live_status === "bypassed";
-          return (
-            <g key={`box-${i}`} opacity={ghosted ? 0.55 : 1}>
-              <rect
-                x={x}
-                y={ROW_Y}
-                width={BOX_W}
-                height={BOX_H}
-                rx={10}
-                fill="#0f172a"
-                stroke={color}
-                strokeWidth={2}
-                strokeDasharray={ghosted ? "6 4" : undefined}
-              />
-              <text x={x + 12} y={ROW_Y + 22} fontSize="12" fontWeight="600" fill="#e2e8f0">
-                {truncate(node.name ?? "node", 20)}
-              </text>
-              <text x={x + 12} y={ROW_Y + 40} fontSize="10" fill="#94a3b8">
-                {node.layer} · {truncate(node.device_group_name ?? node.device_group_dn ?? "—", 20)}
-              </text>
-              {/* health % badge */}
-              <text x={x + BOX_W - 12} y={ROW_Y + 22} textAnchor="end" fontSize="12" fontWeight="700" fill={color}>
-                {fmtPct(node.health_pct)}
-              </text>
-              <text x={x + 12} y={ROW_Y + 58} fontSize="10" fill={color}>
-                {statusLabel(node)}
-              </text>
-              {node.leaf || node.path ? (
-                <text x={x + 12} y={ROW_Y + 76} fontSize="9" fill="#64748b">
-                  {truncate([node.leaf, node.path].filter(Boolean).join(" "), 24)}
-                </text>
-              ) : null}
-            </g>
-          );
-        })}
+        {parts}
       </svg>
+      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[9.5px] text-slate-500">
+        <span><span style={{ color: TEAL }}>●</span> Consumer EPG</span>
+        <span><span style={{ color: AMBER }}>●</span> Provider EPG / L1 node</span>
+        <span><span style={{ color: GREEN }}>→</span> hop confirmed live (learned/resolved)</span>
+        <span><span style={{ color: RED }}>⚠</span> redirect dest — not learned / fault</span>
+        <span><span style={{ color: TEAL }}>⇄</span> L1 redirect interface (transparent)</span>
+        <span><span style={{ color: AMBER }}>↳</span> threshold breached — node bypassed</span>
+      </div>
     </div>
   );
 }
 
-function statusLabel(node: PbrNode): string {
-  switch (node.live_status) {
-    case "bypassed":
-      return "⤳ bypassed by design";
-    case "permit":
-      return "permit (threshold breached)";
-    case "faulty":
-      return "faulty";
-    case "live":
-      return "live";
-    default:
-      return "unknown";
-  }
+function cloud(key: string, x: number, cy: number, title: string, sub: string, color: string, uid: string) {
+  return (
+    <g key={key}>
+      <rect x={x} y={cy - CLOUD_H / 2} width={CLOUD_W} height={CLOUD_H} rx={CLOUD_H / 2} fill="#0e1622" stroke={color} strokeWidth={1.6} />
+      <text x={x + CLOUD_W / 2} y={cy - 8} textAnchor="middle" fontSize="12.5" fontWeight={700} fill={color}>
+        {trunc(title, 24)}
+      </text>
+      <text x={x + CLOUD_W / 2} y={cy + 14} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fill="#9aa7bd">
+        {trunc(sub, 26)}
+      </text>
+    </g>
+  );
 }
 
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+function nodeBox(key: string, x: number, y: number, n: PbrNode, uid: string) {
+  const d = n.detail;
+  const layerColor = d.device_layer === "L1" ? AMBER : TEAL;
+  const status = nodeStatus(n);
+  const border = status === "bypassed" ? AMBER : status === "faulty" ? RED : layerColor;
+  const opacity = n.bypassed ? 0.55 : 1;
+  const hp = n.health_pct;
+  const hcolor = n.bypassed ? AMBER : hp == null ? DIM : hp >= 90 ? GREEN : hp >= 50 ? AMBER : RED;
+  const hlabel = n.bypassed ? "BYPASS" : hp == null ? "N/A" : `${Math.round(hp)}%`;
+
+  const destLines: { text: string; color: string }[] = [];
+  if (d.device_layer === "L1") {
+    const inIf = d.redirect_interfaces?.consumer?.[0]?.interface;
+    const outIf = d.redirect_interfaces?.provider?.[0]?.interface;
+    if (inIf) destLines.push({ text: `⇄ in: ${inIf}`, color: TEAL });
+    if (outIf) destLines.push({ text: `⇄ out: ${outIf}`, color: AMBER });
+    if (!destLines.length) destLines.push({ text: "no interface data", color: DIM });
+  } else {
+    const dests = d.redirect_dests ?? [];
+    if (!dests.length) destLines.push({ text: "no redirect dest", color: DIM });
+    else dests.slice(0, 2).forEach((r) => destLines.push({ text: `${r.active ? "→ " : "⚠ "}${r.ip}`, color: r.active ? GREEN : RED }));
+  }
+  const policyLine = [d.consumer_redirect_policy && `in:${d.consumer_redirect_policy}`, d.provider_redirect_policy && `out:${d.provider_redirect_policy}`]
+    .filter(Boolean)
+    .join("  ");
+
+  return (
+    <g key={key} opacity={opacity}>
+      <rect x={x} y={y} width={BOX_W} height={BOX_H} rx={8} fill="#131b29" stroke={border} strokeWidth={status === "faulty" || n.bypassed ? 2.2 : 1.6} strokeDasharray={status === "faulty" || n.bypassed ? "5,3" : undefined} />
+      <rect x={x} y={y} width={46} height={18} rx={4} fill={layerColor} opacity={0.18} />
+      <text x={x + 23} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fontWeight={700} fill={layerColor}>{d.node}</text>
+      <text x={x + 70} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>{d.device_layer}</text>
+      <rect x={x + BOX_W - 52} y={y} width={52} height={18} rx={4} fill={hcolor} opacity={0.18} />
+      <text x={x + BOX_W - 26} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fontWeight={700} fill={hcolor}>{hlabel}</text>
+      <text x={x + BOX_W / 2} y={y + 40} textAnchor="middle" fontSize="12.5" fontWeight={700} fill={INK}>{trunc(d.devgrp || d.node || "", 26)}</text>
+      <text x={x + BOX_W / 2} y={y + 60} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>{d.leafs?.length ? `Leaf ${d.leafs.join(",")}` : ""}</text>
+      <text x={x + BOX_W / 2} y={y + 76} textAnchor="middle" fontFamily="monospace" fontSize="8.5" fill="#59688a">{trunc(policyLine, 34)}</text>
+      {n.bypassed ? (
+        <>
+          <text x={x + BOX_W / 2} y={y + 98} textAnchor="middle" fontFamily="monospace" fontSize="8.5" fontWeight={700} fill={AMBER}>
+            {`active ${d.threshold.active_pct ?? 0}% < min ${d.threshold.min}%`}
+          </text>
+          <text x={x + BOX_W / 2} y={y + 113} textAnchor="middle" fontFamily="monospace" fontSize="8" fill={DIM}>traffic diverted around node</text>
+        </>
+      ) : (
+        destLines.map((l, i) => (
+          <text key={i} x={x + BOX_W / 2} y={y + 98 + i * 14} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={l.color}>
+            {trunc(l.text, 32)}
+          </text>
+        ))
+      )}
+    </g>
+  );
+}
+
+function arrow(
+  key: string,
+  xStart: number,
+  cy: number,
+  gap: number,
+  status: string,
+  label: string | [string, string] | null,
+  marker: (s: string) => string
+) {
+  const color = arrowColor(status);
+  const m = status === "faulty" ? "fault" : status === "bypassed" ? "bypass" : status === "live" ? "live" : "arrow";
+  const x2 = xStart + gap - 6;
+  const labels = label == null ? [] : Array.isArray(label) ? label : [label];
+  return (
+    <g key={key}>
+      <line x1={xStart} y1={cy} x2={x2} y2={cy} stroke={color} strokeWidth={2} strokeDasharray={status === "bypassed" ? "4,4" : undefined} markerEnd={`url(#${marker(m)})`} />
+      {labels.map((t, i) => (
+        <text key={i} x={xStart + gap / 2} y={cy - 8 - (labels.length - 1 - i) * 12} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>
+          {t}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+function encap(v?: string | null): string | null {
+  if (!v || v === "unknown") return null;
+  return v;
 }

@@ -1,40 +1,166 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { fetchPbrBlastRadius, fetchPbrHealthHistory, fetchPbrServiceDetail } from "@/services/pbr";
-import { PbrBlastRadius, PbrHealthHistory, PbrNode, PbrServiceDetail, PbrThresholdAction } from "@/types";
+import { PbrBlastRadius, PbrEpgGroup, PbrHealthHistory, PbrNode, PbrServiceDetail } from "@/types";
 import { PbrHealthSparkline } from "./PbrHealthSparkline";
 import { PbrTopology } from "./PbrTopology";
 
-const fmt = (v?: string | null) => (v ? v : "—");
-const fmtPct = (v?: number | null) => (v === undefined || v === null ? "N/A" : `${Math.round(v)}%`);
+const dash = <span className="text-slate-600">—</span>;
+const fmt = (v?: string | null) => (v ? <>{v}</> : dash);
+const pct = (v?: number | null) => (v === undefined || v === null ? "N/A" : `${Math.round(v)}%`);
 
-const STATUS_TEXT: Record<string, string> = {
-  live: "text-emerald-300",
-  faulty: "text-rose-300",
-  bypassed: "text-slate-300",
-  permit: "text-amber-300",
-  unknown: "text-slate-400"
-};
+// Per-node health breakdown metric, matching the prototype's computeServiceHealth text.
+function metric(n: PbrNode): string {
+  if (n.bypassed) {
+    const t = n.detail.threshold;
+    return `bypassed by design (active ${t.active_pct ?? 0}% < min ${t.min}%, down action: ${t.action})`;
+  }
+  if (n.detail.device_layer === "L1") return "interface config resolved";
+  return `${n.learned_dest_count}/${n.configured_dest_count} redirect IPs learned`;
+}
 
-// Threshold config summary — L1 is informational only (SDD §9.1); the three-way down
-// action is surfaced literally (SDD §9.3) so permit is never shown as a graceful bypass.
-function thresholdSummary(node: PbrNode): string {
-  if (!node.threshold_enable) {
-    return "threshold disabled";
+function EpgBlock({ title, groups, accent }: { title: string; groups: PbrEpgGroup[]; accent: string }) {
+  return (
+    <div>
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: accent }}>{title}</h4>
+      {groups.length === 0 ? (
+        <span className="text-sm text-slate-500">none on record</span>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((g, i) => (
+            <div key={i}>
+              <div className="font-mono text-[13px] text-slate-200">
+                {g.l3out} <span className="text-slate-500">/</span> {g.epg}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {g.subnets.length === 0 && g.excluded_subnets.length === 0 ? (
+                  <span className="text-xs text-slate-500">no scope-valid subnets on record</span>
+                ) : null}
+                {g.subnets.map((s) => (
+                  <span key={s} className="rounded border border-brand-700 bg-brand-800/60 px-1.5 py-0.5 font-mono text-[11px] text-slate-200">
+                    {s}
+                  </span>
+                ))}
+                {g.excluded_subnets.map((s) => (
+                  <span
+                    key={s}
+                    title="route-control only — not used for classification (no import-security)"
+                    className="rounded border border-rose-500/40 bg-rose-500/5 px-1.5 py-0.5 font-mono text-[11px] text-rose-300/70 line-through"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KV({ k, children }: { k: string; children: ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-brand-800/40 py-1 text-sm last:border-0">
+      <span className="text-slate-500">{k}</span>
+      <span className="text-right font-mono text-[12px] text-slate-200">{children}</span>
+    </div>
+  );
+}
+
+function ThresholdRows({ n }: { n: PbrNode }) {
+  const t = n.detail.threshold;
+  if (!t.enable) {
+    return <KV k="Threshold"><span className="text-slate-500">not enabled on this redirect policy</span></KV>;
   }
-  const action: PbrThresholdAction = node.threshold_down_action;
-  const min = node.min_threshold_pct ?? "—";
-  if (node.layer === "L1") {
-    return `min ${min}% · action ${action} (informational — L1)`;
-  }
-  return `min ${min}% · down action ${action}`;
+  const cfg = `min ${t.min}% / max ${t.max}% → down action: ${t.action}`;
+  return (
+    <>
+      <KV k="Threshold">{cfg}</KV>
+      {n.detail.device_layer === "L1" ? (
+        <KV k="Active %"><span className="text-slate-500">not available for L1 members in this environment</span></KV>
+      ) : t.active_pct !== undefined && t.active_pct !== null ? (
+        <KV k="Active %">
+          <span className={t.breached ? "font-semibold text-amber-300" : "font-semibold text-emerald-300"}>
+            {t.active_pct}%{t.breached ? " — below min" : ""}
+          </span>
+        </KV>
+      ) : null}
+      {n.bypassed ? (
+        <div className="mt-1.5 rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
+          ⚠ THRESHOLD BREACHED — active {t.active_pct ?? 0}% fell below min {t.min}%. Down Action = <b>{t.action}</b>:
+          traffic no longer passes through this node; service continues without it.
+        </div>
+      ) : t.action === "deny" && t.breached ? (
+        <div className="mt-1.5 rounded border border-rose-500/50 bg-rose-500/10 px-2 py-1.5 text-[11px] text-rose-200">
+          ⚠ THRESHOLD BREACHED — Down Action = deny: traffic through this node is being dropped, not bypassed.
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function NodeCard({ n }: { n: PbrNode }) {
+  const d = n.detail;
+  const isL1 = d.device_layer === "L1";
+  return (
+    <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-3">
+      <div className="mb-2 flex items-center justify-between border-b border-brand-800/70 pb-2">
+        <span className="text-sm font-semibold text-slate-100">{d.node} · {d.devgrp}</span>
+        <span className="rounded border border-brand-600 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">{d.device_layer}</span>
+      </div>
+      <KV k="Leaf/path">{d.leafs?.length ? d.leafs.join(", ") : dash}</KV>
+      <KV k="Consumer BD">{fmt(d.consumer_bd)}</KV>
+      <KV k="Consumer VRF">{fmt(d.consumer_vrf)}</KV>
+      <KV k="Consumer VLAN">{fmt(d.consumer_lif_encap)}</KV>
+      <KV k="Provider BD">{fmt(d.provider_bd)}</KV>
+      <KV k="Provider L3Out">{d.provider_l3out ? d.provider_l3out.filter(Boolean).join("/") : dash}</KV>
+      <KV k="Provider VRF">{fmt(d.provider_vrf)}</KV>
+      <KV k="Provider VLAN">{fmt(d.provider_lif_encap)}</KV>
+      <KV k="Redirect policy">
+        {[d.consumer_redirect_policy && `in: ${d.consumer_redirect_policy}`, d.provider_redirect_policy && `out: ${d.provider_redirect_policy}`]
+          .filter(Boolean)
+          .join(" / ") || dash}
+      </KV>
+      <ThresholdRows n={n} />
+      <KV k={isL1 ? "Redirect interface" : "Redirect dest"}>
+        {isL1 ? (
+          <div className="text-right">
+            {(d.redirect_interfaces?.consumer ?? []).map((r, i) => (
+              <div key={`c${i}`}><span className="text-slate-500 text-[9px] uppercase">in </span>{r.interface} <span className="text-slate-500">({r.device})</span></div>
+            ))}
+            {(d.redirect_interfaces?.provider ?? []).map((r, i) => (
+              <div key={`p${i}`}><span className="text-slate-500 text-[9px] uppercase">out </span>{r.interface} <span className="text-slate-500">({r.device})</span></div>
+            ))}
+            {!d.redirect_interfaces?.consumer?.length && !d.redirect_interfaces?.provider?.length ? <span className="text-slate-500">no interface data</span> : null}
+          </div>
+        ) : (d.redirect_dests ?? []).length === 0 ? (
+          dash
+        ) : (
+          <div className="text-right">
+            {d.redirect_dests.map((r, i) =>
+              r.active ? (
+                <div key={i}>
+                  <span className="text-slate-100">{r.ip}</span> <span className="text-slate-500">({r.learned_mac}, learned)</span>
+                </div>
+              ) : (
+                <div key={i} className="text-rose-300">
+                  <span className="font-semibold">{r.ip}</span> (not learned — no active endpoint, possible fault)
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </KV>
+    </div>
+  );
 }
 
 export function PbrServiceDetailView({ serviceId }: { serviceId: string }) {
   const [detail, setDetail] = useState<PbrServiceDetail | null>(null);
   const [blast, setBlast] = useState<PbrBlastRadius | null>(null);
   const [history, setHistory] = useState<PbrHealthHistory | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,23 +173,17 @@ export function PbrServiceDetailView({ serviceId }: { serviceId: string }) {
           fetchPbrBlastRadius(serviceId),
           fetchPbrHealthHistory(serviceId, 24 * 7)
         ]);
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setDetail(d);
         setBlast(b);
         setHistory(h);
         setError(null);
       } catch (err) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         console.error("Failed to load PBR service detail", err);
         setError("Unable to load service detail. Please retry.");
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
     load();
@@ -72,110 +192,77 @@ export function PbrServiceDetailView({ serviceId }: { serviceId: string }) {
     };
   }, [serviceId]);
 
-  if (loading) {
-    return <div className="px-4 py-4 text-sm text-slate-400">Loading service detail…</div>;
-  }
-  if (error) {
-    return <div className="px-4 py-3 text-sm text-rose-200">{error}</div>;
-  }
-  if (!detail) {
-    return null;
-  }
+  if (loading) return <div className="px-4 py-4 text-sm text-slate-400">Loading service detail…</div>;
+  if (error) return <div className="px-4 py-3 text-sm text-rose-200">{error}</div>;
+  if (!detail) return null;
 
   return (
-    <div className="space-y-4 border-t border-brand-800/70 bg-brand-950/30 px-4 py-4">
-      {/* Health trend (durable history, Phase 4 — replaces prototype localStorage) */}
-      <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Health trend (last 7 days)
-        </h3>
-        <PbrHealthSparkline samples={history?.samples ?? []} state={detail.state} />
+    <div className="space-y-5 border-t border-brand-800/70 bg-brand-950/30 px-4 py-4">
+      {/* External EPGs + subnets */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <EpgBlock title="Consumer External EPG(s)" groups={detail.consumer_epgs} accent="#4fd1c5" />
+        <EpgBlock title="Provider External EPG(s)" groups={detail.provider_epgs} accent="#fbbf24" />
       </div>
 
-      {/* Topology */}
+      {/* Health breakdown + trend */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Topology</h3>
-        <PbrTopology service={detail} />
-      </div>
-
-      {/* Per-node health breakdown */}
-      <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Node health breakdown</h3>
-        <div className="overflow-x-auto rounded-md border border-brand-800/70">
-          <table className="min-w-full divide-y divide-brand-800/70 text-sm">
-            <thead className="bg-brand-900/70 text-[11px] uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2 text-left">Node</th>
-                <th className="px-3 py-2 text-left">Layer</th>
-                <th className="px-3 py-2 text-left">Device group</th>
-                <th className="px-3 py-2 text-left">Redirect dests</th>
-                <th className="px-3 py-2 text-left">Threshold</th>
-                <th className="px-3 py-2 text-left">Status</th>
-                <th className="px-3 py-2 text-right">Health</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-800/60 text-slate-200">
-              {detail.nodes.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-3 text-center text-slate-500">
-                    No nodes ingested for this service yet.
-                  </td>
-                </tr>
-              ) : (
-                detail.nodes.map((node) => (
-                  <tr key={node.id}>
-                    <td className="px-3 py-2 font-medium text-slate-100">{fmt(node.name)}</td>
-                    <td className="px-3 py-2">{node.layer}</td>
-                    <td className="px-3 py-2 text-slate-300">{fmt(node.device_group_name ?? node.device_group_dn)}</td>
-                    <td className="px-3 py-2 text-slate-300">
-                      {node.layer === "L1"
-                        ? "—"
-                        : `${node.learned_dest_count}/${node.configured_dest_count} learned`}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{thresholdSummary(node)}</td>
-                    <td className={`px-3 py-2 text-xs font-semibold ${STATUS_TEXT[node.live_status]}`}>
-                      {node.live_status}
-                      {node.bypassed ? " (by design)" : ""}
-                    </td>
-                    <td className={`px-3 py-2 text-right font-mono font-semibold ${STATUS_TEXT[node.live_status]}`}>
-                      {fmtPct(node.health_pct)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Health breakdown ({pct(detail.health_pct)} overall)
+        </h4>
+        <div className="max-w-xl rounded-lg border border-brand-700 bg-brand-900/60 p-3">
+          {detail.nodes.length === 0 ? (
+            <div className="text-sm text-slate-500">no redirect IPs/interfaces configured on any node</div>
+          ) : (
+            detail.nodes.map((n) => (
+              <div key={n.id} className="flex justify-between gap-3 border-b border-brand-800/40 py-1 text-sm last:border-0">
+                <span className="text-slate-400">{n.detail.node} ({n.detail.device_layer})</span>
+                <span className="text-right text-slate-200">{metric(n)} — {pct(n.health_pct)}</span>
+              </div>
+            ))
+          )}
+          <div className="mt-3"><PbrHealthSparkline samples={history?.samples ?? []} state={detail.state} /></div>
         </div>
       </div>
 
       {/* Blast radius */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Blast radius — services sharing a device group in this fabric
-        </h3>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Blast radius — what else shares this device group
+        </h4>
         {!blast || blast.items.length === 0 ? (
           <p className="rounded-md border border-brand-800/70 bg-brand-900/40 px-3 py-2 text-sm text-slate-400">
-            No other PBR service in this fabric shares a device group — touching this device should be isolated to this
-            service.
+            No other PBR service in this fabric shares a device group — touching this device should be isolated to this service.
           </p>
         ) : (
-          <ul className="space-y-1">
-            {blast.items.map((item) => (
-              <li
-                key={item.service_id}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-brand-800/70 bg-brand-900/40 px-3 py-2 text-sm"
-              >
-                <span className="font-medium text-slate-100">{fmt(item.contract_name)}</span>
-                <span className="text-slate-500">/ {fmt(item.graph_name)}</span>
-                <span className={`text-xs ${STATUS_TEXT[item.state]}`}>{item.state} · {fmtPct(item.health_pct)}</span>
-                <span className="text-[11px] text-slate-500">
-                  shares: {item.shared_device_groups.join(", ")}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="mb-1 text-xs text-amber-300/80">⚠ {blast.items.length} other service(s) share a device group with this one</p>
+            <ul className="space-y-1">
+              {blast.items.map((item) => (
+                <li key={item.service_id} className="flex flex-wrap items-center gap-2 rounded-md border border-brand-800/70 bg-brand-900/40 px-3 py-2 text-sm">
+                  <span className="font-medium text-slate-100">{item.contract_name}</span>
+                  <span className="text-slate-500">/ {item.graph_name}</span>
+                  <span className="ml-auto text-[11px] text-slate-500">via device group {item.shared_device_groups.join(", ")}</span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
+
+      {/* Topology */}
+      <div>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          PBR topology — {detail.nodes.length} node chain
+        </h4>
+        <PbrTopology service={detail} />
+      </div>
+
+      {/* Node detail cards */}
+      {detail.nodes.length > 0 ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {detail.nodes.map((n) => <NodeCard key={n.id} n={n} />)}
+        </div>
+      ) : null}
     </div>
   );
 }
