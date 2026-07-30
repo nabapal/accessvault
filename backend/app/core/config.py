@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     cgnat_poll_tick_seconds: int = Field(default=30, ge=5, le=600)
     cpnr_poller_enabled: bool = True
     cpnr_poll_tick_seconds: int = Field(default=60, ge=5, le=600)
+    # PBR Flow Monitoring: subtree fetches are heavier than node inventory, so the tick
+    # + per-fabric interval default longer (SDD §7.2 / Appendix B Q3).
+    pbr_poller_enabled: bool = True
+    pbr_poll_tick_seconds: int = Field(default=60, ge=5, le=600)
     # Optional default SSH credentials for IP-MPLS devices (per-device creds in the
     # DB take precedence; these are a convenience fallback, e.g. for a shared lab).
     net_username: Optional[str] = None

@@ -44,6 +44,7 @@ with the same data available through a documented API.
 - **VLAN inventory** — Bridge‑Domain **and L3Out** VLANs, mapped to EPG/BD/VRF/tenant.
 - **Free‑ports report** — available access ports per switch, fabric uplinks excluded.
 - **Fabric summary** — nodes by role/model/state with charts.
+- **PBR Flow Monitoring** — L4‑L7 Policy‑Based Redirect service‑graph health across fabrics: node‑by‑node topology (per‑side BD/VRF/VLAN/L3Out, redirect dests, threshold/bypass states), blast radius, durable health trend, and **IP‑flow lookup** (which PBR service handles a source→destination flow).
 
 ### 🟢 IP‑MPLS Inventory (Cisco IOS‑XR / IOS‑XE)
 - Onboard routers **by Nautobot role**; collected over SSH with pyATS/Genie.

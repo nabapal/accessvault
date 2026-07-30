@@ -1153,3 +1153,183 @@ export interface CpnrSummary {
   by_service: Record<string, number>;
   by_status: Record<string, number>;
 }
+
+// ---------------------------------------------------------------------------
+// PBR Flow Monitoring
+// ---------------------------------------------------------------------------
+
+export type PbrLayer = "L1" | "L3" | "unknown";
+export type PbrThresholdAction = "bypass" | "permit" | "deny" | "unknown";
+export type PbrNodeStatus = "live" | "faulty" | "bypassed" | "permit" | "unknown";
+export type PbrServiceState = "healthy" | "degraded" | "down" | "unknown";
+
+export interface PbrFabric {
+  fabric_job_id: string;
+  name: string;
+  target_host: string;
+  service_count: number;
+  healthy_count: number;
+  degraded_count: number;
+  down_count: number;
+  unknown_count: number;
+  avg_health_pct?: number | null;
+  stale_as_of?: string | null;
+  is_stale: boolean;
+}
+
+export interface PbrService {
+  id: string;
+  fabric_job_id: string;
+  contract_dn: string;
+  graph_dn: string;
+  contract_name?: string | null;
+  graph_name?: string | null;
+  consumer_epg_dn?: string | null;
+  provider_epg_dn?: string | null;
+  consumer_epg_name?: string | null;
+  provider_epg_name?: string | null;
+  health_pct?: number | null;
+  state: PbrServiceState;
+  stale_as_of?: string | null;
+  updated_at: string;
+}
+
+export interface PbrServicePage {
+  items: PbrService[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface PbrRedirectDest {
+  id: string;
+  ip?: string | null;
+  mac?: string | null;
+  layer: PbrLayer;
+  l1_interface_ref?: string | null;
+  resolved: boolean;
+  learned: boolean;
+}
+
+export interface PbrRedirectDestDetail {
+  ip: string;
+  configured_mac?: string | null;
+  learned_mac?: string | null;
+  active: boolean;
+}
+
+export interface PbrRedirectInterface {
+  destName?: string | null;
+  device?: string | null;
+  interface?: string | null;
+}
+
+export interface PbrThresholdDetail {
+  enable: boolean;
+  min: number;
+  max: number;
+  action: PbrThresholdAction;
+  active_pct?: number | null;
+  breached: boolean;
+}
+
+export interface PbrNodeDetail {
+  node?: string | null;
+  devgrp?: string | null;
+  leafs: string[];
+  device_layer: PbrLayer;
+  consumer_bd?: string | null;
+  consumer_l3out?: [string, string] | null;
+  consumer_vrf?: string | null;
+  consumer_lif_encap?: string | null;
+  consumer_redirect_policy?: string | null;
+  provider_bd?: string | null;
+  provider_l3out?: [string, string] | null;
+  provider_vrf?: string | null;
+  provider_lif_encap?: string | null;
+  provider_redirect_policy?: string | null;
+  redirect_dests: PbrRedirectDestDetail[];
+  redirect_interfaces?: { consumer: PbrRedirectInterface[]; provider: PbrRedirectInterface[] } | null;
+  threshold: PbrThresholdDetail;
+}
+
+export interface PbrNode {
+  id: string;
+  distinguished_name: string;
+  name?: string | null;
+  layer: PbrLayer;
+  device_group_dn?: string | null;
+  device_group_name?: string | null;
+  redirect_policy_names: string[];
+  threshold_enable: boolean;
+  min_threshold_pct?: number | null;
+  max_threshold_pct?: number | null;
+  threshold_down_action: PbrThresholdAction;
+  configured_dest_count: number;
+  learned_dest_count: number;
+  health_pct?: number | null;
+  live_status: PbrNodeStatus;
+  bypassed: boolean;
+  active_pct?: number | null;
+  detail: PbrNodeDetail;
+  redirect_dests: PbrRedirectDest[];
+}
+
+export interface PbrEpgGroup {
+  l3out: string;
+  epg: string;
+  subnets: string[];
+  excluded_subnets: string[];
+  default_v4: boolean;
+  default_v6: boolean;
+}
+
+export interface PbrServiceDetail extends PbrService {
+  consumer_epgs: PbrEpgGroup[];
+  provider_epgs: PbrEpgGroup[];
+  nodes: PbrNode[];
+}
+
+export interface PbrBlastRadiusItem {
+  service_id: string;
+  contract_name?: string | null;
+  graph_name?: string | null;
+  state: PbrServiceState;
+  health_pct?: number | null;
+  shared_device_groups: string[];
+}
+
+export interface PbrBlastRadius {
+  service_id: string;
+  items: PbrBlastRadiusItem[];
+}
+
+export interface PbrHealthSample {
+  sampled_at: string;
+  health_pct?: number | null;
+  state: PbrServiceState;
+}
+
+export interface PbrHealthHistory {
+  service_id: string;
+  samples: PbrHealthSample[];
+}
+
+export interface PbrFlowCandidate {
+  service_id?: string | null;
+  contract_dn: string;
+  src_prefix: string;
+  dst_prefix: string;
+  src_side?: string | null;
+  dst_side?: string | null;
+  used_default_route: boolean;
+}
+
+export interface PbrFlowLookupResult {
+  matched: boolean;
+  ambiguous: boolean;
+  message?: string | null;
+  candidates: PbrFlowCandidate[];
+}

@@ -40,6 +40,17 @@ from .aci import (
     AciNodeRole,
 )
 from .telco import TelcoFabricOnboardingJob, TelcoFabricType, TelcoOnboardingStatus
+from .pbr import (
+    PbrHealthSample,
+    PbrLayer,
+    PbrNode,
+    PbrNodeStatus,
+    PbrRedirectDest,
+    PbrService,
+    PbrServiceState,
+    PbrSubnet,
+    PbrThresholdAction,
+)
 from .ipmpls import (
     IpMplsDevice,
     IpMplsDeviceStatus,
@@ -87,6 +98,15 @@ __all__ = [
     "TelcoFabricOnboardingJob",
     "TelcoFabricType",
     "TelcoOnboardingStatus",
+    "PbrService",
+    "PbrServiceState",
+    "PbrNode",
+    "PbrNodeStatus",
+    "PbrLayer",
+    "PbrThresholdAction",
+    "PbrRedirectDest",
+    "PbrSubnet",
+    "PbrHealthSample",
     "IpMplsDevice",
     "IpMplsDeviceStatus",
     "IpMplsInterface",

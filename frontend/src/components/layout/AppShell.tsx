@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
+  ArrowsRightLeftIcon,
   ChartBarSquareIcon,
   ChartPieIcon,
   CloudArrowDownIcon,
@@ -40,6 +41,7 @@ const SIDEBAR_SECTIONS = [
       { label: "Fabric Summary", to: "/telco/aci/summary", icon: RectangleGroupIcon },
       { label: "Fabric Nodes", to: "/telco/aci", icon: CpuChipIcon },
       { label: "Endpoints", to: "/telco/aci/endpoints", icon: MapPinIcon },
+      { label: "PBR Monitoring", to: "/telco/aci/pbr", icon: ArrowsRightLeftIcon },
       { label: "Free Ports", to: "/telco/aci/free-ports", icon: ViewfinderCircleIcon },
       { label: "VLANs", to: "/telco/aci/vlans", icon: Squares2X2Icon }
     ]

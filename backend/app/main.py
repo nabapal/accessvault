@@ -13,6 +13,7 @@ from app.services.ipmpls_poller import build_ipmpls_poller
 from app.services.nxos_poller import build_nxos_poller
 from app.services.cgnat_poller import build_cgnat_poller
 from app.services.cpnr_poller import build_cpnr_poller
+from app.services.pbr_collector import build_pbr_poller
 from app.services.telco_collector import build_telco_poller
 
 settings = get_settings()
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
     nxos_poller = None
     cgnat_poller = None
     cpnr_poller = None
+    pbr_poller = None
 
     if settings.inventory_poller_enabled:
         inventory_poller = build_inventory_poller(
@@ -85,9 +87,20 @@ async def lifespan(app: FastAPI):  # noqa: ANN001 - FastAPI signature contract
     else:
         logger.info("CPNR poller disabled via configuration")
 
+    if settings.pbr_poller_enabled:
+        pbr_poller = build_pbr_poller(
+            session_factory=AsyncSessionLocal,
+            tick_seconds=settings.pbr_poll_tick_seconds,
+        )
+        await pbr_poller.start()
+    else:
+        logger.info("PBR poller disabled via configuration")
+
     try:
         yield
     finally:
+        if pbr_poller:
+            await pbr_poller.stop()
         if cpnr_poller:
             await cpnr_poller.stop()
         if cgnat_poller:

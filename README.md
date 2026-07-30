@@ -7,7 +7,7 @@ NetVerse AI is a secure infrastructure operations portal for multinational teams
 ## Modules
 - **AccessVault** — credential vault, group/system management, browser SSH terminal, GUI quick-launch.
 - **VM Inventory (VMware)** — live ESXi/vCenter host, VM, datastore, and network telemetry via pyVmomi; overview dashboard + VM Center workspace. Clickable **host detail** (uplink LLDP/CDP neighbor topology) and **VM detail** (VM → port group → uplink → switch connectivity topology).
-- **Cisco ACI** — fabric node inventory (leaf/spine/controller), interface EPG/L3Out bindings, cross-fabric endpoint directory (MAC/IP), VLAN inventory, and free-ports report.
+- **Cisco ACI** — fabric node inventory (leaf/spine/controller), interface EPG/L3Out bindings, cross-fabric endpoint directory (MAC/IP), VLAN inventory, free-ports report, and **PBR Flow Monitoring** (L4-L7 service-graph health, node-by-node topology with threshold/bypass states, blast radius, and IP-flow lookup).
 - **IP-MPLS Inventory** — Cisco IOS-XR/XE device onboarding (by Nautobot role), interface/VRF/neighbor/hardware collection via Netmiko + pyATS/Genie, and an interactive ISIS topology (Cytoscape) with role/location filters and fullscreen.
 - **NX-OS Inventory** — Cisco Nexus onboarding by Nautobot role (`Nexus`/`ToR`), interface/VRF/BGP/hardware collection via Netmiko + pyATS/Genie, and a CDP+LLDP topology.
 - **CGNAT Inventory** — A10 Thunder (aXAPI) and F5 BIG-IP (iControl REST) CGNAT gateways: NAT/LSN pools, IP interfaces, static routes, and health metrics (sessions, translations, port utilization, exhaustion). Manual onboarding.
