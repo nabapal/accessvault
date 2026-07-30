@@ -1,9 +1,35 @@
 # SDD: PBR Flow Monitoring — NetVerse AI integration
 
-- **Status:** Proposed (spec-first, per [[sdd-workflow]]) — ready for implementation
+- **Status:** Implemented (2026-07-29) — Phases 1–4 on branch `feat/pbr-flow-monitoring`.
 - **Owner:** sumit (reporting to naba)
 - **Type:** New feature — ACI L4–L7 / PBR observability, **read-only**
-- **Nav placement:** Sidebar → **Data Center Inventory**, a new **“PBR Monitoring”** item directly **below the “Endpoints”** tab.
+- **Nav placement:** Sidebar → **Data Center Inventory**, a new **“PBR Monitoring”** item directly **below the “Endpoints”** tab. IP-flow lookup sits directly under the fabric dashboard.
+
+> **As-built delta (validated against live Bangalore/Mumbai/Jamnagar APICs).** The
+> sections below are the design; these are the deltas discovered while implementing
+> and validating against real fabrics:
+> - **Service intersection** matches on **(contract name, graph name)** — `vnsGraphInst`
+>   exposes `ctrctDn`/`graphDn` (DNs) while `vnsLDevCtx` exposes `ctrctNameOrLbl`/
+>   `graphNameOrLbl` (names), so keys are normalised to names.
+> - **Extra APIC classes** beyond §5 were required to hydrate the prototype's detail:
+>   `vnsLIfCtx` (consumer/provider connector split + `ctxDn` VRF), `vnsRsCIfPathAtt`
+>   (leaf/path), `vnsEPpInfo` (BD-side connector VLAN), `l3extRsPathL3OutAtt` (L3Out
+>   VLAN), `l3extRsEctx` (L3Out→VRF), plus `fvIp` DN parsing (`cep-<MAC>`) for the
+>   learned MAC on redirect destinations.
+> - **Storage:** rich per-node detail is persisted as JSON (`pbr_nodes.detail`,
+>   `pbr_nodes.active_pct`) and per-service external-EPG groups as JSON
+>   (`pbr_services.consumer_epgs` / `provider_epgs`) via migration
+>   `20260729_pbr_detail_columns`, rather than a wider relational model.
+> - **Persistence is upsert, not replace:** services are keyed by (contract, graph)
+>   with a **stable id** so `pbr_health_samples` accumulate a real trend; child rows
+>   are deleted explicitly because SQLite FK cascade is not enforced in this env.
+> - **VLAN gap resolved:** consumer/provider `lif_encap` (e.g. `vlan-3634`, `vlan-3521`)
+>   and L3Out-side VRF are now derived (BD side via `vnsEPpInfo`; L3Out side via
+>   `l3extRsPathL3OutAtt`/`l3extRsEctx`). L1 shows `L1 (no VLAN)`.
+> - **EPG blocks show only scope-valid** ("External Subnets for the External EPG",
+>   `import-security`) subnets; route-control-only subnets are not listed there.
+> - **Flow-lookup** returns the full matched service (header + EPG chips + topology +
+>   node cards + consumer/provider match-basis footer), with `src_side`/`dst_side`.
 
 ## Source documents (read both before implementing)
 

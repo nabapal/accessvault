@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [
 
 ## [Unreleased]
 
+### Features
+- pbr: PBR Flow Monitoring module — read-only ACI L4-L7 service-graph visibility
+  (fabric health dashboard, searchable/sortable service browser, node-by-node
+  topology with threshold/bypass states, blast radius, durable health-trend history)
+- pbr: IP-flow lookup — maps a source/destination IP pair to its PBR service via
+  longest-prefix match on scope-valid (import-security) external subnets, with
+  same-contract-opposite-side default-route disambiguation and tie surfacing
+- pbr: per-node detail (leaf/path, per-side BD/VRF/L3Out/VLAN + redirect policy,
+  redirect destinations with configured + learned MAC, L1 redirect interfaces,
+  threshold min/max/down-action + active%) resolved from live APIC
+
 ## [0.3.0] - 2026-07-23
 
 ### Features
