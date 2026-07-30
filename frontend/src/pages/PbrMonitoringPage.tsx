@@ -225,6 +225,9 @@ export function PbrMonitoringPage() {
           )}
         </section>
 
+        {/* IP-flow lookup — directly below the fabric dashboard */}
+        {selectedFabric ? <PbrFlowLookup fabricId={selectedFabric.fabric_job_id} /> : null}
+
         {/* Service browser */}
         {selectedFabric ? (
           <section className="rounded-lg border border-brand-700 bg-brand-900/60">
@@ -407,8 +410,6 @@ export function PbrMonitoringPage() {
             </div>
           </section>
         ) : null}
-
-        {selectedFabric ? <PbrFlowLookup fabricId={selectedFabric.fabric_job_id} /> : null}
       </div>
     </AppShell>
   );
