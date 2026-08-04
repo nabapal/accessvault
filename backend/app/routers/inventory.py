@@ -112,6 +112,7 @@ def _serialize_vm(vm: InventoryVirtualMachine) -> InventoryVMRead:
         datastores=list(vm.datastores or []),
         networks=list(vm.networks or []),
         tools_status=vm.tools_status,
+        is_template=vm.is_template,
         last_seen_at=vm.last_seen_at,
         updated_at=vm.updated_at,
     )
