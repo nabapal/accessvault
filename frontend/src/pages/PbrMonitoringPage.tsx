@@ -225,8 +225,8 @@ export function PbrMonitoringPage() {
           )}
         </section>
 
-        {/* IP-flow lookup — global (all fabrics), directly below the fabric dashboard */}
-        <PbrFlowLookup />
+        {/* IP-flow lookup — defaults to all fabrics; a dropdown can scope to one. */}
+        <PbrFlowLookup fabrics={fabrics} />
 
         {/* Service browser */}
         {selectedFabric ? (

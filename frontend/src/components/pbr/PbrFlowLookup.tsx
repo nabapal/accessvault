@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { isAxiosError } from "axios";
 
 import { pbrFlowLookup } from "@/services/pbr";
-import { PbrFlowCandidate, PbrFlowLookupResult, PbrServiceState } from "@/types";
+import { PbrFabric, PbrFlowCandidate, PbrFlowLookupResult, PbrServiceState } from "@/types";
 import { PbrServiceDetailView } from "./PbrServiceDetailView";
 
 const shortName = (dn: string) => dn.split("/brc-").pop()?.split("/").pop() ?? dn;
@@ -98,9 +98,10 @@ function MatchedFlowCard({ candidate }: { candidate: PbrFlowCandidate }) {
   );
 }
 
-export function PbrFlowLookup() {
+export function PbrFlowLookup({ fabrics = [] }: { fabrics?: PbrFabric[] }) {
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
+  const [fabricId, setFabricId] = useState<string>(""); // "" = All fabrics (default)
   const [result, setResult] = useState<PbrFlowLookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -116,7 +117,7 @@ export function PbrFlowLookup() {
     setError(null);
     setLoading(true);
     try {
-      const res = await pbrFlowLookup(source.trim(), destination.trim());
+      const res = await pbrFlowLookup(source.trim(), destination.trim(), fabricId || undefined);
       setResult(res);
     } catch (err) {
       if (isAxiosError(err) && err.response?.data?.detail) {
@@ -134,10 +135,25 @@ export function PbrFlowLookup() {
     <section className="rounded-lg border border-brand-700 bg-brand-900/60 p-4">
       <h2 className="text-sm font-semibold text-slate-100">IP-flow lookup</h2>
       <p className="mt-0.5 text-xs text-slate-400">
-        Identify which PBR service handles a source → destination flow, across <b>all fabrics</b>. Longest-prefix match
-        against scope-valid (import-security) subnets; ties are surfaced, never silently resolved.
+        Identify which PBR service handles a source → destination flow. Longest-prefix match against scope-valid
+        (import-security) subnets; ties are surfaced, never silently resolved.
       </p>
       <form onSubmit={onSubmit} className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-400">
+          Fabric
+          <select
+            value={fabricId}
+            onChange={(e) => setFabricId(e.target.value)}
+            className="w-52 rounded-md border border-brand-700 bg-brand-900/70 px-2 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
+            <option value="">All fabrics</option>
+            {fabrics.map((f) => (
+              <option key={f.fabric_job_id} value={f.fabric_job_id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Source IP
           <input
