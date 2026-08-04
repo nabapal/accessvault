@@ -30,7 +30,10 @@ with the same data available through a documented API.
 - Group/system organization with search.
 
 ### 🖥️ VM Inventory (VMware)
-- Live **ESXi / vCenter** collection: hosts, virtual machines, datastores, networks.
+- Live **ESXi / vCenter** collection: hosts, virtual machines, datastores, networks
+  (traverses VM subfolders, vApps, and folder-nested datacenters).
+- **VMs and templates** are both inventoried and distinguished — a Type column
+  (VM / Template) and a Type filter (All / VMs only / Templates only).
 - Dashboard with capacity/health KPIs; VM Center workspace with filters.
 - **Host detail** (clickable) — facts, VMs, datastores, and an **Uplinks & Neighbors**
   topology built from each host's physical NIC **LLDP / CDP** switch neighbors.
