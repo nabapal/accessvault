@@ -135,7 +135,7 @@ function NodeCard({ n }: { n: PbrNode }) {
             {d.redirect_dests.map((r, i) =>
               r.active ? (
                 <div key={i}>
-                  <span className="text-slate-100">{r.ip}</span> <span className="text-slate-500">({r.learned_mac}, learned)</span>
+                  <span className="font-semibold text-emerald-300">{r.ip}</span> <span className="text-slate-500">({r.learned_mac}, learned)</span>
                 </div>
               ) : (
                 <div key={i} className="text-rose-300">
