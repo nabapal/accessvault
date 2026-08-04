@@ -152,6 +152,51 @@ def test_service_average_mixes_bypass_and_real():
     assert state == PbrServiceState.DEGRADED
 
 
+# --- Service state is a status judgement, not a static % band (SDD §9.4) ---
+
+
+def test_low_percentage_single_node_is_warning_not_down():
+    """1/4 learned (25%) with no threshold is LIVE -> WARNING, not DOWN."""
+    node = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=4, learned_dest_count=1))
+    avg, state = service_health([node])
+    assert avg == 25.0
+    assert state == PbrServiceState.DEGRADED  # warning, not down
+
+
+def test_all_nodes_down_is_down():
+    a = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=2, learned_dest_count=0))  # faulty
+    b = evaluate_node(NodeInput(layer=PbrLayer.L1, l1_interface_resolved=False))  # faulty
+    _, state = service_health([a, b])
+    assert state == PbrServiceState.DOWN
+
+
+def test_deny_threshold_breach_is_down():
+    deny = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=4, learned_dest_count=1,
+                                   threshold_enable=True, min_threshold_pct=50.0,
+                                   threshold_down_action=PbrThresholdAction.DENY))  # breached deny -> faulty
+    live = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=2, learned_dest_count=2))  # 100
+    _, state = service_health([deny, live])
+    assert state == PbrServiceState.DOWN  # a deny-breach anywhere drops the flow
+
+
+def test_permit_breach_zero_active_is_warning_not_down():
+    """A permit breach at 0% active is informational -> WARNING, never DOWN."""
+    permit = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=2, learned_dest_count=0,
+                                     threshold_enable=True, min_threshold_pct=50.0,
+                                     threshold_down_action=PbrThresholdAction.PERMIT))  # 0%, PERMIT
+    _, state = service_health([permit])
+    assert state == PbrServiceState.DEGRADED
+
+
+def test_all_healthy_is_healthy():
+    a = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=2, learned_dest_count=2))  # 100
+    bypassed = evaluate_node(NodeInput(layer=PbrLayer.L3, configured_dest_count=2, learned_dest_count=0,
+                                       threshold_enable=True, min_threshold_pct=50.0,
+                                       threshold_down_action=PbrThresholdAction.BYPASS))  # 100 by design
+    _, state = service_health([a, bypassed])
+    assert state == PbrServiceState.HEALTHY
+
+
 # --------------------------------------------------------------------------- #
 # Blast radius (SDD §5.5)
 # --------------------------------------------------------------------------- #

@@ -141,6 +141,22 @@ class PbrFlowLookupRequest(BaseModel):
 class PbrFlowCandidate(BaseModel):
     service_id: Optional[UUID] = None
     contract_dn: str
+    contract_name: Optional[str] = None
+    graph_name: Optional[str] = None
+    state: Optional[PbrServiceState] = None
+    # ACI fabric the match came from.
+    fabric_id: Optional[UUID] = None
+    fabric_name: Optional[str] = None
+    fabric_tenant: Optional[str] = None
+    # Best-matching consumer/provider external EPG + the specific subnet that matched.
+    consumer_l3out: Optional[str] = None
+    consumer_epg: Optional[str] = None
+    consumer_subnet: Optional[str] = None
+    consumer_default: bool = False
+    provider_l3out: Optional[str] = None
+    provider_epg: Optional[str] = None
+    provider_subnet: Optional[str] = None
+    provider_default: bool = False
     src_prefix: str
     dst_prefix: str
     src_side: Optional[str] = None  # "consumer" | "provider"
@@ -151,5 +167,6 @@ class PbrFlowCandidate(BaseModel):
 class PbrFlowLookupResult(BaseModel):
     matched: bool
     ambiguous: bool
+    match_count: int = 0
     message: Optional[str] = None
     candidates: List[PbrFlowCandidate] = Field(default_factory=list)

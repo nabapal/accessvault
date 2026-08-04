@@ -188,9 +188,20 @@ Per node, from `vnsSvcRedirectPol` (real per-policy values, never defaulted):
 - **L3 node:** `learned_destinations / total_configured_destinations * 100`; "learned" = present in `fvIp`.
 - **L1 node:** 100 if redirect interface ref resolves else 0.
 - **Bypassed node:** 100 ("bypassed by design").
-- **Service health:** average of node scores; a node with **zero configured destinations is
-  excluded** from the average (not counted as 0). Bands: `healthy ≥90`, `warning 50–89`,
-  `failed <50`, `unknown` when no scorable nodes (matches prototype `healthBand`).
+- **Service health %:** average of node scores; a node with **zero configured destinations
+  is excluded** from the average (not counted as 0). The % is shown as-is.
+- **Service state is a status judgement, not a static % band** (revised from the
+  prototype's `healthBand`): a partially-degraded but still-forwarding service must not
+  read as fully down.
+  - **DOWN** only when **all** scored nodes are genuinely faulty, **or** a configured
+    threshold is breached with a traffic-dropping action (**deny**). A `bypass`
+    (functioning-as-designed) or `permit` (informational) breach never makes the service
+    down — preserving the three-way rule (§9.3).
+  - **HEALTHY** only when every scored node is fully healthy (100%; a bypassed node counts
+    as 100 by design).
+  - **WARNING** otherwise (partial learn %, permit-breach, mixed) — e.g. a single node at
+    1/4 learned (25%) with no threshold is a warning, not down.
+  - **UNKNOWN** when there are no scorable nodes.
 
 ## 10. Blast radius (SDD §5.5, ports `computeBlastRadius`)
 Other services **in the same fabric** sharing a **device group** (`vnsLDevVip`) with the

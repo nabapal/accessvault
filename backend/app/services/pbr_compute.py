@@ -118,19 +118,38 @@ def evaluate_node(node: NodeInput) -> NodeHealth:
 
 
 def service_health(node_healths: Sequence[NodeHealth]) -> tuple[Optional[float], PbrServiceState]:
-    """Average of node scores; nodes with health_pct None (zero configured dests) are
-    EXCLUDED from the average rather than counted as 0 (SDD §9.4). Bands match the
-    prototype's healthBand: healthy >=90, warning/degraded 50-89, failed/down <50."""
-    scored = [h.health_pct for h in node_healths if h.health_pct is not None]
+    """Average of node scores (nodes with zero configured dests excluded, SDD §9.4)
+    plus a state that is NOT a static % band.
+
+    The state reflects real service impact, not just the average:
+      • DOWN only when **all** scored nodes are down (0%), OR a configured threshold is
+        breached with a traffic-dropping action (deny) — a genuine outage.
+      • HEALTHY only when every scored node is fully healthy (100%; a gracefully
+        bypassed node counts as 100 by design).
+      • otherwise WARNING (partial learn %, permit-breach, mixed) — a degraded but
+        still-forwarding service is a warning, not down.
+
+    A breach with `bypass` (functioning as designed) or `permit` (informational) does
+    NOT make the service down — only `deny` does. This preserves the three-way
+    threshold distinction (SDD §9.3).
+    """
+    scored = [h for h in node_healths if h.health_pct is not None]
     if not scored:
         return None, PbrServiceState.UNKNOWN
-    avg = sum(scored) / len(scored)
-    if avg >= 90.0:
-        state = PbrServiceState.HEALTHY
-    elif avg >= 50.0:
-        state = PbrServiceState.DEGRADED
-    else:
+    avg = sum(h.health_pct for h in scored) / len(scored)
+
+    # "Down" is a status judgement, not a % threshold: every scored node genuinely
+    # faulty, or a deny-breach anywhere in the chain (traffic dropped). A `permit`
+    # (PERMIT) or `bypass` (BYPASSED) node — even at 0% active — is NOT down.
+    all_faulty = all(h.live_status == PbrNodeStatus.FAULTY for h in scored)
+    deny_breach = any(h.breached and h.live_status == PbrNodeStatus.FAULTY for h in scored)
+
+    if all_faulty or deny_breach:
         state = PbrServiceState.DOWN
+    elif all(h.health_pct >= 100 for h in scored):
+        state = PbrServiceState.HEALTHY
+    else:
+        state = PbrServiceState.DEGRADED
     return avg, state
 
 

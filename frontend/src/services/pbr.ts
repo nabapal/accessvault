@@ -69,14 +69,14 @@ export const fetchPbrHealthHistory = async (
   return data;
 };
 
+// IP-flow lookup. With no fabricId it searches ALL fabrics (the address decides which
+// fabric/service); pass a fabricId to scope the search to one fabric.
 export const pbrFlowLookup = async (
-  fabricId: string,
   source: string,
-  destination: string
+  destination: string,
+  fabricId?: string
 ): Promise<PbrFlowLookupResult> => {
-  const { data } = await api.post<PbrFlowLookupResult>(`/pbr/fabrics/${fabricId}/flow-lookup`, {
-    source,
-    destination
-  });
+  const path = fabricId ? `/pbr/fabrics/${fabricId}/flow-lookup` : `/pbr/flow-lookup`;
+  const { data } = await api.post<PbrFlowLookupResult>(path, { source, destination });
   return data;
 };
