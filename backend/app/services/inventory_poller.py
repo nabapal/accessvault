@@ -231,6 +231,7 @@ async def _upsert_virtual_machines(
 		vm.datastores = sorted({name.strip() for name in vm_data.datastores if name})
 		vm.networks = sorted({name.strip() for name in vm_data.networks if name})
 		vm.tools_status = vm_data.tools_status
+		vm.is_template = vm_data.is_template
 		vm.last_seen_at = snapshot.collected_at
 		vm.updated_at = snapshot.collected_at
 		seen.add(vm.name)

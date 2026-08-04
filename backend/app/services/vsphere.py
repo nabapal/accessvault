@@ -68,6 +68,7 @@ class VsphereVirtualMachine:
     datastores: List[str]
     networks: List[str]
     tools_status: Optional[str]
+    is_template: bool = False
 
 
 @dataclass
@@ -221,6 +222,27 @@ def _host_portgroups(host_net) -> List[VsphereHostPortgroup]:
     return result
 
 
+def _iter_datacenters(folder):
+    """Recursively yield Datacenter objects under rootFolder. Datacenters can be
+    nested inside folders (e.g. a 'Datacenters' folder), so descend into folders."""
+    for entity in getattr(folder, "childEntity", []) or []:
+        if hasattr(entity, "vmFolder"):        # Datacenter
+            yield entity
+        elif hasattr(entity, "childEntity"):   # Folder -> recurse
+            yield from _iter_datacenters(entity)
+
+
+def _iter_vm_entities(folder):
+    """Recursively yield VirtualMachine entities under a datacenter vmFolder.
+    vCenter nests VMs in subfolders (and vApps); a shallow childEntity scan
+    misses them, so descend into folders/vApps and yield only VMs."""
+    for entity in getattr(folder, "childEntity", []) or []:
+        if hasattr(entity, "childEntity"):  # Folder or vApp -> recurse
+            yield from _iter_vm_entities(entity)
+        elif hasattr(entity, "summary") and getattr(entity.summary, "config", None) is not None:
+            yield entity
+
+
 def collect_inventory(
     address: str,
     port: int,
@@ -251,7 +273,7 @@ def collect_inventory(
         datastore_map: dict[str, VsphereDatastore] = {}
         network_names: Set[str] = set()
 
-        for datacenter in content.rootFolder.childEntity:
+        for datacenter in _iter_datacenters(content.rootFolder):
             host_folder = getattr(datacenter, "hostFolder", None)
             if host_folder is None:
                 continue
@@ -317,10 +339,7 @@ def collect_inventory(
             vm_folder = getattr(datacenter, "vmFolder", None)
             if vm_folder is None:
                 continue
-            for entity in vm_folder.childEntity:
-                # Skip folders/other entities
-                if not hasattr(entity, "summary"):
-                    continue
+            for entity in _iter_vm_entities(vm_folder):
                 summary = entity.summary
                 quickstats = summary.quickStats
                 storage = getattr(summary, "storage", None)
@@ -347,6 +366,7 @@ def collect_inventory(
                         datastores=vm_datastores,
                         networks=vm_networks,
                         tools_status=guest.toolsRunningStatus if guest else None,
+                        is_template=bool(getattr(summary.config, "template", False)) if summary.config else False,
                     )
                 )
 

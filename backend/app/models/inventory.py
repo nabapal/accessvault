@@ -166,6 +166,7 @@ class InventoryVirtualMachine(Base):
     datastores = Column(JSON, nullable=False, default=list)
     networks = Column(JSON, nullable=False, default=list)
     tools_status = Column(String, nullable=True)
+    is_template = Column(Boolean, nullable=False, default=False)
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

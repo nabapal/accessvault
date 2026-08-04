@@ -33,6 +33,7 @@ const powerStateBadge: Record<InventoryPowerState, string> = {
 };
 
 type PowerFilter = "all" | InventoryPowerState;
+type TypeFilter = "all" | "vm" | "template";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
@@ -71,6 +72,7 @@ export function VirtualMachinesPage() {
   const [endpointFilter, setEndpointFilter] = useState<string>("all");
   const [hostFilter, setHostFilter] = useState<string>("all");
   const [powerFilter, setPowerFilter] = useState<PowerFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
@@ -113,7 +115,7 @@ export function VirtualMachinesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [endpointFilter, hostFilter, powerFilter, searchTerm]);
+  }, [endpointFilter, hostFilter, powerFilter, typeFilter, searchTerm]);
 
   const filteredVirtualMachines = useMemo(() => {
     return virtualMachines.filter((vm) => {
@@ -124,6 +126,12 @@ export function VirtualMachinesPage() {
         return false;
       }
       if (powerFilter !== "all" && vm.power_state !== powerFilter) {
+        return false;
+      }
+      if (typeFilter === "template" && !vm.is_template) {
+        return false;
+      }
+      if (typeFilter === "vm" && vm.is_template) {
         return false;
       }
       if (searchTerm) {
@@ -145,7 +153,7 @@ export function VirtualMachinesPage() {
       }
       return true;
     });
-  }, [endpointFilter, hostFilter, powerFilter, searchTerm, virtualMachines]);
+  }, [endpointFilter, hostFilter, powerFilter, typeFilter, searchTerm, virtualMachines]);
 
   const totalVmCount = filteredVirtualMachines.length;
   const totalPages = totalVmCount > 0 ? Math.ceil(totalVmCount / pageSize) : 1;
@@ -214,6 +222,7 @@ export function VirtualMachinesPage() {
       poweredOn,
       poweredOff,
       suspended,
+      templates: filteredVirtualMachines.filter((vm) => vm.is_template).length,
       avgCpu: average(cpuSamples),
       avgMemory: average(memorySamples),
       avgStorage: average(storageSamples)
@@ -252,7 +261,7 @@ export function VirtualMachinesPage() {
             <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-400">Total VMs</p>
               <p className="mt-2 text-2xl font-semibold text-primary-100">{summary.total || "--"}</p>
-              <p className="text-xs text-slate-500">Matching current filters</p>
+              <p className="text-xs text-slate-500">incl. {summary.templates} template{summary.templates === 1 ? "" : "s"}</p>
             </div>
             <div className="rounded-md border border-brand-800 bg-brand-900/70 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-400">Power Mix</p>
@@ -307,6 +316,21 @@ export function VirtualMachinesPage() {
                   <option value="unknown">Unknown</option>
                 </select>
               </div>
+              <div className="md:w-40">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="vm-type-filter">
+                  Type
+                </label>
+                <select
+                  id="vm-type-filter"
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.currentTarget.value as TypeFilter)}
+                  className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/80 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                >
+                  <option value="all">All</option>
+                  <option value="vm">VMs only</option>
+                  <option value="template">Templates only</option>
+                </select>
+              </div>
               <div className="md:w-52">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400" htmlFor="vm-endpoint-filter">
                   Collector
@@ -351,6 +375,7 @@ export function VirtualMachinesPage() {
                 setEndpointFilter("all");
                 setHostFilter("all");
                 setPowerFilter("all");
+                setTypeFilter("all");
                 setSearchTerm("");
               }}
             >
@@ -384,6 +409,7 @@ export function VirtualMachinesPage() {
                 <thead className="text-xs uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 text-left">VM</th>
+                    <th className="px-3 text-left">Type</th>
                     <th className="px-3 text-left">Host</th>
                     <th className="px-3 text-left">Collector</th>
                     <th className="px-3 text-left">Power</th>
@@ -410,6 +436,11 @@ export function VirtualMachinesPage() {
                         <td className="px-3 py-3 align-top">
                           <div className="text-sm font-semibold text-slate-100">{vm.name}</div>
                           <div className="text-xs text-slate-400">{vm.guest_os ?? "Unknown OS"}</div>
+                        </td>
+                        <td className="px-3 py-3 align-top">
+                          <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-medium ${vm.is_template ? "border-violet-500/50 bg-violet-500/15 text-violet-200" : "border-slate-500/50 bg-slate-500/10 text-slate-300"}`}>
+                            {vm.is_template ? "Template" : "VM"}
+                          </span>
                         </td>
                         <td className="px-3 py-3 align-top text-xs text-slate-300">
                           <div>{vm.host_name ?? "Unassigned"}</div>

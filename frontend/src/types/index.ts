@@ -130,6 +130,7 @@ export interface InventoryVirtualMachine {
   datastores: string[];
   networks: string[];
   tools_status?: string | null;
+  is_template?: boolean;
   last_seen_at?: string | null;
   updated_at: string;
 }

@@ -146,6 +146,7 @@ class InventoryVMRead(BaseModel):
     datastores: List[str]
     networks: List[str]
     tools_status: Optional[str]
+    is_template: bool = False
     last_seen_at: Optional[datetime]
     updated_at: datetime
 
