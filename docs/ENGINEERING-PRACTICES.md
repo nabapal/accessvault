@@ -7,8 +7,13 @@ Conventions for version control, change control, docs, releases, and deploys.
   `refactor` / `chore` / `perf`. This drives the auto-generated CHANGELOG.
 - **One logical change per commit**; end messages with the
   `Co-Authored-By: Claude Opus 4.8 …` trailer when AI-assisted.
-- **`master` is deployable.** Prefer a short-lived branch + review for larger
-  work; `git pull --rebase` before pushing (multiple sessions push concurrently).
+- **Always use a pull request — never commit directly to `master`.** Create a
+  short-lived branch (`feat/…`, `fix/…`, `docs/…`), push it, and open a PR
+  (`gh pr create`); `master` is updated only by merging the reviewed PR and
+  stays deployable. `git pull --rebase` before pushing (multiple sessions push
+  concurrently). See [CONTRIBUTING.md](../CONTRIBUTING.md).
+- **Update the docs in the same PR as the code** — README, PRODUCT-OVERVIEW, the
+  feature SDD in `docs/specs/`, API.md + `openapi.json`, and CHANGELOG — not later.
 - **Never commit secrets.** `.env*`, local DBs, logs, venvs are gitignored; only
   `*.env.example` templates are tracked. Delete plaintext credential files
   (e.g. `cpnr_vms.json`) after use — creds are stored Fernet-encrypted in the DB.

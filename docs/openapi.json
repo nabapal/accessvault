@@ -4617,6 +4617,412 @@
         ]
       }
     },
+    "/api/v1/pbr/fabrics": {
+      "get": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "List Fabrics",
+        "operationId": "list_fabrics_api_v1_pbr_fabrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PbrFabricRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Fabrics Api V1 Pbr Fabrics Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/pbr/fabrics/{fabric_id}/services": {
+      "get": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "List Services",
+        "operationId": "list_services_api_v1_pbr_fabrics__fabric_id__services_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "fabric_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Fabric Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 25,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PbrServiceState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(health|name|state)$",
+              "default": "health",
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbrServicePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pbr/services/{service_id}": {
+      "get": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "Get Service",
+        "operationId": "get_service_api_v1_pbr_services__service_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "service_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Service Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbrServiceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pbr/services/{service_id}/blast-radius": {
+      "get": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "Get Blast Radius",
+        "operationId": "get_blast_radius_api_v1_pbr_services__service_id__blast_radius_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "service_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Service Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbrBlastRadius"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pbr/services/{service_id}/health-history": {
+      "get": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "Get Health History",
+        "operationId": "get_health_history_api_v1_pbr_services__service_id__health_history_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "service_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Service Id"
+            }
+          },
+          {
+            "name": "window_hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 720,
+              "minimum": 1,
+              "default": 24,
+              "title": "Window Hours"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbrHealthHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pbr/flow-lookup": {
+      "post": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "Flow Lookup Global",
+        "description": "IP-flow lookup across ALL fabrics (the address decides which fabric/service).",
+        "operationId": "flow_lookup_global_api_v1_pbr_flow_lookup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PbrFlowLookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbrFlowLookupResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/pbr/fabrics/{fabric_id}/flow-lookup": {
+      "post": {
+        "tags": [
+          "pbr"
+        ],
+        "summary": "Flow Lookup",
+        "description": "IP-flow lookup scoped to a single fabric (kept for back-compat).",
+        "operationId": "flow_lookup_api_v1_pbr_fabrics__fabric_id__flow_lookup_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "fabric_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Fabric Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PbrFlowLookupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PbrFlowLookupResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/systems/": {
       "get": {
         "tags": [
@@ -10914,6 +11320,11 @@
             ],
             "title": "Tools Status"
           },
+          "is_template": {
+            "type": "boolean",
+            "title": "Is Template",
+            "default": false
+          },
           "last_seen_at": {
             "anyOf": [
               {
@@ -13537,6 +13948,1188 @@
           "name"
         ],
         "title": "NxosVrfRead"
+      },
+      "PbrBlastRadius": {
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Service Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PbrBlastRadiusItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_id"
+        ],
+        "title": "PbrBlastRadius"
+      },
+      "PbrBlastRadiusItem": {
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Service Id"
+          },
+          "contract_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Name"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PbrServiceState"
+          },
+          "health_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Pct"
+          },
+          "shared_device_groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Shared Device Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_id",
+          "contract_name",
+          "graph_name",
+          "state",
+          "health_pct"
+        ],
+        "title": "PbrBlastRadiusItem"
+      },
+      "PbrFabricRead": {
+        "properties": {
+          "fabric_job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Fabric Job Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "target_host": {
+            "type": "string",
+            "title": "Target Host"
+          },
+          "service_count": {
+            "type": "integer",
+            "title": "Service Count"
+          },
+          "healthy_count": {
+            "type": "integer",
+            "title": "Healthy Count"
+          },
+          "degraded_count": {
+            "type": "integer",
+            "title": "Degraded Count"
+          },
+          "down_count": {
+            "type": "integer",
+            "title": "Down Count"
+          },
+          "unknown_count": {
+            "type": "integer",
+            "title": "Unknown Count"
+          },
+          "avg_health_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Pct"
+          },
+          "stale_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale As Of"
+          },
+          "is_stale": {
+            "type": "boolean",
+            "title": "Is Stale",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "fabric_job_id",
+          "name",
+          "target_host",
+          "service_count",
+          "healthy_count",
+          "degraded_count",
+          "down_count",
+          "unknown_count",
+          "avg_health_pct"
+        ],
+        "title": "PbrFabricRead"
+      },
+      "PbrFlowCandidate": {
+        "properties": {
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          },
+          "contract_dn": {
+            "type": "string",
+            "title": "Contract Dn"
+          },
+          "contract_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Name"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PbrServiceState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fabric_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fabric Id"
+          },
+          "fabric_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fabric Name"
+          },
+          "fabric_tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fabric Tenant"
+          },
+          "consumer_l3out": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer L3Out"
+          },
+          "consumer_epg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Epg"
+          },
+          "consumer_subnet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Subnet"
+          },
+          "consumer_default": {
+            "type": "boolean",
+            "title": "Consumer Default",
+            "default": false
+          },
+          "provider_l3out": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider L3Out"
+          },
+          "provider_epg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Epg"
+          },
+          "provider_subnet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Subnet"
+          },
+          "provider_default": {
+            "type": "boolean",
+            "title": "Provider Default",
+            "default": false
+          },
+          "src_prefix": {
+            "type": "string",
+            "title": "Src Prefix"
+          },
+          "dst_prefix": {
+            "type": "string",
+            "title": "Dst Prefix"
+          },
+          "src_side": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src Side"
+          },
+          "dst_side": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst Side"
+          },
+          "used_default_route": {
+            "type": "boolean",
+            "title": "Used Default Route"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contract_dn",
+          "src_prefix",
+          "dst_prefix",
+          "used_default_route"
+        ],
+        "title": "PbrFlowCandidate"
+      },
+      "PbrFlowLookupRequest": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Single source host IP (IPv4 or IPv6, no CIDR)."
+          },
+          "destination": {
+            "type": "string",
+            "title": "Destination",
+            "description": "Single destination host IP (IPv4 or IPv6, no CIDR)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "destination"
+        ],
+        "title": "PbrFlowLookupRequest"
+      },
+      "PbrFlowLookupResult": {
+        "properties": {
+          "matched": {
+            "type": "boolean",
+            "title": "Matched"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "title": "Ambiguous"
+          },
+          "match_count": {
+            "type": "integer",
+            "title": "Match Count",
+            "default": 0
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PbrFlowCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matched",
+          "ambiguous"
+        ],
+        "title": "PbrFlowLookupResult"
+      },
+      "PbrHealthHistory": {
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Service Id"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/PbrHealthSampleRead"
+            },
+            "type": "array",
+            "title": "Samples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_id"
+        ],
+        "title": "PbrHealthHistory"
+      },
+      "PbrHealthSampleRead": {
+        "properties": {
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sampled At"
+          },
+          "health_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Pct"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PbrServiceState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sampled_at",
+          "health_pct",
+          "state"
+        ],
+        "title": "PbrHealthSampleRead"
+      },
+      "PbrLayer": {
+        "type": "string",
+        "enum": [
+          "L1",
+          "L3",
+          "unknown"
+        ],
+        "title": "PbrLayer",
+        "description": "Service-graph node insertion layer."
+      },
+      "PbrNodeRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "distinguished_name": {
+            "type": "string",
+            "title": "Distinguished Name"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "function_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Function Type"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/PbrLayer"
+          },
+          "device_group_dn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Group Dn"
+          },
+          "device_group_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Group Name"
+          },
+          "leaf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaf"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "consumer_bd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Bd"
+          },
+          "consumer_vrf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Vrf"
+          },
+          "consumer_vlan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Vlan"
+          },
+          "provider_bd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Bd"
+          },
+          "provider_vrf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Vrf"
+          },
+          "provider_vlan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Vlan"
+          },
+          "redirect_policy_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Redirect Policy Names"
+          },
+          "threshold_enable": {
+            "type": "boolean",
+            "title": "Threshold Enable"
+          },
+          "min_threshold_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Threshold Pct"
+          },
+          "max_threshold_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Threshold Pct"
+          },
+          "threshold_down_action": {
+            "$ref": "#/components/schemas/PbrThresholdAction"
+          },
+          "configured_dest_count": {
+            "type": "integer",
+            "title": "Configured Dest Count"
+          },
+          "learned_dest_count": {
+            "type": "integer",
+            "title": "Learned Dest Count"
+          },
+          "health_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Pct"
+          },
+          "live_status": {
+            "$ref": "#/components/schemas/PbrNodeStatus"
+          },
+          "bypassed": {
+            "type": "boolean",
+            "title": "Bypassed"
+          },
+          "active_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Pct"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          },
+          "redirect_dests": {
+            "items": {
+              "$ref": "#/components/schemas/PbrRedirectDestRead"
+            },
+            "type": "array",
+            "title": "Redirect Dests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "distinguished_name",
+          "name",
+          "function_type",
+          "layer",
+          "device_group_dn",
+          "device_group_name",
+          "leaf",
+          "path",
+          "consumer_bd",
+          "consumer_vrf",
+          "consumer_vlan",
+          "provider_bd",
+          "provider_vrf",
+          "provider_vlan",
+          "threshold_enable",
+          "min_threshold_pct",
+          "max_threshold_pct",
+          "threshold_down_action",
+          "configured_dest_count",
+          "learned_dest_count",
+          "health_pct",
+          "live_status",
+          "bypassed"
+        ],
+        "title": "PbrNodeRead"
+      },
+      "PbrNodeStatus": {
+        "type": "string",
+        "enum": [
+          "live",
+          "faulty",
+          "bypassed",
+          "permit",
+          "unknown"
+        ],
+        "title": "PbrNodeStatus",
+        "description": "Computed live status of a service-graph node."
+      },
+      "PbrRedirectDestRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mac"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/PbrLayer"
+          },
+          "l1_interface_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L1 Interface Ref"
+          },
+          "resolved": {
+            "type": "boolean",
+            "title": "Resolved"
+          },
+          "learned": {
+            "type": "boolean",
+            "title": "Learned"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ip",
+          "mac",
+          "layer",
+          "l1_interface_ref",
+          "resolved",
+          "learned"
+        ],
+        "title": "PbrRedirectDestRead"
+      },
+      "PbrServiceDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "fabric_job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Fabric Job Id"
+          },
+          "contract_dn": {
+            "type": "string",
+            "title": "Contract Dn"
+          },
+          "graph_dn": {
+            "type": "string",
+            "title": "Graph Dn"
+          },
+          "contract_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Name"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "consumer_epg_dn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Epg Dn"
+          },
+          "provider_epg_dn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Epg Dn"
+          },
+          "consumer_epg_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Epg Name"
+          },
+          "provider_epg_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Epg Name"
+          },
+          "health_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Pct"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PbrServiceState"
+          },
+          "stale_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale As Of"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "consumer_epgs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Consumer Epgs"
+          },
+          "provider_epgs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Provider Epgs"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PbrNodeRead"
+            },
+            "type": "array",
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fabric_job_id",
+          "contract_dn",
+          "graph_dn",
+          "contract_name",
+          "graph_name",
+          "consumer_epg_dn",
+          "provider_epg_dn",
+          "consumer_epg_name",
+          "provider_epg_name",
+          "health_pct",
+          "state",
+          "stale_as_of",
+          "updated_at"
+        ],
+        "title": "PbrServiceDetail"
+      },
+      "PbrServicePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PbrServiceRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "has_next": {
+            "type": "boolean",
+            "title": "Has Next"
+          },
+          "has_prev": {
+            "type": "boolean",
+            "title": "Has Prev"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "has_next",
+          "has_prev"
+        ],
+        "title": "PbrServicePage"
+      },
+      "PbrServiceRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "fabric_job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Fabric Job Id"
+          },
+          "contract_dn": {
+            "type": "string",
+            "title": "Contract Dn"
+          },
+          "graph_dn": {
+            "type": "string",
+            "title": "Graph Dn"
+          },
+          "contract_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Name"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "consumer_epg_dn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Epg Dn"
+          },
+          "provider_epg_dn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Epg Dn"
+          },
+          "consumer_epg_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumer Epg Name"
+          },
+          "provider_epg_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Epg Name"
+          },
+          "health_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Pct"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PbrServiceState"
+          },
+          "stale_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale As Of"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fabric_job_id",
+          "contract_dn",
+          "graph_dn",
+          "contract_name",
+          "graph_name",
+          "consumer_epg_dn",
+          "provider_epg_dn",
+          "consumer_epg_name",
+          "provider_epg_name",
+          "health_pct",
+          "state",
+          "stale_as_of",
+          "updated_at"
+        ],
+        "title": "PbrServiceRead"
+      },
+      "PbrServiceState": {
+        "type": "string",
+        "enum": [
+          "healthy",
+          "degraded",
+          "down",
+          "unknown"
+        ],
+        "title": "PbrServiceState"
+      },
+      "PbrThresholdAction": {
+        "type": "string",
+        "enum": [
+          "bypass",
+          "permit",
+          "deny",
+          "unknown"
+        ],
+        "title": "PbrThresholdAction",
+        "description": "`thresholdDownAction` on vnsSvcRedirectPol. THREE distinct outcomes \u2014 see SDD \u00a79.3.\n\nbypass and permit are NOT the same; conflating them (as the v19 prototype's\nnodeBypassState still does) inflated a real 0%-active node to a fake 100% score."
       },
       "SystemCreate": {
         "properties": {
