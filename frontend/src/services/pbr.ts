@@ -69,14 +69,11 @@ export const fetchPbrHealthHistory = async (
   return data;
 };
 
+// Global IP-flow lookup — the address decides which fabric/service (searches all fabrics).
 export const pbrFlowLookup = async (
-  fabricId: string,
   source: string,
   destination: string
 ): Promise<PbrFlowLookupResult> => {
-  const { data } = await api.post<PbrFlowLookupResult>(`/pbr/fabrics/${fabricId}/flow-lookup`, {
-    source,
-    destination
-  });
+  const { data } = await api.post<PbrFlowLookupResult>(`/pbr/flow-lookup`, { source, destination });
   return data;
 };

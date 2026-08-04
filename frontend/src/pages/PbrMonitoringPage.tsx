@@ -225,8 +225,8 @@ export function PbrMonitoringPage() {
           )}
         </section>
 
-        {/* IP-flow lookup — directly below the fabric dashboard */}
-        {selectedFabric ? <PbrFlowLookup fabricId={selectedFabric.fabric_job_id} /> : null}
+        {/* IP-flow lookup — global (all fabrics), directly below the fabric dashboard */}
+        <PbrFlowLookup />
 
         {/* Service browser */}
         {selectedFabric ? (

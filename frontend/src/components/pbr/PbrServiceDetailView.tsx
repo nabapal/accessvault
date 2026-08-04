@@ -150,7 +150,7 @@ function NodeCard({ n }: { n: PbrNode }) {
   );
 }
 
-export function PbrServiceDetailView({ serviceId }: { serviceId: string }) {
+export function PbrServiceDetailView({ serviceId, hideEpgBlock }: { serviceId: string; hideEpgBlock?: boolean }) {
   const [detail, setDetail] = useState<PbrServiceDetail | null>(null);
   const [blast, setBlast] = useState<PbrBlastRadius | null>(null);
   const [history, setHistory] = useState<PbrHealthHistory | null>(null);
@@ -192,11 +192,13 @@ export function PbrServiceDetailView({ serviceId }: { serviceId: string }) {
 
   return (
     <div className="space-y-5 border-t border-brand-800/70 bg-brand-950/30 px-4 py-4">
-      {/* External EPGs + subnets */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <EpgBlock title="Consumer External EPG(s)" groups={detail.consumer_epgs} accent="#4fd1c5" />
-        <EpgBlock title="Provider External EPG(s)" groups={detail.provider_epgs} accent="#fbbf24" />
-      </div>
+      {/* External EPGs + subnets (hidden in flow-lookup, which shows only the matched EPG) */}
+      {hideEpgBlock ? null : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <EpgBlock title="Consumer External EPG(s)" groups={detail.consumer_epgs} accent="#4fd1c5" />
+          <EpgBlock title="Provider External EPG(s)" groups={detail.provider_epgs} accent="#fbbf24" />
+        </div>
+      )}
 
       {/* Health breakdown + trend */}
       <div>

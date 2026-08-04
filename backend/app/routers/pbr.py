@@ -218,6 +218,127 @@ async def get_health_history(
     )
 
 
+_DEFAULT_ROUTES = {"0.0.0.0/0", "::/0"}
+
+
+def _seg_after(dn: Optional[str], token: str) -> Optional[str]:
+    if not dn:
+        return None
+    for seg in dn.split("/"):
+        if seg.startswith(token):
+            return seg[len(token):]
+    return None
+
+
+def _epg_of(epg_dn: Optional[str]) -> Optional[str]:
+    if not epg_dn:
+        return None
+    tail = epg_dn.rstrip("/").split("/")[-1]
+    for p in ("instP-", "epg-"):
+        if tail.startswith(p):
+            return tail[len(p):]
+    return tail
+
+
+async def _run_flow_lookup(
+    db: AsyncSession, source: str, destination: str, fabric_id: Optional[UUID]
+) -> PbrFlowLookupResult:
+    """Shared IP-flow lookup. Searches ALL fabrics when fabric_id is None. Input is
+    validated SERVER-SIDE (SDD §5.3). Returns the best-matching consumer/provider EPG +
+    subnet per candidate, and the fabric each match came from."""
+    stmt = select(PbrSubnet)
+    if fabric_id is not None:
+        stmt = stmt.where(PbrSubnet.fabric_job_id == fabric_id)
+    subnets = (await db.execute(stmt)).scalars().all()
+
+    # Batch-load the services these subnets belong to (+ their fabrics) for enrichment.
+    svc_ids = {sn.service_id for sn in subnets if sn.service_id}
+    services = {}
+    if svc_ids:
+        services = {
+            s.id: s
+            for s in (await db.execute(select(PbrService).where(PbrService.id.in_(svc_ids)))).scalars().all()
+        }
+    job_ids = {s.fabric_job_id for s in services.values()}
+    jobs = {}
+    if job_ids:
+        jobs = {
+            j.id: j
+            for j in (
+                await db.execute(select(TelcoFabricOnboardingJob).where(TelcoFabricOnboardingJob.id.in_(job_ids)))
+            ).scalars().all()
+        }
+
+    subnet_inputs: List[compute.SubnetInput] = []
+    for sn in subnets:
+        svc = services.get(sn.service_id) if sn.service_id else None
+        subnet_inputs.append(
+            compute.SubnetInput(
+                prefix=sn.prefix,
+                scope_valid=sn.scope_valid,
+                is_default_route=sn.is_default_route,
+                service_id=str(sn.service_id) if sn.service_id else "",
+                contract_dn=svc.contract_dn if svc else "",
+                side=sn.side or "",
+                epg_dn=sn.epg_dn,
+            )
+        )
+
+    try:
+        result = compute.match_flow(source, destination, subnet_inputs)
+    except compute.FlowLookupError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    candidates: List[PbrFlowCandidate] = []
+    for c in result.candidates:
+        svc = services.get(UUID(c.service_id)) if c.service_id else None
+        job = jobs.get(svc.fabric_job_id) if svc else None
+        cons = c.src_subnet if c.src_subnet.side == "consumer" else (c.dst_subnet if c.dst_subnet.side == "consumer" else None)
+        prov = c.src_subnet if c.src_subnet.side == "provider" else (c.dst_subnet if c.dst_subnet.side == "provider" else None)
+        candidates.append(
+            PbrFlowCandidate(
+                service_id=UUID(c.service_id) if c.service_id else None,
+                contract_dn=c.contract_dn,
+                contract_name=svc.contract_name if svc else None,
+                graph_name=svc.graph_name if svc else None,
+                state=svc.state if svc else None,
+                fabric_id=svc.fabric_job_id if svc else None,
+                fabric_name=job.name if job else None,
+                fabric_tenant=_seg_after(svc.contract_dn, "tn-") if svc else None,
+                consumer_l3out=_seg_after(cons.epg_dn, "out-") if cons else None,
+                consumer_epg=_epg_of(cons.epg_dn) if cons else None,
+                consumer_subnet=cons.prefix if cons else None,
+                consumer_default=(cons.prefix in _DEFAULT_ROUTES) if cons else False,
+                provider_l3out=_seg_after(prov.epg_dn, "out-") if prov else None,
+                provider_epg=_epg_of(prov.epg_dn) if prov else None,
+                provider_subnet=prov.prefix if prov else None,
+                provider_default=(prov.prefix in _DEFAULT_ROUTES) if prov else False,
+                src_prefix=c.src_subnet.prefix,
+                dst_prefix=c.dst_subnet.prefix,
+                src_side=c.src_subnet.side or None,
+                dst_side=c.dst_subnet.side or None,
+                used_default_route=c.used_default_route,
+            )
+        )
+    return PbrFlowLookupResult(
+        matched=bool(candidates),
+        ambiguous=result.ambiguous,
+        match_count=len(candidates),
+        message=result.message,
+        candidates=candidates,
+    )
+
+
+@router.post("/flow-lookup", response_model=PbrFlowLookupResult)
+async def flow_lookup_global(
+    payload: PbrFlowLookupRequest,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> PbrFlowLookupResult:
+    """IP-flow lookup across ALL fabrics (the address decides which fabric/service)."""
+    return await _run_flow_lookup(db, payload.source, payload.destination, None)
+
+
 @router.post("/fabrics/{fabric_id}/flow-lookup", response_model=PbrFlowLookupResult)
 async def flow_lookup(
     fabric_id: UUID,
@@ -225,54 +346,5 @@ async def flow_lookup(
     db: AsyncSession = Depends(get_db),
     _: object = Depends(get_current_user),
 ) -> PbrFlowLookupResult:
-    """IP-flow lookup (SDD §5.3). Input is validated SERVER-SIDE here (as well as in the UI)."""
-    subnets = (
-        await db.execute(select(PbrSubnet).where(PbrSubnet.fabric_job_id == fabric_id))
-    ).scalars().all()
-
-    svc_lookup = {}
-    subnet_inputs: List[compute.SubnetInput] = []
-    for sn in subnets:
-        contract_dn = ""
-        if sn.service_id is not None:
-            if sn.service_id not in svc_lookup:
-                svc_lookup[sn.service_id] = (
-                    await db.execute(select(PbrService).where(PbrService.id == sn.service_id))
-                ).scalar_one_or_none()
-            svc = svc_lookup[sn.service_id]
-            contract_dn = svc.contract_dn if svc else ""
-        subnet_inputs.append(
-            compute.SubnetInput(
-                prefix=sn.prefix,
-                scope_valid=sn.scope_valid,
-                is_default_route=sn.is_default_route,
-                service_id=str(sn.service_id) if sn.service_id else "",
-                contract_dn=contract_dn,
-                side=sn.side or "",
-                epg_dn=sn.epg_dn,
-            )
-        )
-
-    try:
-        result = compute.match_flow(payload.source, payload.destination, subnet_inputs)
-    except compute.FlowLookupError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-
-    candidates = [
-        PbrFlowCandidate(
-            service_id=UUID(c.service_id) if c.service_id else None,
-            contract_dn=c.contract_dn,
-            src_prefix=c.src_subnet.prefix,
-            dst_prefix=c.dst_subnet.prefix,
-            src_side=c.src_subnet.side or None,
-            dst_side=c.dst_subnet.side or None,
-            used_default_route=c.used_default_route,
-        )
-        for c in result.candidates
-    ]
-    return PbrFlowLookupResult(
-        matched=bool(candidates),
-        ambiguous=result.ambiguous,
-        message=result.message,
-        candidates=candidates,
-    )
+    """IP-flow lookup scoped to a single fabric (kept for back-compat)."""
+    return await _run_flow_lookup(db, payload.source, payload.destination, fabric_id)

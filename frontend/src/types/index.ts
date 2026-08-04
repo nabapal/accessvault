@@ -1320,6 +1320,20 @@ export interface PbrHealthHistory {
 export interface PbrFlowCandidate {
   service_id?: string | null;
   contract_dn: string;
+  contract_name?: string | null;
+  graph_name?: string | null;
+  state?: PbrServiceState | null;
+  fabric_id?: string | null;
+  fabric_name?: string | null;
+  fabric_tenant?: string | null;
+  consumer_l3out?: string | null;
+  consumer_epg?: string | null;
+  consumer_subnet?: string | null;
+  consumer_default: boolean;
+  provider_l3out?: string | null;
+  provider_epg?: string | null;
+  provider_subnet?: string | null;
+  provider_default: boolean;
   src_prefix: string;
   dst_prefix: string;
   src_side?: string | null;
@@ -1330,6 +1344,7 @@ export interface PbrFlowCandidate {
 export interface PbrFlowLookupResult {
   matched: boolean;
   ambiguous: boolean;
+  match_count: number;
   message?: string | null;
   candidates: PbrFlowCandidate[];
 }
