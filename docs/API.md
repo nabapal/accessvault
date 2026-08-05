@@ -61,6 +61,21 @@ All read-only; auth required. Populated by the PBR poller (no live APIC call per
 | GET | `/api/v1/pbr/services/{service_id}/health-history` | Health-trend samples (`window_hours`) |
 | POST | `/api/v1/pbr/fabrics/{fabric_id}/flow-lookup` | Body `{source, destination}` → matched service(s) + match basis (server-side validated) |
 
+## Fabric onboarding (Telco: ACI / NX-OS) endpoints
+
+Admin-managed. List/detail/create require auth; mutating actions require admin.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/telco/onboarding/jobs` | List onboarded fabrics |
+| POST | `/api/v1/telco/onboarding/jobs` | Onboard a fabric (admin; optional `auto_validate`) |
+| GET | `/api/v1/telco/onboarding/jobs/{id}` | Fabric detail |
+| PATCH | `/api/v1/telco/onboarding/jobs/{id}` | **Edit** settings (host/port/username/verify/poll interval/notes); non-empty `password` rotates the credential (admin) |
+| DELETE | `/api/v1/telco/onboarding/jobs/{id}` | **Delete** the fabric + stop polling (admin) |
+| POST | `/api/v1/telco/onboarding/jobs/{id}/test` | **Test connection** — lightweight auth/reachability probe, persists nothing → `{success, message, latency_ms, checked_at}` (admin) |
+| POST | `/api/v1/telco/onboarding/jobs/{id}/sync` | **Sync now** — full refresh: base inventory **and** (ACI) PBR → `{success, message, snapshot, pbr_service_count, job}` (admin) |
+| POST | `/api/v1/telco/onboarding/jobs/{id}/validate` | Onboarding validation (base inventory only; retained for auto-validate) (admin) |
+
 ## Regenerating the snapshot
 `docs/openapi.json` is exported from the app; refresh it when the API changes
 (ideally at release time):
