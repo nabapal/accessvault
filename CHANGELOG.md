@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [
 ## [Unreleased]
 
 ### Features
+- telco: Fabric Onboarding admin parity — Edit, Test connection, Sync now, Delete
+  (matches CGNAT/NX-OS/IP-MPLS tabs). `PATCH/test/sync` endpoints added; **Sync now**
+  on an ACI fabric refreshes base inventory **and** PBR in one action; **Test
+  connection** is a lightweight auth probe that persists nothing
 - pbr: PBR Flow Monitoring module — read-only ACI L4-L7 service-graph visibility
   (fabric health dashboard, searchable/sortable service browser, node-by-node
   topology with threshold/bypass states, blast radius, durable health-trend history)

@@ -30,9 +30,12 @@ from .aci import (
     AciFabricSummaryFabric,
 )
 from .telco import (
+    TelcoConnectivityResult,
     TelcoOnboardingJobCreate,
     TelcoOnboardingJobRead,
+    TelcoOnboardingJobUpdate,
     TelcoOnboardingValidationRequest,
+    TelcoSyncResult,
 )
 from .ipmpls import (
     IpMplsDeviceCreate,
@@ -192,9 +195,12 @@ __all__ = [
     "AciFabricNodePage",
     "AciFabricSummaryFabric",
     "AciFabricSummaryDetails",
+    "TelcoConnectivityResult",
     "TelcoOnboardingJobCreate",
     "TelcoOnboardingJobRead",
+    "TelcoOnboardingJobUpdate",
     "TelcoOnboardingValidationRequest",
+    "TelcoSyncResult",
     "PbrServiceRead",
     "PbrServiceDetail",
     "PbrServicePage",

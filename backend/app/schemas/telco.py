@@ -46,5 +46,38 @@ class TelcoOnboardingValidationRequest(BaseModel):
     password: Optional[str] = None
 
 
+class TelcoOnboardingJobUpdate(BaseModel):
+    """Partial update for an onboarded fabric. All fields optional.
+
+    A non-empty ``password`` rotates the stored credential; omitting it (or
+    sending an empty/whitespace string) keeps the existing secret.
+    """
+
+    name: Optional[str] = None
+    target_host: Optional[str] = None
+    port: Optional[int] = Field(default=None, ge=1, le=65535)
+    username: Optional[str] = None
+    verify_ssl: Optional[bool] = None
+    description: Optional[str] = None
+    connection_params: Optional[Dict[str, Any]] = None
+    poll_interval_seconds: Optional[int] = Field(default=None, ge=60, le=86400)
+    password: Optional[str] = None
+
+
+class TelcoConnectivityResult(BaseModel):
+    success: bool
+    message: str
+    latency_ms: Optional[float] = None
+    checked_at: datetime
+
+
+class TelcoSyncResult(BaseModel):
+    success: bool
+    message: str
+    snapshot: Optional[Dict[str, Any]] = None
+    pbr_service_count: Optional[int] = None
+    job: TelcoOnboardingJobRead
+
+
 def to_read_model(job: TelcoFabricOnboardingJob) -> TelcoOnboardingJobRead:
     return TelcoOnboardingJobRead.model_validate(job)

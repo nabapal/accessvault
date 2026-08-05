@@ -532,6 +532,21 @@ export interface TelcoOnboardingJob {
   updated_at: string;
 }
 
+export interface TelcoConnectivityResult {
+  success: boolean;
+  message: string;
+  latency_ms?: number | null;
+  checked_at: string;
+}
+
+export interface TelcoSyncResult {
+  success: boolean;
+  message: string;
+  snapshot?: Record<string, unknown> | null;
+  pbr_service_count?: number | null;
+  job: TelcoOnboardingJob;
+}
+
 export type IpMplsPlatform = "iosxe" | "iosxr" | "unknown";
 export type IpMplsDeviceStatus = "pending" | "ok" | "error";
 

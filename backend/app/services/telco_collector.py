@@ -624,6 +624,100 @@ async def _collect_nxos_fabric(
     }
 
 
+@dataclass
+class TelcoConnectivityProbe:
+    """Result of a lightweight connectivity/auth check (no data persisted)."""
+
+    success: bool
+    message: str
+    latency_ms: Optional[float] = None
+
+
+async def _probe_aci(job: TelcoFabricOnboardingJob, password: str) -> None:
+    if not job.username:
+        raise TelcoCollectionError("Username is required for Cisco ACI fabrics.")
+    base_url = _build_base_url(job, default_scheme=job.connection_params.get("protocol", "https"))
+    timeout = httpx.Timeout(15.0, read=15.0)
+    login_payload = {"aaaUser": {"attributes": {"name": job.username, "pwd": password}}}
+    async with httpx.AsyncClient(base_url=base_url, verify=job.verify_ssl, timeout=timeout) as client:
+        response = await client.post("/api/aaaLogin.json", json=login_payload)
+        response.raise_for_status()
+        login_data = response.json()
+        try:
+            login_data["imdata"][0]["aaaLogin"]["attributes"]["token"]
+        except (KeyError, IndexError) as exc:
+            raise TelcoCollectionError("APIC login did not return a session token.") from exc
+
+
+async def _probe_nxos(job: TelcoFabricOnboardingJob, password: str) -> None:
+    if not job.username:
+        raise TelcoCollectionError("Username is required for NX-OS fabrics.")
+    transport = (job.connection_params.get("transport") or "nxapi-https").lower()
+    if transport == "ssh":
+        raise TelcoCollectionError("SSH transport is not yet supported. Enable NX-API and select nxapi-http or nxapi-https.")
+    scheme = "https" if transport.endswith("https") else "http"
+    base_url = _build_base_url(job, default_scheme=scheme)
+    verify = job.verify_ssl if scheme == "https" else False
+    timeout = httpx.Timeout(15.0, read=15.0)
+    payload = {
+        "ins_api": {
+            "version": "1.0",
+            "type": "cli_show",
+            "chunk": "0",
+            "sid": "1",
+            "input": "show clock",
+            "output_format": "json",
+        }
+    }
+    async with httpx.AsyncClient(base_url=base_url, verify=verify, timeout=timeout, auth=(job.username, password)) as client:
+        response = await client.post("/ins", json=payload)
+        response.raise_for_status()
+
+
+async def test_connection_for_job(
+    job: TelcoFabricOnboardingJob,
+    password_override: Optional[str] = None,
+) -> TelcoConnectivityProbe:
+    """Lightweight auth/reachability check against the fabric controller.
+
+    Performs only the vendor login handshake (APIC ``aaaLogin`` / NX-API login);
+    collects and persists nothing, and does not change onboarding status.
+    """
+
+    password = password_override
+    if password is None:
+        if job.password_secret is None:
+            return TelcoConnectivityProbe(success=False, message="No credentials stored for this fabric.")
+        password = decrypt_secret(job.password_secret)
+
+    started = datetime.now(timezone.utc)
+    try:
+        if job.fabric_type == TelcoFabricType.ACI:
+            await _probe_aci(job, password)
+        elif job.fabric_type == TelcoFabricType.NXOS:
+            await _probe_nxos(job, password)
+        else:  # pragma: no cover - defensive guard
+            raise TelcoCollectionError(f"Unsupported fabric type: {job.fabric_type}")
+    except TelcoCollectionError as exc:
+        return TelcoConnectivityProbe(success=False, message=str(exc))
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else "?"
+        detail = "authentication failed" if status_code in (400, 401, 403) else f"HTTP {status_code}"
+        return TelcoConnectivityProbe(success=False, message=f"Connection failed ({detail}).")
+    except httpx.HTTPError as exc:
+        return TelcoConnectivityProbe(success=False, message=f"Connection failed: {exc}")
+    except Exception as exc:  # pragma: no cover - runtime safety
+        logger.exception("Unexpected error during telco connectivity test", extra={"job": str(job.id)})
+        return TelcoConnectivityProbe(success=False, message=str(exc))
+
+    latency_ms = (datetime.now(timezone.utc) - started).total_seconds() * 1000.0
+    return TelcoConnectivityProbe(
+        success=True,
+        message=f"Connected to {job.fabric_type.value.upper()} controller successfully.",
+        latency_ms=round(latency_ms, 1),
+    )
+
+
 async def _upsert_aci_nodes(
     session: AsyncSession,
     items: Iterable[Dict[str, Any]],

@@ -2000,6 +2000,62 @@
           }
         }
       },
+      "patch": {
+        "tags": [
+          "telco"
+        ],
+        "summary": "Update Onboarding Job",
+        "operationId": "update_onboarding_job_api_v1_telco_onboarding_jobs__job_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelcoOnboardingJobUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelcoOnboardingJobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "telco"
@@ -2081,6 +2137,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TelcoOnboardingJobRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telco/onboarding/jobs/{job_id}/test": {
+      "post": {
+        "tags": [
+          "telco"
+        ],
+        "summary": "Test Onboarding Job",
+        "operationId": "test_onboarding_job_api_v1_telco_onboarding_jobs__job_id__test_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelcoConnectivityResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telco/onboarding/jobs/{job_id}/sync": {
+      "post": {
+        "tags": [
+          "telco"
+        ],
+        "summary": "Sync Onboarding Job",
+        "operationId": "sync_onboarding_job_api_v1_telco_onboarding_jobs__job_id__sync_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelcoSyncResult"
                 }
               }
             }
@@ -15378,6 +15530,41 @@
         "type": "object",
         "title": "SystemUpdate"
       },
+      "TelcoConnectivityResult": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "checked_at"
+        ],
+        "title": "TelcoConnectivityResult"
+      },
       "TelcoFabricType": {
         "type": "string",
         "enum": [
@@ -15619,6 +15806,117 @@
         ],
         "title": "TelcoOnboardingJobRead"
       },
+      "TelcoOnboardingJobUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "target_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Host"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "verify_ssl": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Ssl"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "connection_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Params"
+          },
+          "poll_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 86400.0,
+                "minimum": 60.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll Interval Seconds"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "title": "TelcoOnboardingJobUpdate",
+        "description": "Partial update for an onboarded fabric. All fields optional.\n\nA non-empty ``password`` rotates the stored credential; omitting it (or\nsending an empty/whitespace string) keeps the existing secret."
+      },
       "TelcoOnboardingStatus": {
         "type": "string",
         "enum": [
@@ -15661,6 +15959,51 @@
         },
         "type": "object",
         "title": "TelcoOnboardingValidationRequest"
+      },
+      "TelcoSyncResult": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot"
+          },
+          "pbr_service_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pbr Service Count"
+          },
+          "job": {
+            "$ref": "#/components/schemas/TelcoOnboardingJobRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "job"
+        ],
+        "title": "TelcoSyncResult"
       },
       "TokenPair": {
         "properties": {

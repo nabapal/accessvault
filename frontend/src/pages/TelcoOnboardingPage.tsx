@@ -7,9 +7,23 @@ import {
   createTelcoOnboardingJob,
   deleteTelcoOnboardingJob,
   listTelcoOnboardingJobs,
-  validateTelcoOnboardingJob
+  syncTelcoOnboardingJob,
+  testTelcoOnboardingJob,
+  updateTelcoOnboardingJob,
+  type TelcoOnboardingJobUpdatePayload
 } from "@/services/telco";
 import { TelcoFabricType, TelcoOnboardingJob, TelcoOnboardingStatus } from "@/types";
+
+interface EditFormState {
+  name: string;
+  targetHost: string;
+  port: string;
+  username: string;
+  description: string;
+  pollInterval: string;
+  verifySsl: boolean;
+  password: string;
+}
 
 interface FabricFormState {
   name: string;
@@ -139,6 +153,10 @@ export function TelcoOnboardingPage() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [editingJob, setEditingJob] = useState<TelcoOnboardingJob | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState | null>(null);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
   const loadJobs = async () => {
     setIsLoading(true);
@@ -216,30 +234,139 @@ export function TelcoOnboardingPage() {
     }
   };
 
-  const handleValidate = async (jobId: string) => {
-    const job = jobs.find((item) => item.id === jobId);
-    if (job && !job.has_credentials) {
-      setError("Credentials are not stored for this fabric. Re-onboard with credentials before validating.");
+  const handleTest = async (job: TelcoOnboardingJob) => {
+    setFeedback(null);
+    setError(null);
+    if (!job.has_credentials) {
+      setError("Credentials are not stored for this fabric. Edit it to add a password first.");
       return;
     }
+    setActingId(job.id);
     try {
-      await validateTelcoOnboardingJob(jobId, { force_fail: false });
-      await loadJobs();
-      setFeedback("Validation completed successfully.");
-      setError(null);
+      const result = await testTelcoOnboardingJob(job.id);
+      if (result.success) {
+        const latency = result.latency_ms != null ? ` (${result.latency_ms} ms)` : "";
+        setFeedback(`${job.name}: ${result.message}${latency}`);
+      } else {
+        setError(`${job.name}: ${result.message}`);
+      }
     } catch (err) {
-      console.error("Failed to trigger validation", err);
-      setError("Unable to trigger validation. Please retry.");
+      console.error("Failed to test connection", err);
+      setError("Unable to test connection. Please retry.");
+    } finally {
+      setActingId(null);
     }
   };
 
-  const handleDelete = async (jobId: string) => {
+  const handleSync = async (job: TelcoOnboardingJob) => {
+    setFeedback(null);
+    setError(null);
+    if (!job.has_credentials) {
+      setError("Credentials are not stored for this fabric. Edit it to add a password first.");
+      return;
+    }
+    setActingId(job.id);
     try {
-      await deleteTelcoOnboardingJob(jobId);
+      const result = await syncTelcoOnboardingJob(job.id);
+      if (result.success) {
+        setFeedback(`${job.name}: ${result.message}`);
+      } else {
+        setError(`${job.name}: ${result.message}`);
+      }
+      await loadJobs();
+    } catch (err) {
+      console.error("Failed to sync fabric", err);
+      setError("Unable to sync fabric. Please retry.");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const openEdit = (job: TelcoOnboardingJob) => {
+    setFeedback(null);
+    setError(null);
+    setEditingJob(job);
+    setEditForm({
+      name: job.name,
+      targetHost: job.target_host,
+      port: String(job.port),
+      username: job.username ?? "",
+      description: job.description ?? "",
+      pollInterval: String(job.poll_interval_seconds),
+      verifySsl: job.verify_ssl,
+      password: ""
+    });
+  };
+
+  const closeEdit = () => {
+    setEditingJob(null);
+    setEditForm(null);
+  };
+
+  const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingJob || !editForm) {
+      return;
+    }
+    if (!editForm.name.trim() || !editForm.targetHost.trim()) {
+      setError("Name and target host are required.");
+      return;
+    }
+    const parsedPort = Number.parseInt(editForm.port, 10);
+    if (!Number.isFinite(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+      setError("Port must be between 1 and 65535.");
+      return;
+    }
+    const parsedInterval = Number.parseInt(editForm.pollInterval, 10);
+    if (!Number.isFinite(parsedInterval) || parsedInterval < 60) {
+      setError("Polling interval must be at least 60 seconds.");
+      return;
+    }
+
+    const payload: TelcoOnboardingJobUpdatePayload = {
+      name: editForm.name.trim(),
+      target_host: editForm.targetHost.trim(),
+      port: parsedPort,
+      username: editForm.username.trim(),
+      description: editForm.description.trim(),
+      verify_ssl: editForm.verifySsl,
+      poll_interval_seconds: parsedInterval
+    };
+    if (editForm.password.trim()) {
+      payload.password = editForm.password.trim();
+    }
+
+    setIsUpdating(true);
+    try {
+      await updateTelcoOnboardingJob(editingJob.id, payload);
+      setFeedback(`Updated ${editForm.name.trim()}.`);
+      setError(null);
+      closeEdit();
+      await loadJobs();
+    } catch (err) {
+      console.error("Failed to update onboarding job", err);
+      setError("Unable to update fabric. Please check details and retry.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDelete = async (job: TelcoOnboardingJob) => {
+    if (!window.confirm(`Delete fabric "${job.name}"? This removes the onboarding job and stops polling.`)) {
+      return;
+    }
+    setActingId(job.id);
+    try {
+      await deleteTelcoOnboardingJob(job.id);
+      if (editingJob?.id === job.id) {
+        closeEdit();
+      }
       await loadJobs();
     } catch (err) {
       console.error("Failed to delete onboarding job", err);
       setError("Unable to delete onboarding job.");
+    } finally {
+      setActingId(null);
     }
   };
 
@@ -592,17 +719,35 @@ export function TelcoOnboardingPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            className="rounded-md border border-primary-500/60 bg-primary-500/15 px-3 py-1 text-xs font-semibold text-primary-100 transition hover:border-primary-400 hover:bg-primary-500/25"
-                            onClick={() => handleValidate(job.id)}
+                            className="rounded-md border border-brand-700 bg-brand-800/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-500 disabled:opacity-60"
+                            onClick={() => openEdit(job)}
+                            disabled={actingId === job.id}
                           >
-                            Validate
+                            Edit
                           </button>
                           <button
                             type="button"
-                            className="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:border-rose-400 hover:bg-rose-500/20"
-                            onClick={() => handleDelete(job.id)}
+                            className="rounded-md border border-brand-700 bg-brand-800/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-primary-500 disabled:opacity-60"
+                            onClick={() => handleTest(job)}
+                            disabled={actingId === job.id}
                           >
-                            Remove
+                            {actingId === job.id ? "…" : "Test connection"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md border border-primary-500/60 bg-primary-500/15 px-3 py-1 text-xs font-semibold text-primary-100 transition hover:border-primary-400 hover:bg-primary-500/25 disabled:opacity-60"
+                            onClick={() => handleSync(job)}
+                            disabled={actingId === job.id}
+                          >
+                            {actingId === job.id ? "…" : "Sync now"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-100 transition hover:border-rose-400 hover:bg-rose-500/20 disabled:opacity-60"
+                            onClick={() => handleDelete(job)}
+                            disabled={actingId === job.id}
+                          >
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -613,6 +758,127 @@ export function TelcoOnboardingPage() {
             </table>
           </div>
         </section>
+
+        {editingJob && editForm ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+            <form
+              className="w-full max-w-lg rounded-lg border border-brand-700 bg-brand-900 p-6 shadow-xl"
+              onSubmit={handleEditSubmit}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">
+                  Edit fabric — <span className="text-primary-200">{editingJob.name}</span>
+                </h2>
+                <span className="rounded-full border border-brand-700 bg-brand-800 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  {editingJob.fabric_type.toUpperCase()}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Fabric name</label>
+                  <input
+                    className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    value={editForm.name}
+                    onChange={(event) => setEditForm((prev) => (prev ? { ...prev, name: event.target.value } : prev))}
+                    required
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Host/IP</label>
+                    <input
+                      className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      value={editForm.targetHost}
+                      onChange={(event) => setEditForm((prev) => (prev ? { ...prev, targetHost: event.target.value } : prev))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Port</label>
+                    <input
+                      className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      value={editForm.port}
+                      onChange={(event) => setEditForm((prev) => (prev ? { ...prev, port: event.target.value } : prev))}
+                      type="number"
+                      min={1}
+                      max={65535}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Service account</label>
+                    <input
+                      className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      value={editForm.username}
+                      onChange={(event) => setEditForm((prev) => (prev ? { ...prev, username: event.target.value } : prev))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Poll interval (seconds)</label>
+                    <input
+                      className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      value={editForm.pollInterval}
+                      onChange={(event) => setEditForm((prev) => (prev ? { ...prev, pollInterval: event.target.value } : prev))}
+                      type="number"
+                      min={60}
+                      step={30}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Password</label>
+                  <input
+                    className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    value={editForm.password}
+                    onChange={(event) => setEditForm((prev) => (prev ? { ...prev, password: event.target.value } : prev))}
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Leave blank to keep the stored credential"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</label>
+                  <textarea
+                    className="mt-1 w-full rounded-md border border-brand-700 bg-brand-900/70 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    rows={2}
+                    value={editForm.description}
+                    onChange={(event) => setEditForm((prev) => (prev ? { ...prev, description: event.target.value } : prev))}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="edit-verify"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-brand-700 bg-brand-900/70 text-primary-500 focus:ring-primary-500"
+                    checked={editForm.verifySsl}
+                    onChange={(event) => setEditForm((prev) => (prev ? { ...prev, verifySsl: event.target.checked } : prev))}
+                  />
+                  <label htmlFor="edit-verify" className="text-sm text-slate-300">
+                    Verify TLS certificates
+                  </label>
+                </div>
+              </div>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  className="rounded-md border border-brand-700 bg-brand-800 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500"
+                  onClick={closeEdit}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-md border border-primary-500/60 bg-primary-500/15 px-4 py-2 text-sm font-semibold text-primary-100 transition hover:border-primary-400 hover:bg-primary-500/25 disabled:opacity-60"
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
       </div>
     </AppShell>
   );
