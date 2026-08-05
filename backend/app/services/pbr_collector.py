@@ -73,6 +73,11 @@ _PBR_CLASSES: Dict[str, Dict[str, bool]] = {
 }
 
 _PBR_FETCH_CONCURRENCY = 2
+# Large/busy fabrics (e.g. 6k+ interfaces, 15k+ fvIp) can return 503 under load;
+# give the fetch more headroom to ride out transient APIC overload before failing
+# the whole fabric. (Shared _apic_get_with_retry defaults stay for telco.)
+_PBR_FETCH_RETRIES = 6
+_PBR_FETCH_BACKOFF = 3.0
 
 
 class PbrCollectionError(Exception):
@@ -205,7 +210,9 @@ async def fetch_class(
     path = f"/api/class/{mo_class}.json"
     if subtree:
         path += "?query-target=self&rsp-subtree=full"
-    response = await _apic_get_with_retry(client, path)
+    response = await _apic_get_with_retry(
+        client, path, retries=_PBR_FETCH_RETRIES, backoff=_PBR_FETCH_BACKOFF
+    )
     payload = response.json()
     imdata = payload.get("imdata", [])
     if not isinstance(imdata, list):
@@ -1016,6 +1023,10 @@ class PbrPoller:
         self._tick_seconds = tick_seconds
         self._shutdown = asyncio.Event()
         self._task: Optional[asyncio.Task[None]] = None
+        # Per-fabric last-poll time (in-memory) so we honour poll_interval_seconds
+        # instead of polling every tick — the every-tick behaviour overloaded large
+        # APICs (503) and left big fabrics silently empty. Resets on restart.
+        self._last_polled: Dict[str, datetime] = {}
 
     async def start(self) -> None:
         if self._task and not self._task.done():
@@ -1052,10 +1063,18 @@ class PbrPoller:
             for job in jobs:
                 if not self._should_poll(job):
                     continue
+                # Record the attempt up-front so a failing fabric is retried on its
+                # interval, not hammered every tick.
+                self._last_polled[str(job.id)] = datetime.now(timezone.utc)
                 for attempt in range(3):
                     try:
-                        await collect_pbr_for_job(session, job)
+                        res = await collect_pbr_for_job(session, job)
                         await session.commit()
+                        if res is not None and not res.success:
+                            logger.warning(
+                                "PBR collection incomplete for fabric %s (%s): %s",
+                                job.name, job.id, res.message,
+                            )
                         break
                     except OperationalError as exc:  # SQLite "database is locked"
                         await session.rollback()
@@ -1072,7 +1091,14 @@ class PbrPoller:
     def _should_poll(self, job: TelcoFabricOnboardingJob) -> bool:
         if job.poll_interval_seconds <= 0:
             return False
-        return job.status in (TelcoOnboardingStatus.READY, TelcoOnboardingStatus.FAILED)
+        if job.status not in (TelcoOnboardingStatus.READY, TelcoOnboardingStatus.FAILED):
+            return False
+        # Honour the per-fabric interval (default 600s) instead of every tick —
+        # polling every tick overloads large APICs. First run after start polls now.
+        last = self._last_polled.get(str(job.id))
+        if last is None:
+            return True
+        return (datetime.now(timezone.utc) - last).total_seconds() >= job.poll_interval_seconds
 
     @asynccontextmanager
     async def _session(self) -> AsyncGenerator[AsyncSession, None]:
