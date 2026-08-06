@@ -55,23 +55,11 @@ async def resolve_device_by_ip(
     db: AsyncSession = Depends(get_db),
     _: object = Depends(get_current_user),
 ) -> CgnatDeviceByIp:
-    """Resolve an IP (e.g. a PBR redirect next-hop) to the CGNAT device that owns it.
-
-    Matching order (all against LIVE devices only; stale/orphaned interface rows are
-    skipped):
-      1. exact host match on device mgmt IP or an interface address;
-      2. longest-prefix subnet containment — a next-hop that sits on a device's
-         connected interface subnet belongs to that device (this is why a redirect IP
-         like .179 resolves even though the interface's own address is .226/27).
-    Read-only.
-    """
+    """Resolve an IP (e.g. a PBR redirect next-hop) to the CGNAT device that owns it —
+    EXACT host match only (device mgmt IP or an interface address; CIDR/route-domain
+    suffix stripped, IPv6 canonicalised). Subnet-containment is intentionally NOT used.
+    Live devices only; stale/orphaned interface rows are skipped. Read-only."""
     target = _norm_ip(ip)
-    target_addr = None
-    if target is not None:
-        try:
-            target_addr = ipaddress.ip_address(target)
-        except ValueError:
-            target_addr = None
     if target is None:
         return CgnatDeviceByIp(found=False, ip=ip)
 
@@ -83,9 +71,8 @@ async def resolve_device_by_ip(
         if _norm_ip(d.mgmt_ip) == target:
             return CgnatDeviceByIp(found=True, ip=ip, device_id=d.id, name=d.name, mgmt_ip=d.mgmt_ip, matched_on="mgmt_ip")
 
-    # 2) interface addresses — exact first, collecting subnet-containment candidates.
+    # 2) interface addresses (ip_address + JSON addresses list) — exact host only.
     interfaces = (await db.execute(select(CgnatInterface))).scalars().all()
-    subnet_hits: list = []  # (prefixlen, device, iface_name, cidr)
     for iface in interfaces:
         d = by_id.get(iface.device_id)
         if d is None:
@@ -93,27 +80,11 @@ async def resolve_device_by_ip(
         candidates = list(iface.addresses or [])
         if iface.ip_address:
             candidates.append(iface.ip_address)
-        for a in candidates:
-            if _norm_ip(a) == target:
-                return CgnatDeviceByIp(
-                    found=True, ip=ip, device_id=d.id, name=d.name, mgmt_ip=d.mgmt_ip,
-                    matched_on=f"interface {iface.name}",
-                )
-            if target_addr is not None and "/" in str(a):
-                try:
-                    net = ipaddress.ip_network(str(a).split("%")[0], strict=False)
-                except ValueError:
-                    continue
-                if net.prefixlen < net.max_prefixlen and target_addr.version == net.version and target_addr in net:
-                    subnet_hits.append((net.prefixlen, d, iface.name, str(net)))
-
-    if subnet_hits:
-        subnet_hits.sort(key=lambda x: x[0], reverse=True)  # most specific subnet wins
-        _pl, d, iname, cidr = subnet_hits[0]
-        return CgnatDeviceByIp(
-            found=True, ip=ip, device_id=d.id, name=d.name, mgmt_ip=d.mgmt_ip,
-            matched_on=f"interface {iname} subnet {cidr}",
-        )
+        if any(_norm_ip(a) == target for a in candidates):
+            return CgnatDeviceByIp(
+                found=True, ip=ip, device_id=d.id, name=d.name, mgmt_ip=d.mgmt_ip,
+                matched_on=f"interface {iface.name}",
+            )
     return CgnatDeviceByIp(found=False, ip=ip)
 
 
