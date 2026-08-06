@@ -12,7 +12,7 @@ const INK = "#dbe4f3";
 const DIM = "#7e8ba3";
 
 const BOX_W = 240;
-const BOX_H = 126;
+const BOX_H = 150;
 const CLOUD_W = 210;
 const CLOUD_H = 96;
 const GAP = 72;
@@ -182,31 +182,48 @@ function nodeBox(key: string, x: number, y: number, n: PbrNode, uid: string) {
     .filter(Boolean)
     .join("  ");
 
+  const clipId = `${key}-clip`.replace(/[^a-zA-Z0-9-]/g, "");
+  const devgrp = d.devgrp || d.node || "";
+  const leafText = d.leafs?.length ? `Leaf ${d.leafs.join(",")}` : "";
   return (
     <g key={key} opacity={opacity}>
       <rect x={x} y={y} width={BOX_W} height={BOX_H} rx={8} fill="#131b29" stroke={border} strokeWidth={status === "faulty" || n.bypassed ? 2.2 : 1.6} strokeDasharray={status === "faulty" || n.bypassed ? "5,3" : undefined} />
-      <rect x={x} y={y} width={46} height={18} rx={4} fill={layerColor} opacity={0.18} />
-      <text x={x + 23} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fontWeight={700} fill={layerColor}>{d.node}</text>
-      <text x={x + 70} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>{d.device_layer}</text>
-      <rect x={x + BOX_W - 52} y={y} width={52} height={18} rx={4} fill={hcolor} opacity={0.18} />
-      <text x={x + BOX_W - 26} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fontWeight={700} fill={hcolor}>{hlabel}</text>
-      <text x={x + BOX_W / 2} y={y + 40} textAnchor="middle" fontSize="12.5" fontWeight={700} fill={INK}>{trunc(d.devgrp || d.node || "", 26)}</text>
-      <text x={x + BOX_W / 2} y={y + 60} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>{d.leafs?.length ? `Leaf ${d.leafs.join(",")}` : ""}</text>
-      <text x={x + BOX_W / 2} y={y + 76} textAnchor="middle" fontFamily="monospace" fontSize="8.5" fill="#59688a">{trunc(policyLine, 34)}</text>
-      {n.bypassed ? (
-        <>
-          <text x={x + BOX_W / 2} y={y + 98} textAnchor="middle" fontFamily="monospace" fontSize="8.5" fontWeight={700} fill={AMBER}>
-            {`active ${d.threshold.active_pct ?? 0}% < min ${d.threshold.min}%`}
+      {/* Clip the interior so no text can ever escape the box border. */}
+      <clipPath id={clipId}>
+        <rect x={x + 1} y={y + 1} width={BOX_W - 2} height={BOX_H - 2} rx={7} />
+      </clipPath>
+      <g clipPath={`url(#${clipId})`}>
+        <rect x={x} y={y} width={46} height={18} rx={4} fill={layerColor} opacity={0.18} />
+        <text x={x + 23} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fontWeight={700} fill={layerColor}>{d.node}</text>
+        <text x={x + 70} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>{d.device_layer}</text>
+        <rect x={x + BOX_W - 52} y={y} width={52} height={18} rx={4} fill={hcolor} opacity={0.18} />
+        <text x={x + BOX_W - 26} y={y + 13} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fontWeight={700} fill={hcolor}>{hlabel}</text>
+        <text x={x + BOX_W / 2} y={y + 40} textAnchor="middle" fontSize="12" fontWeight={700} fill={INK}>
+          <title>{devgrp}</title>{trunc(devgrp, 28)}
+        </text>
+        {leafText ? (
+          <text x={x + BOX_W / 2} y={y + 60} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={DIM}>{trunc(leafText, 34)}</text>
+        ) : null}
+        {policyLine ? (
+          <text x={x + BOX_W / 2} y={y + 78} textAnchor="middle" fontFamily="monospace" fontSize="8.5" fill="#59688a">
+            <title>{policyLine}</title>{trunc(policyLine, 36)}
           </text>
-          <text x={x + BOX_W / 2} y={y + 113} textAnchor="middle" fontFamily="monospace" fontSize="8" fill={DIM}>traffic diverted around node</text>
-        </>
-      ) : (
-        destLines.map((l, i) => (
-          <text key={i} x={x + BOX_W / 2} y={y + 98 + i * 14} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={l.color}>
-            {trunc(l.text, 32)}
-          </text>
-        ))
-      )}
+        ) : null}
+        {n.bypassed ? (
+          <>
+            <text x={x + BOX_W / 2} y={y + 104} textAnchor="middle" fontFamily="monospace" fontSize="8.5" fontWeight={700} fill={AMBER}>
+              {`active ${d.threshold.active_pct ?? 0}% < min ${d.threshold.min}%`}
+            </text>
+            <text x={x + BOX_W / 2} y={y + 122} textAnchor="middle" fontFamily="monospace" fontSize="8" fill={DIM}>traffic diverted around node</text>
+          </>
+        ) : (
+          destLines.map((l, i) => (
+            <text key={i} x={x + BOX_W / 2} y={y + 102 + i * 16} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={l.color}>
+              <title>{l.text}</title>{trunc(l.text, 34)}
+            </text>
+          ))
+        )}
+      </g>
     </g>
   );
 }
