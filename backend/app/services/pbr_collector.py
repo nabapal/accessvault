@@ -816,7 +816,9 @@ async def collect_pbr_for_job(
         password = decrypt_secret(job.password_secret)
 
     base_url = _build_base_url(job, default_scheme=job.connection_params.get("protocol", "https"))
-    timeout = httpx.Timeout(30.0, read=90.0)
+    # Fail fast on an unreachable APIC (short connect) so one dead fabric can't stall
+    # the whole poll tick; allow long reads for the big class queries.
+    timeout = httpx.Timeout(90.0, connect=8.0)
 
     try:
         async with httpx.AsyncClient(base_url=base_url, verify=job.verify_ssl, timeout=timeout) as client:
@@ -1049,15 +1051,17 @@ class PbrPoller:
             logger.info("PBR poller stopped")
 
     async def _run(self) -> None:
-        try:
-            while not self._shutdown.is_set():
+        # A failed tick (e.g. a transient DB lock) must NOT kill the loop — catch inside
+        # the loop and keep polling on the next interval.
+        while not self._shutdown.is_set():
+            try:
                 await self._tick()
-                try:
-                    await asyncio.wait_for(self._shutdown.wait(), timeout=self._tick_seconds)
-                except asyncio.TimeoutError:
-                    pass
-        except Exception:  # pragma: no cover - defensive guard
-            logger.exception("PBR poller encountered an unexpected error")
+            except Exception:  # noqa: BLE001 - keep the poller alive across any tick error
+                logger.exception("PBR poller tick failed; retrying next interval")
+            try:
+                await asyncio.wait_for(self._shutdown.wait(), timeout=self._tick_seconds)
+            except asyncio.TimeoutError:
+                pass
 
     async def _tick(self) -> None:
         async with self._session() as session:
@@ -1066,33 +1070,30 @@ class PbrPoller:
                     TelcoFabricOnboardingJob.fabric_type == TelcoFabricType.ACI
                 )
             )
-            jobs = result.scalars().all()
+            # Pre-filter by the per-fabric interval; record the attempt up-front so a
+            # failing fabric is retried on its interval, not hammered every tick.
+            jobs = [j for j in result.scalars().all() if self._should_poll(j)]
             for job in jobs:
-                if not self._should_poll(job):
-                    continue
-                # Record the attempt up-front so a failing fabric is retried on its
-                # interval, not hammered every tick.
                 self._last_polled[str(job.id)] = datetime.now(timezone.utc)
                 for attempt in range(3):
                     try:
                         res = await collect_pbr_for_job(session, job)
                         await session.commit()
-                        if res is not None and not res.success:
-                            logger.warning(
-                                "PBR collection incomplete for fabric %s (%s): %s",
-                                job.name, job.id, res.message,
-                            )
+                        if res is not None and res.success:
+                            logger.info("PBR poll ok fabric=%s %s", job.name, res.snapshot)
+                        elif res is not None:
+                            logger.warning("PBR poll kept last-known fabric=%s: %s", job.name, res.message)
                         break
                     except OperationalError as exc:  # SQLite "database is locked"
                         await session.rollback()
                         if "locked" in str(exc).lower() and attempt < 2:
                             await asyncio.sleep(0.5 * (attempt + 1))
                             continue
-                        logger.warning("PBR poll DB error for fabric %s: %s", job.id, exc)
+                        logger.warning("PBR poll DB error for fabric %s: %s", job.name, exc)
                         break
-                    except Exception:  # pragma: no cover - never let one fabric kill the tick
+                    except Exception:  # never let one fabric kill the tick
                         await session.rollback()
-                        logger.exception("PBR poll failed for fabric %s", job.id)
+                        logger.exception("PBR poll failed for fabric %s", job.name)
                         break
 
     def _should_poll(self, job: TelcoFabricOnboardingJob) -> bool:
@@ -1100,8 +1101,8 @@ class PbrPoller:
             return False
         if job.status not in (TelcoOnboardingStatus.READY, TelcoOnboardingStatus.FAILED):
             return False
-        # Honour the per-fabric interval (default 600s) instead of every tick —
-        # polling every tick overloads large APICs. First run after start polls now.
+        # Honour the per-fabric interval (SDD §7.2) instead of every tick — polling
+        # every tick overloaded large APICs. First run after start polls now.
         last = self._last_polled.get(str(job.id))
         if last is None:
             return True
