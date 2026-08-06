@@ -15,6 +15,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com); versions follow [
 - pbr: per-node detail (leaf/path, per-side BD/VRF/L3Out/VLAN + redirect policy,
   redirect destinations with configured + learned MAC, L1 redirect interfaces,
   threshold min/max/down-action + active%) resolved from live APIC
+- pbr: global IP-flow lookup across all fabrics with a per-fabric selector; matched
+  result shows the best-matching consumer/provider EPG, the ACI fabric + tenant, and a
+  count when multiple service graphs match
+- pbr: redirect destinations distinguished IN (consumer policy) vs OUT (provider policy)
+  in node cards and topology; learned/UP next-hop IPs shown in green
+- pbr: double-click a redirect IP to open the owning CGNAT device (exact-host match), or
+  a toast if the IP is not in the CGNAT inventory; returning restores the PBR view + scroll
+
+### Changed
+- pbr: service status is a status judgement, not a static % band — DOWN only when all
+  nodes are faulty or a threshold is breached with down-action=deny; otherwise WARNING
+- pbr: connector VLAN/VRF resolved for both BD-side (vnsEPpInfo) and L3Out-side
+  (l3extRsPathL3OutAtt / l3extRsEctx); external-EPG blocks show only scope-valid
+  (import-security) subnets
+
+### Fixed
+- pbr: poller survives transient per-tick errors (a DB lock no longer kills the loop),
+  gates per-fabric poll interval, and fast-fails an unreachable APIC
+- pbr: topology node-box text no longer overflows (interior clip + hover tooltips);
+  services/nodes upserted with a stable id so health-trend history accumulates without
+  orphaned rows
 
 ## [0.3.0] - 2026-07-23
 
