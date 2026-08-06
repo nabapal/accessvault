@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { TableRowsSkeleton } from "@/components/ui/Skeleton";
 import { PbrFlowLookup } from "@/components/pbr/PbrFlowLookup";
 import { PbrServiceDetailView } from "@/components/pbr/PbrServiceDetailView";
+import { loadPbrView, pbrScroller, savePbrView } from "@/components/pbr/pbrViewState";
 import { fetchPbrFabrics, fetchPbrServices } from "@/services/pbr";
 import { PbrFabric, PbrService, PbrServiceState } from "@/types";
 
@@ -41,23 +42,47 @@ const formatStale = (value?: string | null) => {
 };
 
 export function PbrMonitoringPage() {
+  const saved = loadPbrView();
   const [fabrics, setFabrics] = useState<PbrFabric[]>([]);
-  const [selectedFabricId, setSelectedFabricId] = useState<string | null>(null);
+  const [selectedFabricId, setSelectedFabricId] = useState<string | null>(saved.selectedFabricId ?? null);
   const [fabricsLoading, setFabricsLoading] = useState<boolean>(true);
   const [fabricsError, setFabricsError] = useState<string | null>(null);
 
   const [services, setServices] = useState<PbrService[]>([]);
-  const [search, setSearch] = useState<string>("");
-  const [stateFilter, setStateFilter] = useState<PbrServiceState | "all">("all");
-  const [sort, setSort] = useState<"health" | "name" | "state">("health");
-  const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [search, setSearch] = useState<string>(saved.search ?? "");
+  const [stateFilter, setStateFilter] = useState<PbrServiceState | "all">((saved.stateFilter as PbrServiceState | "all") ?? "all");
+  const [sort, setSort] = useState<"health" | "name" | "state">((saved.sort as "health" | "name" | "state") ?? "health");
+  const [page, setPage] = useState<number>(saved.page ?? 1);
+  const [pageSize, setPageSize] = useState<number>(saved.pageSize ?? DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState<number>(0);
   const [hasPrev, setHasPrev] = useState<boolean>(false);
   const [hasNext, setHasNext] = useState<boolean>(false);
   const [servicesLoading, setServicesLoading] = useState<boolean>(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
-  const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
+  const [expandedServiceId, setExpandedServiceId] = useState<string | null>(saved.expandedServiceId ?? null);
+
+  // Persist the view so returning from a CGNAT deep-link restores the same position.
+  useEffect(() => {
+    savePbrView({ selectedFabricId, expandedServiceId, search, stateFilter, sort, page, pageSize });
+  }, [selectedFabricId, expandedServiceId, search, stateFilter, sort, page, pageSize]);
+
+  // Restore the <main> scroll position saved just before navigating to CGNAT. Content
+  // loads asynchronously (services + expanded detail), so retry until it sticks.
+  useEffect(() => {
+    const target = loadPbrView().scrollTop;
+    if (target == null) return;
+    let tries = 0;
+    const id = window.setInterval(() => {
+      const el = pbrScroller();
+      if (el) el.scrollTop = target;
+      tries += 1;
+      if ((el && Math.abs(el.scrollTop - target) < 6) || tries > 20) {
+        window.clearInterval(id);
+        savePbrView({ scrollTop: null });
+      }
+    }, 100);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

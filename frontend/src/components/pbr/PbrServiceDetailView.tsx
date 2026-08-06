@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchPbrBlastRadius, fetchPbrHealthHistory, fetchPbrServiceDetail } from "@/services/pbr";
 import { resolveCgnatDeviceByIp } from "@/services/cgnat";
 import { toast } from "@/components/ui/toast";
+import { pbrScroller, savePbrView } from "./pbrViewState";
 import { PbrBlastRadius, PbrEpgGroup, PbrHealthHistory, PbrNode, PbrRedirectDestDetail, PbrServiceDetail } from "@/types";
 import { PbrHealthSparkline } from "./PbrHealthSparkline";
 import { PbrTopology } from "./PbrTopology";
@@ -186,6 +187,8 @@ export function PbrServiceDetailView({ serviceId, hideEpgBlock }: { serviceId: s
     try {
       const res = await resolveCgnatDeviceByIp(ip);
       if (res.found && res.device_id) {
+        // Remember where we are so returning restores this exact scroll position.
+        savePbrView({ scrollTop: pbrScroller()?.scrollTop ?? 0 });
         navigate(`/cgnat/devices/${res.device_id}`);
       } else {
         toast.warning("Not in CGNAT inventory", `${ip} is not present in our CGNAT inventory.`);
