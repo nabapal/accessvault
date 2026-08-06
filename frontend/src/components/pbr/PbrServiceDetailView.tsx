@@ -106,36 +106,19 @@ function DestLine({ r }: { r: PbrRedirectDestDetail }) {
   );
 }
 
-// L3 redirect destinations in two columns — IN (consumer policy) | OUT (provider
-// policy) — so the two directions are clearly separate. Falls back to a single list
-// when the data carries no side.
-function RedirectDests({ dests }: { dests: PbrRedirectDestDetail[] }) {
-  const inD = dests.filter((r) => r.side === "in");
-  const outD = dests.filter((r) => r.side === "out");
-  if (!inD.length && !outD.length) {
-    return (
-      <div className="text-right">
-        {dests.map((r, i) => <DestLine key={i} r={r} />)}
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-2 gap-4 text-left">
-      <div>
-        <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">In</div>
-        {inD.length ? inD.map((r, i) => <DestLine key={`in${i}`} r={r} />) : <span className="text-slate-600">—</span>}
-      </div>
-      <div>
-        <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Out</div>
-        {outD.length ? outD.map((r, i) => <DestLine key={`out${i}`} r={r} />) : <span className="text-slate-600">—</span>}
-      </div>
-    </div>
-  );
-}
+const ifaceLine = (r: { interface?: string | null; device?: string | null }, i: number) => (
+  <div key={i}>{r.interface} <span className="text-slate-500">({r.device})</span></div>
+);
 
 function NodeCard({ n }: { n: PbrNode }) {
   const d = n.detail;
   const isL1 = d.device_layer === "L1";
+  const dests = d.redirect_dests ?? [];
+  const inDests = dests.filter((r) => r.side === "in");
+  const outDests = dests.filter((r) => r.side === "out");
+  const destsHaveSide = inDests.length > 0 || outDests.length > 0;
+  const consIf = d.redirect_interfaces?.consumer ?? [];
+  const provIf = d.redirect_interfaces?.provider ?? [];
   return (
     <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-3">
       <div className="mb-2 flex items-center justify-between border-b border-brand-800/70 pb-2">
@@ -156,44 +139,26 @@ function NodeCard({ n }: { n: PbrNode }) {
           .join(" / ") || dash}
       </KV>
       <ThresholdRows n={n} />
-      {/* Full-width so IN / OUT sit in two readable columns. */}
-      <div className="py-1">
-        <div className="mb-1 text-sm text-slate-500">{isL1 ? "Redirect interface" : "Redirect dest"}</div>
-        <div className="font-mono text-[12px] text-slate-200">
-          {isL1 ? (
-            !d.redirect_interfaces?.consumer?.length && !d.redirect_interfaces?.provider?.length ? (
-              <span className="text-slate-500">no interface data</span>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 text-left">
-                <div>
-                  <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">In</div>
-                  {(d.redirect_interfaces?.consumer ?? []).length ? (
-                    d.redirect_interfaces!.consumer.map((r, i) => (
-                      <div key={i}>{r.interface} <span className="text-slate-500">({r.device})</span></div>
-                    ))
-                  ) : (
-                    <span className="text-slate-600">—</span>
-                  )}
-                </div>
-                <div>
-                  <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Out</div>
-                  {(d.redirect_interfaces?.provider ?? []).length ? (
-                    d.redirect_interfaces!.provider.map((r, i) => (
-                      <div key={i}>{r.interface} <span className="text-slate-500">({r.device})</span></div>
-                    ))
-                  ) : (
-                    <span className="text-slate-600">—</span>
-                  )}
-                </div>
-              </div>
-            )
-          ) : (d.redirect_dests ?? []).length === 0 ? (
-            dash
-          ) : (
-            <RedirectDests dests={d.redirect_dests} />
-          )}
-        </div>
-      </div>
+      {/* IN and OUT as separate rows. */}
+      {isL1 ? (
+        !consIf.length && !provIf.length ? (
+          <KV k="Redirect interface"><span className="text-slate-500">no interface data</span></KV>
+        ) : (
+          <>
+            <KV k="Redirect interface (in)"><div className="text-right">{consIf.length ? consIf.map(ifaceLine) : dash}</div></KV>
+            <KV k="Redirect interface (out)"><div className="text-right">{provIf.length ? provIf.map(ifaceLine) : dash}</div></KV>
+          </>
+        )
+      ) : dests.length === 0 ? (
+        <KV k="Redirect dest">{dash}</KV>
+      ) : destsHaveSide ? (
+        <>
+          <KV k="Redirect dest (in)"><div className="text-right">{inDests.length ? inDests.map((r, i) => <DestLine key={i} r={r} />) : dash}</div></KV>
+          <KV k="Redirect dest (out)"><div className="text-right">{outDests.length ? outDests.map((r, i) => <DestLine key={i} r={r} />) : dash}</div></KV>
+        </>
+      ) : (
+        <KV k="Redirect dest"><div className="text-right">{dests.map((r, i) => <DestLine key={i} r={r} />)}</div></KV>
+      )}
     </div>
   );
 }
