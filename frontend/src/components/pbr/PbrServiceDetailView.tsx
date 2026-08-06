@@ -106,12 +106,12 @@ function DestLine({ r }: { r: PbrRedirectDestDetail }) {
   );
 }
 
-// L3 redirect destinations grouped by direction (IN = consumer policy, OUT = provider
-// policy) so the two sets are distinguishable; flat if the data carries no side.
+// L3 redirect destinations in two columns — IN (consumer policy) | OUT (provider
+// policy) — so the two directions are clearly separate. Falls back to a single list
+// when the data carries no side.
 function RedirectDests({ dests }: { dests: PbrRedirectDestDetail[] }) {
   const inD = dests.filter((r) => r.side === "in");
   const outD = dests.filter((r) => r.side === "out");
-  const noSide = dests.filter((r) => !r.side);
   if (!inD.length && !outD.length) {
     return (
       <div className="text-right">
@@ -120,20 +120,15 @@ function RedirectDests({ dests }: { dests: PbrRedirectDestDetail[] }) {
     );
   }
   return (
-    <div className="text-right">
-      {inD.length ? (
-        <div className="mb-1">
-          <span className="text-[9px] uppercase text-slate-500">in</span>
-          {inD.map((r, i) => <DestLine key={`in${i}`} r={r} />)}
-        </div>
-      ) : null}
-      {outD.length ? (
-        <div className="mb-1">
-          <span className="text-[9px] uppercase text-slate-500">out</span>
-          {outD.map((r, i) => <DestLine key={`out${i}`} r={r} />)}
-        </div>
-      ) : null}
-      {noSide.map((r, i) => <DestLine key={`x${i}`} r={r} />)}
+    <div className="grid grid-cols-2 gap-4 text-left">
+      <div>
+        <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">In</div>
+        {inD.length ? inD.map((r, i) => <DestLine key={`in${i}`} r={r} />) : <span className="text-slate-600">—</span>}
+      </div>
+      <div>
+        <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Out</div>
+        {outD.length ? outD.map((r, i) => <DestLine key={`out${i}`} r={r} />) : <span className="text-slate-600">—</span>}
+      </div>
     </div>
   );
 }
@@ -161,23 +156,44 @@ function NodeCard({ n }: { n: PbrNode }) {
           .join(" / ") || dash}
       </KV>
       <ThresholdRows n={n} />
-      <KV k={isL1 ? "Redirect interface" : "Redirect dest"}>
-        {isL1 ? (
-          <div className="text-right">
-            {(d.redirect_interfaces?.consumer ?? []).map((r, i) => (
-              <div key={`c${i}`}><span className="text-slate-500 text-[9px] uppercase">in </span>{r.interface} <span className="text-slate-500">({r.device})</span></div>
-            ))}
-            {(d.redirect_interfaces?.provider ?? []).map((r, i) => (
-              <div key={`p${i}`}><span className="text-slate-500 text-[9px] uppercase">out </span>{r.interface} <span className="text-slate-500">({r.device})</span></div>
-            ))}
-            {!d.redirect_interfaces?.consumer?.length && !d.redirect_interfaces?.provider?.length ? <span className="text-slate-500">no interface data</span> : null}
-          </div>
-        ) : (d.redirect_dests ?? []).length === 0 ? (
-          dash
-        ) : (
-          <RedirectDests dests={d.redirect_dests} />
-        )}
-      </KV>
+      {/* Full-width so IN / OUT sit in two readable columns. */}
+      <div className="py-1">
+        <div className="mb-1 text-sm text-slate-500">{isL1 ? "Redirect interface" : "Redirect dest"}</div>
+        <div className="font-mono text-[12px] text-slate-200">
+          {isL1 ? (
+            !d.redirect_interfaces?.consumer?.length && !d.redirect_interfaces?.provider?.length ? (
+              <span className="text-slate-500">no interface data</span>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 text-left">
+                <div>
+                  <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">In</div>
+                  {(d.redirect_interfaces?.consumer ?? []).length ? (
+                    d.redirect_interfaces!.consumer.map((r, i) => (
+                      <div key={i}>{r.interface} <span className="text-slate-500">({r.device})</span></div>
+                    ))
+                  ) : (
+                    <span className="text-slate-600">—</span>
+                  )}
+                </div>
+                <div>
+                  <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Out</div>
+                  {(d.redirect_interfaces?.provider ?? []).length ? (
+                    d.redirect_interfaces!.provider.map((r, i) => (
+                      <div key={i}>{r.interface} <span className="text-slate-500">({r.device})</span></div>
+                    ))
+                  ) : (
+                    <span className="text-slate-600">—</span>
+                  )}
+                </div>
+              </div>
+            )
+          ) : (d.redirect_dests ?? []).length === 0 ? (
+            dash
+          ) : (
+            <RedirectDests dests={d.redirect_dests} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
