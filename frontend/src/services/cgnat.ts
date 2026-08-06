@@ -3,6 +3,7 @@ import api from "./api";
 import {
   CgnatConnectivityResult,
   CgnatDevice,
+  CgnatDeviceByIp,
   CgnatDeviceCreate,
   CgnatDevicePage,
   CgnatInterface,
@@ -11,6 +12,12 @@ import {
   CgnatSummary,
   CgnatSyncResult
 } from "@/types";
+
+// Resolve an arbitrary IP (e.g. a PBR redirect next-hop) to its CGNAT device.
+export const resolveCgnatDeviceByIp = async (ip: string): Promise<CgnatDeviceByIp> => {
+  const { data } = await api.get<CgnatDeviceByIp>("/cgnat/device-by-ip", { params: { ip } });
+  return data;
+};
 
 interface FetchCgnatDevicesOptions {
   search?: string;

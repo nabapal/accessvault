@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from collections import Counter
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -12,6 +13,7 @@ from app.dependencies import get_current_user, get_db, require_admin
 from app.models import CgnatDevice, CgnatInterface, CgnatNatPool, CgnatStaticRoute
 from app.schemas import (
     CgnatConnectivityResult,
+    CgnatDeviceByIp,
     CgnatDeviceCreate,
     CgnatDevicePage,
     CgnatDeviceRead,
@@ -33,6 +35,55 @@ async def _get_device(db: AsyncSession, device_id: str) -> CgnatDevice:
     if device is None:
         raise HTTPException(status_code=404, detail="CGNAT device not found")
     return device
+
+
+def _norm_ip(value: Optional[str]) -> Optional[str]:
+    """Canonicalise an address for equality: drop CIDR/route-domain suffix and
+    normalise IPv6 form (so ::e72 == 0:0:...:e72)."""
+    if not value:
+        return None
+    host = value.split("/")[0].split("%")[0].strip()
+    try:
+        return str(ipaddress.ip_address(host))
+    except ValueError:
+        return host.lower() or None
+
+
+@router.get("/device-by-ip", response_model=CgnatDeviceByIp)
+async def resolve_device_by_ip(
+    ip: str = Query(..., description="Single host IP to resolve against CGNAT inventory."),
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> CgnatDeviceByIp:
+    """Resolve an IP (e.g. a PBR redirect next-hop) to the CGNAT device that owns it —
+    matched against device mgmt IP and interface addresses. Read-only."""
+    target = _norm_ip(ip)
+    if target is None:
+        return CgnatDeviceByIp(found=False, ip=ip)
+
+    # 1) device management IP
+    devices = (await db.execute(select(CgnatDevice))).scalars().all()
+    by_id = {d.id: d for d in devices}
+    for d in devices:
+        if _norm_ip(d.mgmt_ip) == target:
+            return CgnatDeviceByIp(found=True, ip=ip, device_id=d.id, name=d.name, mgmt_ip=d.mgmt_ip, matched_on="mgmt_ip")
+
+    # 2) interface addresses (ip_address + the JSON addresses list). Only consider
+    # interfaces belonging to a live device (skip stale/orphaned interface rows).
+    interfaces = (await db.execute(select(CgnatInterface))).scalars().all()
+    for iface in interfaces:
+        d = by_id.get(iface.device_id)
+        if d is None:
+            continue
+        candidates = list(iface.addresses or [])
+        if iface.ip_address:
+            candidates.append(iface.ip_address)
+        if any(_norm_ip(a) == target for a in candidates):
+            return CgnatDeviceByIp(
+                found=True, ip=ip, device_id=d.id, name=d.name, mgmt_ip=d.mgmt_ip,
+                matched_on=f"interface {iface.name}",
+            )
+    return CgnatDeviceByIp(found=False, ip=ip)
 
 
 @router.get("/devices", response_model=CgnatDevicePage)

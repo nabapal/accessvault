@@ -69,6 +69,7 @@ from .nxos import (
 )
 from .cgnat import (
     CgnatConnectivityResult,
+    CgnatDeviceByIp,
     CgnatDeviceCreate,
     CgnatDevicePage,
     CgnatDeviceRead,
@@ -156,6 +157,7 @@ __all__ = [
     "NxosBgpNeighborRead",
     "NxosVrfRead",
     "CgnatConnectivityResult",
+    "CgnatDeviceByIp",
     "CgnatDeviceCreate",
     "CgnatDevicePage",
     "CgnatDeviceRead",
