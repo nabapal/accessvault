@@ -138,12 +138,14 @@ export function PbrTopology({ service }: { service: PbrServiceDetail }) {
 function cloud(key: string, x: number, cy: number, title: string, sub: string, color: string, uid: string) {
   return (
     <g key={key}>
+      {/* group-level tooltip: full EPG name + L3Out, for the whole cloud */}
+      <title>{sub ? `${title} — ${sub}` : title}</title>
       <rect x={x} y={cy - CLOUD_H / 2} width={CLOUD_W} height={CLOUD_H} rx={CLOUD_H / 2} fill="#0e1622" stroke={color} strokeWidth={1.6} />
       <text x={x + CLOUD_W / 2} y={cy - 8} textAnchor="middle" fontSize="12.5" fontWeight={700} fill={color}>
-        {trunc(title, 24)}
+        <title>{title}</title>{trunc(title, 24)}
       </text>
       <text x={x + CLOUD_W / 2} y={cy + 14} textAnchor="middle" fontFamily="monospace" fontSize="9.5" fill="#9aa7bd">
-        {trunc(sub, 26)}
+        <title>{sub}</title>{trunc(sub, 26)}
       </text>
     </g>
   );
@@ -187,7 +189,9 @@ function nodeBox(key: string, x: number, y: number, n: PbrNode, uid: string) {
   const leafText = d.leafs?.length ? `Leaf ${d.leafs.join(",")}` : "";
   return (
     <g key={key} opacity={opacity}>
-      <rect x={x} y={y} width={BOX_W} height={BOX_H} rx={8} fill="#131b29" stroke={border} strokeWidth={status === "faulty" || n.bypassed ? 2.2 : 1.6} strokeDasharray={status === "faulty" || n.bypassed ? "5,3" : undefined} />
+      <rect x={x} y={y} width={BOX_W} height={BOX_H} rx={8} fill="#131b29" stroke={border} strokeWidth={status === "faulty" || n.bypassed ? 2.2 : 1.6} strokeDasharray={status === "faulty" || n.bypassed ? "5,3" : undefined}>
+        <title>{`${d.node} · ${devgrp}${policyLine ? ` — ${policyLine}` : ""}`}</title>
+      </rect>
       {/* Clip the interior so no text can ever escape the box border. */}
       <clipPath id={clipId}>
         <rect x={x + 1} y={y + 1} width={BOX_W - 2} height={BOX_H - 2} rx={7} />
