@@ -168,8 +168,15 @@ function nodeBox(key: string, x: number, y: number, n: PbrNode, uid: string) {
     if (!destLines.length) destLines.push({ text: "no interface data", color: DIM });
   } else {
     const dests = d.redirect_dests ?? [];
-    if (!dests.length) destLines.push({ text: "no redirect dest", color: DIM });
-    else dests.slice(0, 2).forEach((r) => destLines.push({ text: `${r.active ? "→ " : "⚠ "}${r.ip}`, color: r.active ? GREEN : RED }));
+    const inD = dests.filter((r) => r.side === "in");
+    const outD = dests.filter((r) => r.side === "out");
+    // Prefer one IN + one OUT (labelled) so direction is clear; else first two.
+    const picks: { r: (typeof dests)[number]; lbl: string }[] =
+      inD.length || outD.length
+        ? [...(inD[0] ? [{ r: inD[0], lbl: "in " }] : []), ...(outD[0] ? [{ r: outD[0], lbl: "out " }] : [])]
+        : dests.slice(0, 2).map((r) => ({ r, lbl: "" }));
+    if (!picks.length) destLines.push({ text: "no redirect dest", color: DIM });
+    else picks.forEach(({ r, lbl }) => destLines.push({ text: `${lbl}${r.active ? "→ " : "⚠ "}${r.ip}`, color: r.active ? GREEN : RED }));
   }
   const policyLine = [d.consumer_redirect_policy && `in:${d.consumer_redirect_policy}`, d.provider_redirect_policy && `out:${d.provider_redirect_policy}`]
     .filter(Boolean)
