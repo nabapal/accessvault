@@ -1234,6 +1234,7 @@ export interface PbrRedirectDestDetail {
   configured_mac?: string | null;
   learned_mac?: string | null;
   active: boolean;
+  side?: "in" | "out" | null;
 }
 
 export interface PbrRedirectInterface {

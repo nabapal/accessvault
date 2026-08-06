@@ -524,22 +524,29 @@ def _hydrate_node(
         resolved = bool(redirect_interfaces["consumer"] or redirect_interfaces["provider"])
         health_dests = [{"layer": "L1", "resolved": resolved}] if resolved else []
     else:
-        seen = set()
-        for d in l3:
-            ip = d.get("ip")
-            if not ip or ip in seen:
+        # Keep the IN (consumer policy) and OUT (provider policy) redirect destinations
+        # distinct, so the node card can label which direction each IP belongs to.
+        for pol_side, pol_dn in (("in", cons.get("redirect_pol_dn")), ("out", prov.get("redirect_pol_dn"))):
+            pol = pols.get(pol_dn)
+            if not pol:
                 continue
-            seen.add(ip)
-            active = ip in learned_ips
-            redirect_dests.append(
-                {
-                    "ip": ip,
-                    "configured_mac": d.get("mac"),
-                    "learned_mac": ip_macs.get(ip, "00:00:00:00:00:00"),
-                    "active": active,
-                }
-            )
-            health_dests.append({"ip": ip, "learned": active, "layer": "L3"})
+            seen = set()
+            for d in pol.l3_dests:
+                ip = d.get("ip")
+                if not ip or ip in seen:
+                    continue
+                seen.add(ip)
+                active = ip in learned_ips
+                redirect_dests.append(
+                    {
+                        "ip": ip,
+                        "configured_mac": d.get("mac"),
+                        "learned_mac": ip_macs.get(ip, "00:00:00:00:00:00"),
+                        "active": active,
+                        "side": pol_side,
+                    }
+                )
+                health_dests.append({"ip": ip, "learned": active, "layer": "L3"})
 
     # Active % + breach (L3 only), computed for display in the node card.
     active_pct: Optional[float] = None
