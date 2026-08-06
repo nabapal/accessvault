@@ -1,35 +1,58 @@
 # SDD: PBR Flow Monitoring — NetVerse AI integration
 
-- **Status:** Implemented (2026-07-29) — Phases 1–4 on branch `feat/pbr-flow-monitoring`.
+- **Status:** Implemented + refined. **v1.2** (2026-08-06). Phases 1–4 on branch
+  `feat/pbr-flow-monitoring`. Initial module merged as **PR #1**; the refinements below
+  are open in **PR #2**.
 - **Owner:** sumit (reporting to naba)
 - **Type:** New feature — ACI L4–L7 / PBR observability, **read-only**
-- **Nav placement:** Sidebar → **Data Center Inventory**, a new **“PBR Monitoring”** item directly **below the “Endpoints”** tab. IP-flow lookup sits directly under the fabric dashboard.
+- **Nav placement:** Sidebar → **Data Center Inventory**, a new **“PBR Monitoring”** item
+  directly **below the “Endpoints”** tab. The IP-flow lookup sits directly under the
+  fabric dashboard.
 
-> **As-built delta (validated against live Bangalore/Mumbai/Jamnagar APICs).** The
-> sections below are the design; these are the deltas discovered while implementing
-> and validating against real fabrics:
+> **As-built (validated against live Bangalore/Mumbai/Jamnagar APICs).** The numbered
+> sections below are the design; this box is the current shipped behaviour. See the
+> **Change log (§18)** for the per-change history.
+>
+> **Ingestion / data model**
 > - **Service intersection** matches on **(contract name, graph name)** — `vnsGraphInst`
 >   exposes `ctrctDn`/`graphDn` (DNs) while `vnsLDevCtx` exposes `ctrctNameOrLbl`/
 >   `graphNameOrLbl` (names), so keys are normalised to names.
-> - **Extra APIC classes** beyond §5 were required to hydrate the prototype's detail:
->   `vnsLIfCtx` (consumer/provider connector split + `ctxDn` VRF), `vnsRsCIfPathAtt`
->   (leaf/path), `vnsEPpInfo` (BD-side connector VLAN), `l3extRsPathL3OutAtt` (L3Out
->   VLAN), `l3extRsEctx` (L3Out→VRF), plus `fvIp` DN parsing (`cep-<MAC>`) for the
->   learned MAC on redirect destinations.
-> - **Storage:** rich per-node detail is persisted as JSON (`pbr_nodes.detail`,
->   `pbr_nodes.active_pct`) and per-service external-EPG groups as JSON
->   (`pbr_services.consumer_epgs` / `provider_epgs`) via migration
->   `20260729_pbr_detail_columns`, rather than a wider relational model.
-> - **Persistence is upsert, not replace:** services are keyed by (contract, graph)
->   with a **stable id** so `pbr_health_samples` accumulate a real trend; child rows
->   are deleted explicitly because SQLite FK cascade is not enforced in this env.
-> - **VLAN gap resolved:** consumer/provider `lif_encap` (e.g. `vlan-3634`, `vlan-3521`)
->   and L3Out-side VRF are now derived (BD side via `vnsEPpInfo`; L3Out side via
->   `l3extRsPathL3OutAtt`/`l3extRsEctx`). L1 shows `L1 (no VLAN)`.
-> - **EPG blocks show only scope-valid** ("External Subnets for the External EPG",
->   `import-security`) subnets; route-control-only subnets are not listed there.
-> - **Flow-lookup** returns the full matched service (header + EPG chips + topology +
->   node cards + consumer/provider match-basis footer), with `src_side`/`dst_side`.
+> - **Extra APIC classes** beyond §5 hydrate the full detail: `vnsLIfCtx`
+>   (consumer/provider connector split + `ctxDn` VRF), `vnsRsCIfPathAtt` (leaf/path),
+>   `vnsEPpInfo` (BD-side connector VLAN), `l3extRsPathL3OutAtt` (L3Out VLAN),
+>   `l3extRsEctx` (L3Out→VRF), plus `fvIp` DN parsing (`cep-<MAC>`) for the learned MAC.
+> - **Rich detail is JSON** (`pbr_nodes.detail`, `pbr_nodes.active_pct`,
+>   `pbr_services.consumer_epgs`/`provider_epgs`) via migration `20260729_pbr_detail_columns`.
+> - **Per-node redirect dests are split IN (consumer policy) / OUT (provider policy)** —
+>   each dest carries a `side`.
+> - **VLAN/VRF fully resolved:** consumer/provider `lif_encap` (`vlan-3634`, `vlan-3521`)
+>   and per-side VRF — BD side via `vnsEPpInfo`, L3Out side via `l3extRsPathL3OutAtt` /
+>   `l3extRsEctx`; L1 shows `L1 (no VLAN)`.
+> - **Persistence is upsert with a stable service id** so `pbr_health_samples` accumulate
+>   a real trend; child rows are deleted explicitly (SQLite FK cascade is not enforced).
+>
+> **Compute**
+> - **Service state is a status judgement, not a % band** (§9.4): DOWN only if all nodes
+>   faulty or a `deny`-breach; HEALTHY only at 100%; else WARNING.
+>
+> **Poller (resilience)**
+> - The poll loop **survives per-tick errors** (a transient DB lock no longer kills it),
+>   **gates per-fabric interval**, **fast-fails** an unreachable APIC (8s connect), and
+>   logs each fabric result.
+>
+> **Frontend**
+> - **IP-flow lookup is global by default** (searches all fabrics) with a **fabric
+>   selector** (“All fabrics” default). A match shows only the **best-matching**
+>   consumer/provider EPG + the specific matched subnet, names the **ACI fabric/tenant**,
+>   shows a **count** when multiple graphs match, then the topology + node cards.
+> - **EPG blocks show only scope-valid** (`import-security`) subnets.
+> - **Topology**: per-instance `useId()` SVG ids; IN/OUT-labelled redirect dests;
+>   interior **clip** + hover **tooltips** so nothing overflows the node box.
+> - **Node cards**: IN/OUT redirect dests/interfaces on **separate rows**; learned/UP IPs
+>   render **green**.
+> - **CGNAT deep-link**: double-clicking a redirect IP opens the owning CGNAT device
+>   (exact-host match) or toasts “not in inventory”. Returning restores the exact PBR
+>   view + scroll position.
 
 ## Source documents (read both before implementing)
 
@@ -106,13 +129,20 @@ never blank/error the whole view.
 
 ## 5. ACI object classes ingested (SDD §7.1)
 
-`vnsGraphInst`, `vnsLDevCtx` (**full subtree**), `vnsCDev`/`vnsCIf`/`vnsRsCIfPathAtt`,
-`vnsSvcRedirectPol` (**full attributes incl. thresholdEnable / minThresholdPercent /
-maxThresholdPercent / thresholdDownAction**), `vnsRedirectDest`,
-`vnsL1L2RedirectDest`/`vnsRsToCIf`, `l3extSubnet`, `fvRsProv`/`fvRsCons`
+`vnsGraphInst`, `vnsLDevCtx` (**full subtree** → `vnsLIfCtx` connectors),
+`vnsRsCIfPathAtt` (leaf/path), `vnsSvcRedirectPol` (**full attributes incl.
+thresholdEnable / minThresholdPercent / maxThresholdPercent / thresholdDownAction**),
+`vnsRedirectDest`, `vnsL1L2RedirectDest`, `l3extSubnet`, `fvRsProv`/`fvRsCons`
 (**count-verified**), `fvIp`.
 
+Additional classes ingested to resolve per-connector VLAN/VRF (as-built):
+- **`vnsEPpInfo`** → BD-side connector VLAN encap (keyed by device group + BD).
+- **`l3extRsPathL3OutAtt`** → L3Out-side connector VLAN encap (keyed by `out-<L3Out>`).
+- **`l3extRsEctx`** → L3Out → VRF (fallback when a connector has no `ctxDn`).
+
+Notes:
 - `vnsCIf.operSt` is **not** ingested for health — unreliable in this environment (§9.1).
+- The learned MAC per redirect destination is parsed from the `fvIp` DN (`…/cep-<MAC>/ip-[addr]`).
 
 ## 6. Two hard filtering rules (SDD §7.3.1, §7.3.3)
 
@@ -218,7 +248,14 @@ Adapts SDD §8 to our `...Page` pagination convention.
 | `GET /pbr/services/{service_id}` | Full detail: EPGs, nodes, per-side VLAN/BD/VRF, redirect dests, threshold state. |
 | `GET /pbr/services/{service_id}/blast-radius` | Same-fabric device-group sharers. |
 | `GET /pbr/services/{service_id}/health-history` | Time-series from `pbr_health_samples`. |
-| `POST /pbr/fabrics/{fabric_id}/flow-lookup` | Body `{source,destination}`; server-side validated; returns matched service(s)/no-match with match basis (specific / default-route / tie). |
+| `POST /pbr/flow-lookup` | **Global** IP-flow lookup (all fabrics). Body `{source,destination}`; server-side validated. Returns matched service(s) enriched with fabric name/tenant, graph, state, best-matching consumer/provider EPG + subnet, `match_count`, and match basis (specific / default-route / tie). |
+| `POST /pbr/fabrics/{fabric_id}/flow-lookup` | Same, scoped to one fabric (kept for back-compat; used when the UI's fabric selector picks a fabric). |
+
+CGNAT deep-link support (in the existing CGNAT router, `/api/v1/cgnat`):
+
+| Method + path | Purpose |
+|---|---|
+| `GET /cgnat/device-by-ip?ip=<ip>` | Resolve a redirect next-hop IP to its CGNAT device by **exact host** match (device `mgmt_ip` or an interface address; CIDR/route-domain stripped, IPv6 canonicalised; live devices only). Returns `{found, device_id, name, mgmt_ip, matched_on}`. |
 
 ## 12. Frontend module (SDD §5, Phases 2–3)
 
@@ -226,21 +263,48 @@ Adapts SDD §8 to our `...Page` pagination convention.
   **Data Center Inventory** section **immediately after Endpoints**
   ([AppShell.tsx:42](../../../frontend/src/components/layout/AppShell.tsx#L42)); add the route in
   [App.tsx](../../../frontend/src/App.tsx) after `/telco/aci/endpoints`.
-- **Dashboard + service browser:** per-fabric health cards; searchable/sortable/status-filterable
-  service list; wired to the Phase 1 API (never APIC directly).
-- **Service detail + topology:** Consumer EPG → node(s) → Provider EPG; per-node health %
-  badge; `live/faulty/bypassed/permit/unknown` arrow states; per-side VLAN on the arrows
-  (may diverge across L1→L3); ghosted skip-arc for a bypassed node distinct from a faulty one.
-  **Every SVG `<defs>` id must be unique per diagram instance** (the prototype uses a
-  `_topoInstanceCounter`; multiple simultaneously-rendered diagrams otherwise collide on
-  `url(#…)` refs and silently drop shapes — SDD §11).
-- **IP-flow lookup tool** and **blast radius** panels, wired to the API.
-- Fault-code glossary tooltips (`wrapFaultText`), JSON export per fabric/service.
+- **Dashboard + service browser:** per-fabric health cards (healthy/warning/failed/total,
+  avg health %, "stale as of …"); searchable/sortable/status-filterable service list;
+  wired to the API (never APIC directly).
+- **IP-flow lookup** (directly under the dashboard): a **Fabric** dropdown (default
+  **All fabrics**, then each fabric by name), source/destination inputs. On a match it
+  shows only the **best-matching** consumer/provider EPG + the specific matched subnet
+  (`✓ selected`), the **ACI fabric + tenant + graph + status** header, a **count** banner
+  when multiple service graphs match, then the topology + node cards; a match-basis footer.
+- **Service detail + topology** (`PbrServiceDetailView` + `PbrTopology`): Consumer EPG →
+  node(s) → Provider EPG; per-node health % badge; `live/faulty/bypassed/permit/unknown`
+  states; per-side VLAN on the arrows (may diverge across L1→L3); ghosted skip-arc for a
+  bypassed node.
+  - **Every SVG `<defs>` id is unique per diagram instance** via React `useId()`
+    (multiple diagrams otherwise collide on `url(#…)` and drop shapes — SDD §11).
+  - Node box **redirect dests are IN/OUT-labelled**; interior is **clipped** to the box
+    and long labels expose the full value via hover **tooltips** (device group,
+    redirect policy, dest lines, and the EPG clouds).
+- **Node detail cards:** per-side BD/VRF/VLAN/L3Out, redirect policy in/out, threshold +
+  active %, and redirect dests/interfaces on **separate IN / OUT rows**; learned/UP IPs
+  render **green**, unlearned **red**.
+- **CGNAT deep-link:** double-clicking a redirect IP in a node card calls
+  `/cgnat/device-by-ip`; if found → navigate to `/cgnat/devices/{id}`, else a
+  warning toast "not present in our CGNAT inventory".
+- **View + scroll restore:** the PBR page snapshots its state (selected fabric, expanded
+  service, filters, flow-lookup result, and `<main>` scroll position) to `sessionStorage`
+  before a CGNAT deep-link, and restores it on return — so **Back** lands exactly where
+  the user double-clicked (scroll restore waits for the async detail to finish rendering).
+  Implemented in `components/pbr/pbrViewState.ts`.
+- Blast-radius panel; durable health-trend sparkline (Phase 4).
 
 ## 13. Non-functional (SDD §10)
 Read-only against APIC; inherit portal auth/RBAC (no separate frontend credential
 handling); server-side flow-lookup validation; dashboard renders from persisted/computed
 state (no live APIC call per page view); fabric onboarding is configuration, not code.
+
+**Poller resilience (as-built).** The `PbrPoller` loop must never die on a transient
+error: each tick is wrapped so a failed tick (e.g. a SQLite lock during a concurrent
+write) is logged and retried on the next interval rather than exiting the loop. It gates
+each fabric to `poll_interval_seconds` (first poll immediate), fast-fails an unreachable
+APIC (8s connect timeout) so one dead fabric can't stall the tick, and logs a per-fabric
+result (ok / kept-last-known / error). A fabric whose APIC is unreachable retains its
+last-known rows and shows "stale as of …" (SDD §10.4).
 
 ## 14. Phased delivery (SDD §12)
 1. **Backend** — model + migration; collector (count-verify, subtree, intersection + scope
@@ -277,3 +341,40 @@ three-way threshold rule supersedes v19's `nodeBypassState` permit/bypass collap
 3. Acceptable structural-data staleness window (15–60 min?) — confirm with NOC.
 4. Extend blast radius to L3Out-sharing later? (device-group-only today.)
 5. Right ACI/PBR SMEs to validate the §9.1 L1 `operSt` finding before build.
+
+## 17. CGNAT inventory integration (as-built)
+
+Redirect next-hop IPs on a PBR node can be cross-referenced with the CGNAT inventory:
+
+- **Resolver:** `GET /api/v1/cgnat/device-by-ip?ip=<ip>` matches an IP to a CGNAT device
+  by **exact host** only — device `mgmt_ip` or an interface address (`ip_address` + the
+  JSON `addresses` list), with CIDR (`/NN`) and F5 route-domain (`%rd`) suffixes stripped
+  and IPv6 canonicalised. Only **live** devices are considered (stale/orphaned interface
+  rows are skipped). **Subnet containment is deliberately NOT used** — an IP that merely
+  falls within a device's interface subnet does not resolve.
+- **UX:** double-click a redirect IP in a node card → open that device's detail page, or
+  a "not in our CGNAT inventory" toast. IPs that belong to VNF instances not onboarded in
+  the CGNAT inventory correctly report not-found.
+
+## 18. Change log
+
+**v1.0 — initial module (PR #1, merged).** Backend (model + migrations, pure compute
+layer, collector + poller, read API) and frontend (dashboard, service browser, topology,
+blast radius, IP-flow lookup, health-trend). Encodes the three prototyping bug-fixes (§9).
+
+**v1.1 — live-data fidelity.** Name-based service intersection; per-node hydration from
+the real MO shapes (leaf/path, per-side BD/VRF/L3Out/redirect-policy, redirect dests with
+configured + learned MAC, L1 interfaces, threshold); JSON detail storage + migration;
+stable-id upsert (fixes trend-history + orphan accumulation); VLAN via `vnsEPpInfo`; EPG
+blocks show only scope-valid subnets; full rich flow-lookup result.
+
+**v1.2 — flow-lookup + polish (PR #2).**
+- Global IP-flow lookup (all fabrics) + fabric selector; best-matching EPG only; fabric
+  name/tenant in the header; match count; `src_side`/`dst_side` in the response.
+- L3Out-side VLAN (`l3extRsPathL3OutAtt`) and VRF (`l3extRsEctx`) resolution.
+- Service state made status-based, not a static % band (§9.4).
+- Redirect dests split IN/OUT (separate rows in cards; labelled in topology); learned IPs green.
+- Topology overflow fixed (clip + taller box + hover tooltips on clouds and node text).
+- CGNAT deep-link on double-click (exact-host resolver) + PBR view/scroll restore on return.
+- Poller resilience: survive per-tick errors, per-fabric interval gating, fast-fail connect.
+- EPG blocks show only "External Subnets for the External EPG".

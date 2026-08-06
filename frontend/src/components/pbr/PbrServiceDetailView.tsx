@@ -1,7 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { fetchPbrBlastRadius, fetchPbrHealthHistory, fetchPbrServiceDetail } from "@/services/pbr";
-import { PbrBlastRadius, PbrEpgGroup, PbrHealthHistory, PbrNode, PbrServiceDetail } from "@/types";
+import { resolveCgnatDeviceByIp } from "@/services/cgnat";
+import { toast } from "@/components/ui/toast";
+import { pbrScroller, savePbrView } from "./pbrViewState";
+import { PbrBlastRadius, PbrEpgGroup, PbrHealthHistory, PbrNode, PbrRedirectDestDetail, PbrServiceDetail } from "@/types";
 import { PbrHealthSparkline } from "./PbrHealthSparkline";
 import { PbrTopology } from "./PbrTopology";
 
@@ -94,9 +98,44 @@ function ThresholdRows({ n }: { n: PbrNode }) {
   );
 }
 
-function NodeCard({ n }: { n: PbrNode }) {
+function DestIp({ ip, className, onOpen }: { ip: string; className: string; onOpen?: (ip: string) => void }) {
+  return (
+    <span
+      className={`${className} cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid`}
+      title="Double-click to open the matching CGNAT inventory device"
+      onDoubleClick={() => onOpen?.(ip)}
+    >
+      {ip}
+    </span>
+  );
+}
+
+function DestLine({ r, onOpen }: { r: PbrRedirectDestDetail; onOpen?: (ip: string) => void }) {
+  return r.active ? (
+    <div>
+      <DestIp ip={r.ip} className="font-semibold text-emerald-300" onOpen={onOpen} />{" "}
+      <span className="text-slate-500">({r.learned_mac}, learned)</span>
+    </div>
+  ) : (
+    <div className="text-rose-300">
+      <DestIp ip={r.ip} className="font-semibold" onOpen={onOpen} /> (not learned — no active endpoint, possible fault)
+    </div>
+  );
+}
+
+const ifaceLine = (r: { interface?: string | null; device?: string | null }, i: number) => (
+  <div key={i}>{r.interface} <span className="text-slate-500">({r.device})</span></div>
+);
+
+function NodeCard({ n, onOpenIp }: { n: PbrNode; onOpenIp?: (ip: string) => void }) {
   const d = n.detail;
   const isL1 = d.device_layer === "L1";
+  const dests = d.redirect_dests ?? [];
+  const inDests = dests.filter((r) => r.side === "in");
+  const outDests = dests.filter((r) => r.side === "out");
+  const destsHaveSide = inDests.length > 0 || outDests.length > 0;
+  const consIf = d.redirect_interfaces?.consumer ?? [];
+  const provIf = d.redirect_interfaces?.provider ?? [];
   return (
     <div className="rounded-lg border border-brand-700 bg-brand-900/60 p-3">
       <div className="mb-2 flex items-center justify-between border-b border-brand-800/70 pb-2">
@@ -117,40 +156,48 @@ function NodeCard({ n }: { n: PbrNode }) {
           .join(" / ") || dash}
       </KV>
       <ThresholdRows n={n} />
-      <KV k={isL1 ? "Redirect interface" : "Redirect dest"}>
-        {isL1 ? (
-          <div className="text-right">
-            {(d.redirect_interfaces?.consumer ?? []).map((r, i) => (
-              <div key={`c${i}`}><span className="text-slate-500 text-[9px] uppercase">in </span>{r.interface} <span className="text-slate-500">({r.device})</span></div>
-            ))}
-            {(d.redirect_interfaces?.provider ?? []).map((r, i) => (
-              <div key={`p${i}`}><span className="text-slate-500 text-[9px] uppercase">out </span>{r.interface} <span className="text-slate-500">({r.device})</span></div>
-            ))}
-            {!d.redirect_interfaces?.consumer?.length && !d.redirect_interfaces?.provider?.length ? <span className="text-slate-500">no interface data</span> : null}
-          </div>
-        ) : (d.redirect_dests ?? []).length === 0 ? (
-          dash
+      {/* IN and OUT as separate rows. */}
+      {isL1 ? (
+        !consIf.length && !provIf.length ? (
+          <KV k="Redirect interface"><span className="text-slate-500">no interface data</span></KV>
         ) : (
-          <div className="text-right">
-            {d.redirect_dests.map((r, i) =>
-              r.active ? (
-                <div key={i}>
-                  <span className="font-semibold text-emerald-300">{r.ip}</span> <span className="text-slate-500">({r.learned_mac}, learned)</span>
-                </div>
-              ) : (
-                <div key={i} className="text-rose-300">
-                  <span className="font-semibold">{r.ip}</span> (not learned — no active endpoint, possible fault)
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </KV>
+          <>
+            <KV k="Redirect interface (in)"><div className="text-right">{consIf.length ? consIf.map(ifaceLine) : dash}</div></KV>
+            <KV k="Redirect interface (out)"><div className="text-right">{provIf.length ? provIf.map(ifaceLine) : dash}</div></KV>
+          </>
+        )
+      ) : dests.length === 0 ? (
+        <KV k="Redirect dest">{dash}</KV>
+      ) : destsHaveSide ? (
+        <>
+          <KV k="Redirect dest (in)"><div className="text-right">{inDests.length ? inDests.map((r, i) => <DestLine key={i} r={r} onOpen={onOpenIp} />) : dash}</div></KV>
+          <KV k="Redirect dest (out)"><div className="text-right">{outDests.length ? outDests.map((r, i) => <DestLine key={i} r={r} onOpen={onOpenIp} />) : dash}</div></KV>
+        </>
+      ) : (
+        <KV k="Redirect dest"><div className="text-right">{dests.map((r, i) => <DestLine key={i} r={r} onOpen={onOpenIp} />)}</div></KV>
+      )}
     </div>
   );
 }
 
 export function PbrServiceDetailView({ serviceId, hideEpgBlock }: { serviceId: string; hideEpgBlock?: boolean }) {
+  const navigate = useNavigate();
+  // Double-click a redirect IP -> open the matching CGNAT device, or toast if unknown.
+  const openIp = async (ip: string) => {
+    try {
+      const res = await resolveCgnatDeviceByIp(ip);
+      if (res.found && res.device_id) {
+        // Remember where we are so returning restores this exact scroll position.
+        savePbrView({ scrollTop: pbrScroller()?.scrollTop ?? 0 });
+        navigate(`/cgnat/devices/${res.device_id}`);
+      } else {
+        toast.warning("Not in CGNAT inventory", `${ip} is not present in our CGNAT inventory.`);
+      }
+    } catch {
+      toast.error("Lookup failed", `Could not resolve ${ip} against the CGNAT inventory.`);
+    }
+  };
+
   const [detail, setDetail] = useState<PbrServiceDetail | null>(null);
   const [blast, setBlast] = useState<PbrBlastRadius | null>(null);
   const [history, setHistory] = useState<PbrHealthHistory | null>(null);
@@ -256,7 +303,7 @@ export function PbrServiceDetailView({ serviceId, hideEpgBlock }: { serviceId: s
       {/* Node detail cards */}
       {detail.nodes.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {detail.nodes.map((n) => <NodeCard key={n.id} n={n} />)}
+          {detail.nodes.map((n) => <NodeCard key={n.id} n={n} onOpenIp={openIp} />)}
         </div>
       ) : null}
     </div>

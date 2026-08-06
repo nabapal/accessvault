@@ -1234,6 +1234,16 @@ export interface PbrRedirectDestDetail {
   configured_mac?: string | null;
   learned_mac?: string | null;
   active: boolean;
+  side?: "in" | "out" | null;
+}
+
+export interface CgnatDeviceByIp {
+  found: boolean;
+  ip: string;
+  device_id?: string | null;
+  name?: string | null;
+  mgmt_ip?: string | null;
+  matched_on?: string | null;
 }
 
 export interface PbrRedirectInterface {

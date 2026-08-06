@@ -40,6 +40,17 @@ class CgnatDeviceUpdate(BaseModel):
     password: Optional[str] = None
 
 
+class CgnatDeviceByIp(BaseModel):
+    """Resolution of an arbitrary IP to a CGNAT inventory device (for PBR deep-links)."""
+
+    found: bool
+    ip: str
+    device_id: Optional[UUID] = None
+    name: Optional[str] = None
+    mgmt_ip: Optional[str] = None
+    matched_on: Optional[str] = None  # e.g. "mgmt_ip" or "interface ve1512"
+
+
 class CgnatDeviceRead(BaseModel):
     id: UUID
     name: str
