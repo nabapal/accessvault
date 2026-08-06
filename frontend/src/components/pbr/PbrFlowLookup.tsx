@@ -1,9 +1,12 @@
 import { FormEvent, useState } from "react";
 import { isAxiosError } from "axios";
 
+import { useEffect } from "react";
+
 import { pbrFlowLookup } from "@/services/pbr";
 import { PbrFabric, PbrFlowCandidate, PbrFlowLookupResult, PbrServiceState } from "@/types";
 import { PbrServiceDetailView } from "./PbrServiceDetailView";
+import { loadPbrView, savePbrView } from "./pbrViewState";
 
 const shortName = (dn: string) => dn.split("/brc-").pop()?.split("/").pop() ?? dn;
 const prefixLen = (cidr?: string | null) => (cidr ? cidr.split("/")[1] ?? "" : "");
@@ -99,12 +102,18 @@ function MatchedFlowCard({ candidate }: { candidate: PbrFlowCandidate }) {
 }
 
 export function PbrFlowLookup({ fabrics = [] }: { fabrics?: PbrFabric[] }) {
-  const [source, setSource] = useState("");
-  const [destination, setDestination] = useState("");
-  const [fabricId, setFabricId] = useState<string>(""); // "" = All fabrics (default)
-  const [result, setResult] = useState<PbrFlowLookupResult | null>(null);
+  const savedFlow = loadPbrView().flow;
+  const [source, setSource] = useState(savedFlow?.source ?? "");
+  const [destination, setDestination] = useState(savedFlow?.destination ?? "");
+  const [fabricId, setFabricId] = useState<string>(savedFlow?.fabricId ?? ""); // "" = All fabrics (default)
+  const [result, setResult] = useState<PbrFlowLookupResult | null>(savedFlow?.result ?? null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Persist the flow-lookup so returning from a CGNAT deep-link restores the match.
+  useEffect(() => {
+    savePbrView({ flow: { fabricId, source, destination, result } });
+  }, [fabricId, source, destination, result]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
