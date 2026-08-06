@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { fetchPbrBlastRadius, fetchPbrHealthHistory, fetchPbrServiceDetail } from "@/services/pbr";
-import { PbrBlastRadius, PbrEpgGroup, PbrHealthHistory, PbrNode, PbrServiceDetail } from "@/types";
+import { PbrBlastRadius, PbrEpgGroup, PbrHealthHistory, PbrNode, PbrRedirectDestDetail, PbrServiceDetail } from "@/types";
 import { PbrHealthSparkline } from "./PbrHealthSparkline";
 import { PbrTopology } from "./PbrTopology";
 
@@ -94,6 +94,50 @@ function ThresholdRows({ n }: { n: PbrNode }) {
   );
 }
 
+function DestLine({ r }: { r: PbrRedirectDestDetail }) {
+  return r.active ? (
+    <div>
+      <span className="font-semibold text-emerald-300">{r.ip}</span> <span className="text-slate-500">({r.learned_mac}, learned)</span>
+    </div>
+  ) : (
+    <div className="text-rose-300">
+      <span className="font-semibold">{r.ip}</span> (not learned — no active endpoint, possible fault)
+    </div>
+  );
+}
+
+// L3 redirect destinations grouped by direction (IN = consumer policy, OUT = provider
+// policy) so the two sets are distinguishable; flat if the data carries no side.
+function RedirectDests({ dests }: { dests: PbrRedirectDestDetail[] }) {
+  const inD = dests.filter((r) => r.side === "in");
+  const outD = dests.filter((r) => r.side === "out");
+  const noSide = dests.filter((r) => !r.side);
+  if (!inD.length && !outD.length) {
+    return (
+      <div className="text-right">
+        {dests.map((r, i) => <DestLine key={i} r={r} />)}
+      </div>
+    );
+  }
+  return (
+    <div className="text-right">
+      {inD.length ? (
+        <div className="mb-1">
+          <span className="text-[9px] uppercase text-slate-500">in</span>
+          {inD.map((r, i) => <DestLine key={`in${i}`} r={r} />)}
+        </div>
+      ) : null}
+      {outD.length ? (
+        <div className="mb-1">
+          <span className="text-[9px] uppercase text-slate-500">out</span>
+          {outD.map((r, i) => <DestLine key={`out${i}`} r={r} />)}
+        </div>
+      ) : null}
+      {noSide.map((r, i) => <DestLine key={`x${i}`} r={r} />)}
+    </div>
+  );
+}
+
 function NodeCard({ n }: { n: PbrNode }) {
   const d = n.detail;
   const isL1 = d.device_layer === "L1";
@@ -131,19 +175,7 @@ function NodeCard({ n }: { n: PbrNode }) {
         ) : (d.redirect_dests ?? []).length === 0 ? (
           dash
         ) : (
-          <div className="text-right">
-            {d.redirect_dests.map((r, i) =>
-              r.active ? (
-                <div key={i}>
-                  <span className="font-semibold text-emerald-300">{r.ip}</span> <span className="text-slate-500">({r.learned_mac}, learned)</span>
-                </div>
-              ) : (
-                <div key={i} className="text-rose-300">
-                  <span className="font-semibold">{r.ip}</span> (not learned — no active endpoint, possible fault)
-                </div>
-              )
-            )}
-          </div>
+          <RedirectDests dests={d.redirect_dests} />
         )}
       </KV>
     </div>
