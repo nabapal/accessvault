@@ -66,17 +66,31 @@ export function PbrMonitoringPage() {
     savePbrView({ selectedFabricId, expandedServiceId, search, stateFilter, sort, page, pageSize });
   }, [selectedFabricId, expandedServiceId, search, stateFilter, sort, page, pageSize]);
 
-  // Restore the <main> scroll position saved just before navigating to CGNAT. Content
-  // loads asynchronously (services + expanded detail), so retry until it sticks.
+  // Restore the <main> scroll position saved just before navigating to CGNAT. The
+  // expanded service detail (topology + node cards) loads asynchronously and grows the
+  // page over time, so keep re-applying until we actually reach the target OR the
+  // layout height has settled (content finished loading) — not a fixed short window.
   useEffect(() => {
     const target = loadPbrView().scrollTop;
     if (target == null) return;
     let tries = 0;
+    let stable = 0;
+    let lastHeight = -1;
     const id = window.setInterval(() => {
       const el = pbrScroller();
-      if (el) el.scrollTop = target;
+      if (!el) {
+        savePbrView({ scrollTop: null });
+        window.clearInterval(id);
+        return;
+      }
+      el.scrollTop = target; // clamps to current max while content is still loading
       tries += 1;
-      if ((el && Math.abs(el.scrollTop - target) < 6) || tries > 20) {
+      stable = el.scrollHeight === lastHeight ? stable + 1 : 0;
+      lastHeight = el.scrollHeight;
+      const reached = Math.abs(el.scrollTop - target) < 6;
+      // Done when we hit the target, or the layout has been stable ~1s after a brief
+      // grace period (content done loading, target clamped), or a hard 12s cap.
+      if (reached || (stable >= 10 && tries >= 12) || tries > 120) {
         window.clearInterval(id);
         savePbrView({ scrollTop: null });
       }
