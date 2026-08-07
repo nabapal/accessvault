@@ -17,5 +17,6 @@
 - [ ] Frontend: `npx tsc --noEmit` and `npm run build` pass
 - [ ] Backend: imports clean; Alembic **single head** (`alembic heads` → one); migrations additive
 - [ ] Verified against real systems where relevant
-- [ ] Docs updated in this PR (README, PRODUCT-OVERVIEW, API.md + openapi.json, CHANGELOG)
+- [ ] `VERSION` bumped per SemVer in this PR (`fix`/`perf`→patch, `feat`→minor, breaking→major)
+- [ ] Docs updated in this PR (README, PRODUCT-OVERVIEW, API.md + **regenerated openapi.json**, CHANGELOG)
 - [ ] No secrets committed; plaintext credential files removed

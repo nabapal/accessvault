@@ -41,14 +41,19 @@ per-tick failures without dropping good data. A failed poll never overwrites goo
 Alembic keeps **one linear head**; migrations are additive/non-destructive (nullable
 columns, new tables) and auto-apply at startup and on deploy. Back up the prod DB before
 every deploy. Versioning is **SemVer** via the root `VERSION` file (`fix`/`perf`→patch,
-`feat`→minor, breaking→major); the running build self-identifies (`/health`, `/version`);
-a tag == a known deployable state.
+`feat`→minor, breaking→major). **Every feature/fix PR bumps `VERSION` and — when the API
+surface changes — regenerates `docs/openapi.json`, in the same PR**, so `VERSION` and the
+OpenAPI snapshot always track merged state. `release.sh` then cuts at the current
+`VERSION`. The running build self-identifies (`/health`, `/version`); a tag == a known
+deployable state.
 
 ## Quality Gates (before every commit)
 
 - Frontend: `npx tsc --noEmit` and `npm run build` pass.
 - Backend: imports clean; `alembic` resolves to a **single head**; migrations additive.
 - Behaviour verified against **live systems** where relevant; acceptance criteria met.
+- **`VERSION` bumped per SemVer in the same PR**; `docs/openapi.json` regenerated when the
+  API surface changes.
 - Docs updated in-PR: README, PRODUCT-OVERVIEW (per module), the feature spec, `docs/API.md`
   + regenerated `docs/openapi.json`, and CHANGELOG.
 

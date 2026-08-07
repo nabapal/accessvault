@@ -21,15 +21,21 @@ Conventions for version control, change control, docs, releases, and deploys.
 ## 2. Versioning (SemVer)
 - **`VERSION` file** at repo root is the single source of truth.
 - Bump rule: `fix`/`perf` → **patch**, `feat` → **minor**, breaking → **major**.
+- **Bump `VERSION` in the same PR as the change** (not only at release), so
+  `VERSION` always reflects the latest merged state. When an API surface changes,
+  **regenerate `docs/openapi.json` in that same PR** (see §5). Feature/fix and its
+  version bump + OpenAPI snapshot land together — never as a follow-up.
 - The running build self-identifies: `GET /api/v1/health` and `/version` →
   `{version, environment, git_sha, build_date}`; version shows in the UI footer.
 - Version + git SHA + build date are baked into the container at build time
   (Docker build args → env + OCI labels).
 
 ## 3. Tags & releases
-- Cut with **`scripts/release.sh <x.y.z>`**: bumps `VERSION`, updates CHANGELOG,
-  commits `chore(release): vX.Y.Z`, annotated-tags, then (on confirm) pushes and
-  creates the **GitHub Release**.
+- Because PRs already bump `VERSION`, **`scripts/release.sh <x.y.z>` cuts a release
+  at the current `VERSION`** (pass the value already in the file): it rolls the
+  `[Unreleased]` CHANGELOG section under `vX.Y.Z`, commits `chore(release): vX.Y.Z`,
+  annotated-tags, then (on confirm) pushes and creates the **GitHub Release**. It
+  does not invent a new number — the per-PR bumps already did.
 - **A tag == a deployable, known state.** Deploy tagged releases, not arbitrary
   `master`, so you always know exactly what's on prepod/prod.
 - Notes format: [Keep a Changelog](https://keepachangelog.com) in `CHANGELOG.md`.
